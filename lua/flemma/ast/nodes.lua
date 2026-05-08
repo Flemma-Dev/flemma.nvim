@@ -95,7 +95,7 @@ local M = {}
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"
 ---@field text string
----@field _bg_job_id? string Internal marker for job result enrichment
+---@field _job_id? string Internal marker for job result enrichment
 
 ---@class flemma.ast.GenericBinaryPart
 ---@field mime_type string
@@ -392,7 +392,7 @@ function M.to_generic_parts(evaluated_parts, source_file)
     elseif p.kind == "job_result" then
       ---@cast p flemma.ast.JobResultSegment
       if p.content and #p.content > 0 then
-        table.insert(parts, { kind = "text", text = p.content, _bg_job_id = p.job_id })
+        table.insert(parts, { kind = "text", text = p.content, _job_id = p.job_id })
       end
     end
   end

@@ -19,7 +19,7 @@ M.definitions = {
     async = false,
     backgroundable = false,
     input_schema = s.object({
-      job_id = s.string("The background job ID (e.g., 'bg_xxx') from the tool result placeholder."),
+      job_id = s.string("The job ID (e.g., 'job_xxx') from the tool result placeholder."),
     }),
     ---@param input { job_id: string }
     ---@param ctx flemma.tools.ExecutionContext

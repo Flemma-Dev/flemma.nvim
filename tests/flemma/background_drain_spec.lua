@@ -33,14 +33,14 @@ describe("job completion drain", function()
     local hooks = require("flemma.hooks")
     hooks.dispatch("job:completed", {
       bufnr = 0,
-      job_id = "bg_test1",
+      job_id = "job_test1",
       tool_id = "tool_01",
       tool_name = "bash",
       success = true,
     })
     assert.equals(1, #hooks_fired)
     assert.equals("job:completed", hooks_fired[1].name)
-    assert.equals("bg_test1", hooks_fired[1].data.job_id)
+    assert.equals("job_test1", hooks_fired[1].data.job_id)
   end)
 
   it("drain_and_inject_completions injects results into the buffer", function()
@@ -60,7 +60,7 @@ describe("job completion drain", function()
     vim.bo[bufnr].filetype = "chat"
 
     executor.enqueue_job_completion(bufnr, {
-      job_id = "bg_drain1",
+      job_id = "job_drain1",
       tool_id = "tool_01",
       tool_name = "bash",
       result = { success = true, output = "drain test output" },
@@ -76,7 +76,7 @@ describe("job completion drain", function()
 
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local joined = table.concat(lines, "\n")
-    assert.truthy(joined:match("%*%*Job Result:%*%*%s*`bg_drain1`"))
+    assert.truthy(joined:match("%*%*Job Result:%*%*%s*`job_drain1`"))
     assert.truthy(joined:match("drain test output"))
     assert.is_false(executor.has_job_completions(bufnr))
 

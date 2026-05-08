@@ -19,7 +19,7 @@ describe("background lifecycle", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_01` (job=bg_lost1)",
+        "**Tool Result:** `tool_01` (job=job_lost1)",
         "",
         "```",
         "Running in background.",
@@ -32,7 +32,7 @@ describe("background lifecycle", function()
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:match("%*%*Job Result:%*%*%s*`bg_lost1`%s*%(error%)"))
+      assert.truthy(joined:match("%*%*Job Result:%*%*%s*`job_lost1`%s*%(error%)"))
       assert.truthy(joined:match("Job lost: session ended before completion"))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -48,14 +48,14 @@ describe("background lifecycle", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_01` (job=bg_done1)",
+        "**Tool Result:** `tool_01` (job=job_done1)",
         "",
         "```",
         "Running in background.",
         "```",
         "",
         "@You:",
-        "**Job Result:** `bg_done1`",
+        "**Job Result:** `job_done1`",
         "",
         "```",
         "file1.txt file2.txt",
@@ -80,7 +80,7 @@ describe("background lifecycle", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_01` (job=bg_run1)",
+        "**Tool Result:** `tool_01` (job=job_run1)",
         "",
         "```",
         "Running in background.",
@@ -99,7 +99,7 @@ describe("background lifecycle", function()
           started_at = 0,
           completed = false,
           placeholder_modified = false,
-          job_id = "bg_run1",
+          job_id = "job_run1",
         },
       }
 

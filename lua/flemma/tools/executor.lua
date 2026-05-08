@@ -80,11 +80,11 @@ local function get_delivery_queue(bufnr)
   return buffer_state.delivery_queue
 end
 
----Generate a random unique background job identifier (e.g. "bg_k7x2m").
+---Generate a random unique job identifier (e.g. "job_k7x2m").
 ---Relies on Neovim seeding math.randomseed(vim.uv.hrtime()) at startup.
 ---@return string
 function M.generate_job_id()
-  local parts = { "bg_" }
+  local parts = { "job_" }
   for _ = 1, JOB_ID_LENGTH do
     local idx = math.random(1, #JOB_ID_CHARS)
     parts[#parts + 1] = JOB_ID_CHARS:sub(idx, idx)
@@ -807,14 +807,14 @@ function M.background_at_cursor(bufnr)
     return false, "Failed to update header: " .. (header_err or "unknown")
   end
 
-  local bg_placeholder_text
+  local job_placeholder_text
   if is_tool_available("flemma:job_status", bufnr) then
-    bg_placeholder_text = messages.render("background_available", { job_id = job_id })
+    job_placeholder_text = messages.render("background_available", { job_id = job_id })
   else
-    bg_placeholder_text = messages.render("background_unavailable", {})
+    job_placeholder_text = messages.render("background_unavailable", {})
   end
   local content_ok, content_err =
-    injector.set_fence_content(bufnr, ctx.tool_id, bg_placeholder_text or "Running in background.")
+    injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text or "Running in background.")
   if not content_ok then
     log.warn(
       "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")

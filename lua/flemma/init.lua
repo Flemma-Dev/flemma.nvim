@@ -210,22 +210,22 @@ M.setup = function(user_opts)
       local buf_count = 0
       for bufnr, bs in state.each_buffer_state() do
         local has_request = bs.current_request ~= nil
-        local bg_count = 0
+        local job_count = 0
         if bs.pending_executions then
           for _, entry in pairs(bs.pending_executions) do
             if entry.job_id then
-              bg_count = bg_count + 1
+              job_count = job_count + 1
             end
           end
         end
-        if has_request or bg_count > 0 then
+        if has_request or job_count > 0 then
           log.info(
             "VimLeavePre: buffer "
               .. bufnr
               .. " — cancelling request="
               .. tostring(has_request)
               .. " jobs="
-              .. bg_count
+              .. job_count
           )
         end
         bridge.cancel_request({ bufnr = bufnr })

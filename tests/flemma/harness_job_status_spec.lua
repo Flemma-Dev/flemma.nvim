@@ -56,15 +56,15 @@ describe("flemma:job_status", function()
           started_at = os.time() - 10,
           completed = false,
           placeholder_modified = true,
-          job_id = "bg_abc12",
+          job_id = "job_abc12",
         },
       }
 
-      local result = execute({ job_id = "bg_abc12" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_abc12" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("running", data.status)
-      assert.equals("bg_abc12", data.job_id)
+      assert.equals("job_abc12", data.job_id)
       assert.equals("tool_01", data.tool_id)
       assert.equals("bash", data.tool_name)
       assert.truthy(data.elapsed_seconds >= 10)
@@ -85,15 +85,15 @@ describe("flemma:job_status", function()
           started_at = os.time() - 5,
           completed = true,
           placeholder_modified = true,
-          job_id = "bg_def34",
+          job_id = "job_def34",
         },
       }
 
-      local result = execute({ job_id = "bg_def34" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_def34" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("queued", data.status)
-      assert.equals("bg_def34", data.job_id)
+      assert.equals("job_def34", data.job_id)
       assert.equals("tool_02", data.tool_id)
       assert.equals("grep", data.tool_name)
 
@@ -106,18 +106,18 @@ describe("flemma:job_status", function()
       buffer_state.pending_executions = {}
       buffer_state.delivery_queue = {
         {
-          job_id = "bg_queue1",
+          job_id = "job_queue1",
           tool_id = "tool_q1",
           tool_name = "find",
           result = { success = true, output = "found it" },
         },
       }
 
-      local result = execute({ job_id = "bg_queue1" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_queue1" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("queued", data.status)
-      assert.equals("bg_queue1", data.job_id)
+      assert.equals("job_queue1", data.job_id)
       assert.equals("tool_q1", data.tool_id)
       assert.equals("find", data.tool_name)
 
@@ -128,7 +128,7 @@ describe("flemma:job_status", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@You:",
-        "**Job Result:** `bg_done1`",
+        "**Job Result:** `job_done1`",
         "",
         "```",
         "all tests passed",
@@ -138,11 +138,11 @@ describe("flemma:job_status", function()
       buffer_state.pending_executions = {}
       buffer_state.delivery_queue = {}
 
-      local result = execute({ job_id = "bg_done1" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_done1" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("completed", data.status)
-      assert.equals("bg_done1", data.job_id)
+      assert.equals("job_done1", data.job_id)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -157,11 +157,11 @@ describe("flemma:job_status", function()
       buffer_state.pending_executions = {}
       buffer_state.delivery_queue = {}
 
-      local result = execute({ job_id = "bg_undone1" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_undone1" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("completed (removed from conversation)", data.status)
-      assert.equals("bg_undone1", data.job_id)
+      assert.equals("job_undone1", data.job_id)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -182,7 +182,7 @@ describe("flemma:job_status", function()
         },
       }
 
-      local result = execute({ job_id = "bg_nope" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_nope" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("completed (removed from conversation)", data.status)
@@ -203,19 +203,19 @@ describe("flemma:job_status", function()
           started_at = os.time(),
           completed = false,
           placeholder_modified = true,
-          job_id = "bg_both",
+          job_id = "job_both",
         },
       }
       buffer_state.delivery_queue = {
         {
-          job_id = "bg_both",
+          job_id = "job_both",
           tool_id = "tool_both",
           tool_name = "bash",
           result = { success = true, output = "done" },
         },
       }
 
-      local result = execute({ job_id = "bg_both" }, make_ctx(bufnr))
+      local result = execute({ job_id = "job_both" }, make_ctx(bufnr))
       local data = json.decode(result.output)
       assert.equals("running", data.status)
 

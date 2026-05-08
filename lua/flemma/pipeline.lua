@@ -167,12 +167,12 @@ function M.run(doc, context, opts)
     end
 
     for _, part in ipairs(parts) do
-      if part.kind == "text" and part._bg_job_id then
-        local info = job_id_to_tool[part._bg_job_id]
+      if part.kind == "text" and part._job_id then
+        local info = job_id_to_tool[part._job_id]
         if info then
           log.trace(
             "pipeline: enriching job result "
-              .. part._bg_job_id
+              .. part._job_id
               .. " → "
               .. info.tool_name
               .. " ("
@@ -181,10 +181,10 @@ function M.run(doc, context, opts)
           )
           part.text = "[Job result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text
         else
-          log.warn("pipeline: no tool_result found for job " .. part._bg_job_id .. ", using fallback enrichment")
-          part.text = "[Job result for unknown tool (job: " .. part._bg_job_id .. ")]\n" .. part.text
+          log.warn("pipeline: no tool_result found for job " .. part._job_id .. ", using fallback enrichment")
+          part.text = "[Job result for unknown tool (job: " .. part._job_id .. ")]\n" .. part.text
         end
-        part._bg_job_id = nil
+        part._job_id = nil
       end
     end
 

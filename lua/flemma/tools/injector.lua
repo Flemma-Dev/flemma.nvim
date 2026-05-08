@@ -366,7 +366,7 @@ end
 ---Set a modeline suffix on a tool_result header with arbitrary key=value content.
 ---@param bufnr integer
 ---@param tool_id string
----@param modeline_content string Raw modeline content (e.g. "job=bg_k7x2m")
+---@param modeline_content string Raw modeline content (e.g. "job=job_k7x2m")
 ---@return boolean success
 ---@return string|nil error_message
 function M.set_header_modeline(bufnr, tool_id, modeline_content)

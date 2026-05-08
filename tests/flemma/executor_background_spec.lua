@@ -56,7 +56,7 @@ describe("executor background filtering", function()
           started_at = 0,
           completed = false,
           placeholder_modified = false,
-          job_id = "bg_abc12",
+          job_id = "job_abc12",
         },
         ["tool_03"] = {
           tool_id = "tool_03",
@@ -87,7 +87,7 @@ describe("executor background filtering", function()
           started_at = 0,
           completed = false,
           placeholder_modified = false,
-          job_id = "bg_xyz99",
+          job_id = "job_xyz99",
         },
       }
       assert.equals(0, executor.count_running(bufnr))
@@ -120,7 +120,7 @@ describe("executor background filtering", function()
           started_at = 0,
           completed = false,
           placeholder_modified = false,
-          job_id = "bg_abc12",
+          job_id = "job_abc12",
         },
       }
       local pending = executor.get_pending(bufnr)
@@ -143,7 +143,7 @@ describe("executor background filtering", function()
           started_at = 0,
           completed = false,
           placeholder_modified = false,
-          job_id = "bg_xyz99",
+          job_id = "job_xyz99",
         },
       }
       local pending = executor.get_pending(bufnr)
@@ -153,11 +153,11 @@ describe("executor background filtering", function()
   end)
 
   describe("generate_job_id", function()
-    it("returns a string starting with bg_ followed by 8 alphanumeric chars", function()
+    it("returns a string starting with job_ followed by 8 alphanumeric chars", function()
       local executor = require("flemma.tools.executor")
       local id = executor.generate_job_id()
       assert.is_string(id)
-      assert.truthy(id:match("^bg_[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$"))
+      assert.truthy(id:match("^job_[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$"))
     end)
 
     it("generates unique IDs", function()
@@ -179,7 +179,7 @@ describe("executor background filtering", function()
       assert.is_false(executor.has_job_completions(bufnr))
 
       executor.enqueue_job_completion(bufnr, {
-        job_id = "bg_abc12",
+        job_id = "job_abc12",
         tool_id = "tool_01",
         tool_name = "bash",
         result = { success = true, output = "hello" },
@@ -189,7 +189,7 @@ describe("executor background filtering", function()
 
       local items = executor.drain_job_completions(bufnr)
       assert.equals(1, #items)
-      assert.equals("bg_abc12", items[1].job_id)
+      assert.equals("job_abc12", items[1].job_id)
       assert.equals("tool_01", items[1].tool_id)
       assert.is_true(items[1].result.success)
 
@@ -202,13 +202,13 @@ describe("executor background filtering", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
 
       executor.enqueue_job_completion(bufnr, {
-        job_id = "bg_first",
+        job_id = "job_first",
         tool_id = "t1",
         tool_name = "bash",
         result = { success = true, output = "a" },
       })
       executor.enqueue_job_completion(bufnr, {
-        job_id = "bg_second",
+        job_id = "job_second",
         tool_id = "t2",
         tool_name = "bash",
         result = { success = true, output = "b" },
@@ -216,8 +216,8 @@ describe("executor background filtering", function()
 
       local items = executor.drain_job_completions(bufnr)
       assert.equals(2, #items)
-      assert.equals("bg_first", items[1].job_id)
-      assert.equals("bg_second", items[2].job_id)
+      assert.equals("job_first", items[1].job_id)
+      assert.equals("job_second", items[2].job_id)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
@@ -235,7 +235,7 @@ describe("executor background filtering", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_01` (job=bg_abc12)",
+        "**Tool Result:** `tool_01` (job=job_abc12)",
         "",
         "```",
         "Running in background.",
@@ -254,7 +254,7 @@ describe("executor background filtering", function()
           started_at = 0,
           completed = false,
           placeholder_modified = true,
-          job_id = "bg_abc12",
+          job_id = "job_abc12",
         },
       }
 
@@ -263,7 +263,7 @@ describe("executor background filtering", function()
       assert.is_true(executor.has_job_completions(bufnr))
       local items = executor.drain_job_completions(bufnr)
       assert.equals(1, #items)
-      assert.equals("bg_abc12", items[1].job_id)
+      assert.equals("job_abc12", items[1].job_id)
       assert.is_true(items[1].result.success)
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -289,7 +289,7 @@ describe("executor background filtering", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_drain` (job=bg_drain)",
+        "**Tool Result:** `tool_drain` (job=job_drain)",
         "",
         "```",
         "Running in background.",
@@ -308,7 +308,7 @@ describe("executor background filtering", function()
           started_at = 0,
           completed = false,
           placeholder_modified = true,
-          job_id = "bg_drain",
+          job_id = "job_drain",
         },
       }
       buffer_state.current_request = nil
@@ -338,8 +338,8 @@ describe("executor background filtering", function()
       local executor = require("flemma.tools.executor")
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.register("test_bg_tool", {
-        name = "test_bg_tool",
+      registry.register("test_job_tool", {
+        name = "test_job_tool",
         description = "Test tool",
         async = true,
         input_schema = { type = "object", properties = { cmd = { type = "string" } } },
@@ -351,14 +351,14 @@ describe("executor background filtering", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@Assistant:",
-        "**Tool Use:** `test_bg_tool` (`tool_bg_01`)",
+        "**Tool Use:** `test_job_tool` (`tool_job_01`)",
         "",
         "```json",
         '{"cmd": "long task"}',
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_bg_01` (approved)",
+        "**Tool Result:** `tool_job_01` (approved)",
         "",
         "```",
         "```",
@@ -367,13 +367,13 @@ describe("executor background filtering", function()
 
       ---@type flemma.tools.ToolContext
       local context = {
-        tool_id = "tool_bg_01",
-        tool_name = "test_bg_tool",
+        tool_id = "tool_job_01",
+        tool_name = "test_job_tool",
         input = { cmd = "long task" },
         node = {
           kind = "tool_use",
-          id = "tool_bg_01",
-          name = "test_bg_tool",
+          id = "tool_job_01",
+          name = "test_job_tool",
           input = {},
           position = { start_line = 2, end_line = 6 },
         },
@@ -385,15 +385,15 @@ describe("executor background filtering", function()
       assert.is_true(ok, err)
 
       local buffer_state = state.get_buffer_state(bufnr)
-      local entry = buffer_state.pending_executions["tool_bg_01"]
+      local entry = buffer_state.pending_executions["tool_job_01"]
       assert.truthy(entry)
       assert.truthy(entry.job_id)
-      assert.truthy(entry.job_id:match("^bg_"))
+      assert.truthy(entry.job_id:match("^job_"))
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local header_found = false
       for _, line in ipairs(lines) do
-        if line:match("Tool Result.*tool_bg_01.*job=") then
+        if line:match("Tool Result.*tool_job_01.*job=") then
           header_found = true
           break
         end
