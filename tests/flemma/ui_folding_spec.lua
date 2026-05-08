@@ -586,6 +586,48 @@ describe("UI Folding", function()
       assert.are.equal(">2", fold_level, "Background job with completion should fold")
     end)
 
+    it("should fold a standalone job_result block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Done.",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_fold1`",
+        "",
+        "```",
+        "47 passed, 0 failed",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      local fold_level = folding.get_fold_level(6)
+      assert.are.equal(">2", fold_level, "Job result should fold")
+    end)
+
+    it("should fold a job_result with error status", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "**Job Result:** `job_fold2` (error)",
+        "",
+        "```",
+        "Exit code 1",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      local fold_level = folding.get_fold_level(2)
+      assert.are.equal(">2", fold_level, "Job result with error should fold")
+    end)
+
     it("should NOT fold tool_use without a matching tool_result", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
@@ -1463,6 +1505,36 @@ describe("UI Folding", function()
       -- Pending tool result should NOT be folded
       local foldclosed = vim.fn.foldclosed(10)
       assert.are.equal(-1, foldclosed, "Pending tool result should not be folded")
+    end)
+
+    it("should fold job_result blocks", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Done.",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_autoclose1`",
+        "",
+        "```",
+        "47 passed, 0 failed",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      folding.fold_completed_blocks(bufnr)
+
+      local foldclosed = vim.fn.foldclosed(6)
+      assert.are.equal(6, foldclosed, "Job result block should be folded at line 6")
     end)
 
     it("should not escalate fold when block is already closed", function()

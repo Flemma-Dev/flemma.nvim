@@ -154,6 +154,7 @@
 
 ---@class flemma.config.EditingAutoClose
 ---@field frontmatter boolean
+---@field job_result boolean
 ---@field thinking boolean
 ---@field tool_result boolean
 ---@field tool_use boolean

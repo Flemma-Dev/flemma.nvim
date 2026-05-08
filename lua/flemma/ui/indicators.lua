@@ -243,6 +243,55 @@ function M.update_tool_indicator(bufnr, tool_id, success)
   })
 end
 
+---Show a completion indicator on a job_result header line.
+---Creates static prefix (⬢ dot) and EOL (✔ Complete / ⚠ Failed) extmarks.
+---Uses the same indicator table keyed by job_id, so schedule_tool_indicator_clear works.
+---@param bufnr integer
+---@param job_id string
+---@param header_line integer 1-based line number of the job result header
+---@param success boolean
+function M.show_job_result_indicator(bufnr, job_id, header_line, success)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  M.clear_tool_indicator(bufnr, job_id)
+
+  local line_idx = header_line - 1
+  local prefix_hl, status_text, status_hl
+  if success then
+    prefix_hl = "FlemmaToolSuccess"
+    status_text = " ✔ Complete"
+    status_hl = "FlemmaToolSuccess"
+  else
+    prefix_hl = "FlemmaToolError"
+    status_text = " ⚠ Failed"
+    status_hl = "FlemmaToolError"
+  end
+
+  local prefix_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { TOOL_RESULT_ICON .. " ", prefix_hl } },
+    virt_text_pos = "inline",
+    hl_mode = "combine",
+    priority = PRIORITY_TOOL_EXECUTION,
+    spell = false,
+  })
+
+  local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { status_text, status_hl } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY_TOOL_EXECUTION,
+    spell = false,
+  })
+
+  indicators_for(bufnr)[job_id] = {
+    prefix_extmark_id = prefix_id,
+    status_extmark_id = status_id,
+    timer = nil,
+  }
+end
+
 --- Clear indicator for a tool (removes both extmarks and stops timer)
 ---@param bufnr integer
 ---@param tool_id string

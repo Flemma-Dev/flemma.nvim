@@ -24,9 +24,11 @@ local context_module = require("flemma.context")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
+local indicators = require("flemma.ui.indicators")
 local injector = require("flemma.tools.injector")
 local path_util = require("flemma.utilities.path")
 local parser = require("flemma.parser")
+local query = require("flemma.ast.query")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
@@ -74,6 +76,14 @@ local function drain_and_inject_completions(bufnr)
     if placement_case == 3 then
       user_is_typing = true
       log.debug("drain_and_inject_completions(): user is typing in last @You block, skipping auto-continue")
+    end
+
+    local job_doc = parser.get_parsed_document(bufnr)
+    local job_seg = query.find_job_result(job_doc, item.job_id)
+    if job_seg and job_seg.position then
+      local header_line = job_seg.position.start_line
+      indicators.show_job_result_indicator(bufnr, item.job_id, header_line, item.result.success)
+      indicators.schedule_tool_indicator_clear(bufnr, item.job_id, 1500)
     end
 
     local buffer_state = state.get_buffer_state(bufnr)

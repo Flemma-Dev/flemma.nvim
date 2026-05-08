@@ -396,6 +396,46 @@ function M.get_fold_text()
       table.insert(chunks, { " ", "FlemmaFoldPreview" })
       table.insert(chunks, { suffix, "FlemmaFoldMeta" })
       return chunks
+    elseif tool_kind == "job_result" then
+      ---@cast tool_seg flemma.ast.JobResultSegment
+      local icon_hl = "FlemmaToolIcon"
+      if tool_seg.status == "error" then
+        icon_hl = "FlemmaToolError"
+      elseif tool_seg.content ~= "" then
+        icon_hl = "FlemmaToolSuccess"
+      end
+
+      ---@type {[1]:string, [2]:string}[]
+      local chunks = {
+        { TOOL_RESULT_ICON .. " ", icon_hl },
+        { "Job Result: ", "FlemmaToolResultTitle" },
+        { tool_seg.job_id, "FlemmaToolName" },
+      }
+
+      local fixed_chrome = str.strwidth(TOOL_RESULT_ICON .. " ")
+        + str.strwidth("Job Result: ")
+        + str.strwidth(tool_seg.job_id)
+        + str.strwidth(": ")
+        + str.strwidth(" ")
+        + str.strwidth(suffix)
+      if tool_seg.status == "error" then
+        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
+      end
+      local available = text_width - fixed_chrome
+
+      table.insert(chunks, { ": ", "FlemmaFoldPreview" })
+      if tool_seg.status == "error" then
+        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      end
+
+      local body = preview.format_content_preview(tool_seg.content, available)
+      if body ~= "" then
+        table.insert(chunks, { body, "FlemmaFoldPreview" })
+      end
+
+      table.insert(chunks, { " ", "FlemmaFoldPreview" })
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+      return chunks
     end
   end
 

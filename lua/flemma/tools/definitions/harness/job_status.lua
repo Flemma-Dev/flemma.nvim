@@ -6,6 +6,7 @@ local M = {}
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local query = require("flemma.ast.query")
 local s = require("flemma.schema")
 local state = require("flemma.state")
 
@@ -68,18 +69,7 @@ M.definitions = {
       end
 
       local doc = ctx:get_parsed_document()
-      local found_in_buffer = false
-      for _, msg in ipairs(doc.messages) do
-        for _, seg in ipairs(msg.segments) do
-          if seg.kind == "job_result" and seg.job_id == job_id then
-            found_in_buffer = true
-            break
-          end
-        end
-        if found_in_buffer then
-          break
-        end
-      end
+      local found_in_buffer = query.find_job_result(doc, job_id) ~= nil
 
       local status = found_in_buffer and "completed" or "completed (removed from conversation)"
       log.debug("flemma:job_status: job " .. job_id .. " → " .. status)

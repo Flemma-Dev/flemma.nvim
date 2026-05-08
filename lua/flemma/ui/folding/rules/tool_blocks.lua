@@ -58,6 +58,8 @@ local function is_foldable_tool(seg, completed, completed_jobs)
   elseif seg.kind == "tool_result" then
     ---@cast seg flemma.ast.ToolResultSegment
     return is_tool_result_terminal(seg, completed_jobs)
+  elseif seg.kind == "job_result" then
+    return true
   end
   return false
 end
@@ -74,7 +76,7 @@ end
 local function compute_fold_end(seg_index, msg, base_end_line, completed, completed_jobs)
   for j = seg_index + 1, #msg.segments do
     local next_seg = msg.segments[j]
-    if next_seg.kind == "tool_use" or next_seg.kind == "tool_result" then
+    if next_seg.kind == "tool_use" or next_seg.kind == "tool_result" or next_seg.kind == "job_result" then
       if
         next_seg.position
         and next_seg.position.start_line
@@ -145,6 +147,10 @@ function M.populate(doc, fold_map)
           utils.set_fold(fold_map, seg.position.start_line, ">2")
           utils.set_fold(fold_map, end_line, "<2")
         end
+      elseif seg.kind == "job_result" then
+        local end_line = compute_fold_end(seg_index, msg, seg.position.end_line, completed, completed_jobs)
+        utils.set_fold(fold_map, seg.position.start_line, ">2")
+        utils.set_fold(fold_map, end_line, "<2")
       end
 
       ::continue::
@@ -192,6 +198,15 @@ function M.get_closeable_ranges(doc)
             config_key = "tool_result",
           })
         end
+      elseif seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
+        local end_line = compute_fold_end(seg_index, msg, seg.position.end_line, completed, completed_jobs)
+        table.insert(ranges, {
+          id = "job_result:" .. seg.job_id,
+          start_line = seg.position.start_line,
+          end_line = end_line,
+          config_key = "job_result",
+        })
       end
 
       ::continue::

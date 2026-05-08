@@ -236,7 +236,7 @@ function M.format_tool_result_preview(tool_name, content, is_error, max_length)
   return name_prefix .. body
 end
 
----@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil}
+---@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result"|"job_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.JobResultSegment|nil}
 
 ---Coalesce raw AST segments into logical preview entries.
 ---The parser emits each line as a separate text segment; this merges consecutive
@@ -278,6 +278,12 @@ local function coalesce_segments(segments)
       table.insert(entries, {
         kind = "tool_result",
         segment = seg --[[@as flemma.ast.ToolResultSegment]],
+      })
+    elseif seg.kind == "job_result" then
+      flush_text()
+      table.insert(entries, {
+        kind = "job_result",
+        segment = seg --[[@as flemma.ast.JobResultSegment]],
       })
     end
     -- Skip thinking segments (they have their own level-2 fold)
@@ -482,6 +488,36 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
             entry_width = entry_width + str.strwidth(body)
           end
         end
+      end
+    elseif entry.kind == "job_result" then
+      local job_seg = entry.segment --[[@as flemma.ast.JobResultSegment]]
+      local width_for_result = available - remainder_reserve
+      if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
+        add_overflow(#entries - i + 1)
+        break
+      end
+      local job_id_width = str.strwidth(job_seg.job_id)
+      local prefix_width = job_id_width + #": "
+      if job_seg.status == "error" then
+        prefix_width = prefix_width + #"(error) "
+      end
+
+      table.insert(entry_chunks, { job_seg.job_id, "FlemmaToolName" })
+      entry_width = job_id_width
+
+      table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
+      entry_width = entry_width + #": "
+
+      if job_seg.status == "error" then
+        table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
+        entry_width = entry_width + #"(error) "
+      end
+
+      local remaining = width_for_result - prefix_width
+      local body = M.format_content_preview(job_seg.content, remaining)
+      if body ~= "" then
+        table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
+        entry_width = entry_width + str.strwidth(body)
       end
     else
       local text_preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)

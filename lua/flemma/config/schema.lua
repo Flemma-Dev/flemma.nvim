@@ -336,6 +336,7 @@ return s.object({
       thinking = s.boolean(true),
       tool_use = s.boolean(true),
       tool_result = s.boolean(true),
+      job_result = s.boolean(true),
       frontmatter = s.boolean(false),
     }),
   }),

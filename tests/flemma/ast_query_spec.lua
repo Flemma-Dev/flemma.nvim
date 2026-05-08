@@ -487,4 +487,94 @@ describe("ast.query", function()
       assert.equals("res_b", siblings["id_2"].result.content)
     end)
   end)
+
+  describe("find_tool_segment_at_line", function()
+    it("returns job_result segment", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Job Result:** `job_abc12345`",
+        "",
+        "```",
+        "test output",
+        "```",
+      })
+
+      local seg, kind = ast.find_tool_segment_at_line(doc, 2)
+      assert.is_not_nil(seg)
+      assert.equals("job_result", kind)
+      assert.equals("job_abc12345", seg.job_id)
+    end)
+  end)
+
+  describe("find_job_result", function()
+    it("finds a job_result by job_id", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Job Result:** `job_find1`",
+        "",
+        "```",
+        "result data",
+        "```",
+      })
+
+      local seg, msg = ast.find_job_result(doc, "job_find1")
+      assert.is_not_nil(seg)
+      assert.equals("job_result", seg.kind)
+      assert.equals("job_find1", seg.job_id)
+      assert.is_not_nil(msg)
+      assert.equals("You", msg.role)
+    end)
+
+    it("returns nil for non-existent job_id", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Job Result:** `job_exists`",
+        "",
+        "```",
+        "data",
+        "```",
+      })
+
+      local seg = ast.find_job_result(doc, "job_nope")
+      assert.is_nil(seg)
+    end)
+  end)
+
+  describe("find_tool_result_for_job", function()
+    it("finds a tool_result with matching job= meta", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_bg1`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_bg1` (job=job_match1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+      })
+
+      local seg, msg = ast.find_tool_result_for_job(doc, "job_match1")
+      assert.is_not_nil(seg)
+      assert.equals("tool_result", seg.kind)
+      assert.equals("call_bg1", seg.tool_use_id)
+      assert.is_not_nil(msg)
+    end)
+
+    it("returns nil when no tool_result references the job", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Tool Result:** `call_plain`",
+        "",
+        "```",
+        "output",
+        "```",
+      })
+
+      local seg = ast.find_tool_result_for_job(doc, "job_orphan")
+      assert.is_nil(seg)
+    end)
+  end)
 end)
