@@ -1,4 +1,4 @@
-describe("background tool completed parsing", function()
+describe("job result parsing", function()
   local parser
 
   before_each(function()
@@ -7,11 +7,11 @@ describe("background tool completed parsing", function()
     parser = require("flemma.parser")
   end)
 
-  it("parses a successful background completion block", function()
+  it("parses a successful job result block", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
-      "**Background Tool Completed:** `bg_k7x2m`",
+      "**Job Result:** `bg_k7x2m`",
       "",
       "```",
       "tests/flemma/core_spec.lua: 47 passed, 0 failed",
@@ -21,18 +21,18 @@ describe("background tool completed parsing", function()
     assert.equals(1, #doc.messages)
     assert.equals("You", doc.messages[1].role)
     local segment = doc.messages[1].segments[1]
-    assert.equals("background_tool_completed", segment.kind)
+    assert.equals("job_result", segment.kind)
     assert.equals("bg_k7x2m", segment.job_id)
     assert.is_nil(segment.status)
     assert.truthy(segment.content:match("47 passed"))
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
 
-  it("parses an error background completion block", function()
+  it("parses an error job result block", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
-      "**Background Tool Completed:** `bg_9pfa3` (error)",
+      "**Job Result:** `bg_9pfa3` (error)",
       "",
       "```",
       "Exit code 1: FAILED tests/flemma/agent_spec.lua",
@@ -40,7 +40,7 @@ describe("background tool completed parsing", function()
     })
     local doc = parser.get_parsed_document(bufnr)
     local segment = doc.messages[1].segments[1]
-    assert.equals("background_tool_completed", segment.kind)
+    assert.equals("job_result", segment.kind)
     assert.equals("bg_9pfa3", segment.job_id)
     assert.equals("error", segment.status)
     assert.truthy(segment.content:match("Exit code 1"))
@@ -51,25 +51,25 @@ describe("background tool completed parsing", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
-      "**Background Tool Completed:** `bg_lost1` (error)",
+      "**Job Result:** `bg_lost1` (error)",
       "",
       "```",
-      "Background job lost: session ended before completion.",
+      "Job lost: session ended before completion.",
       "```",
     })
     local doc = parser.get_parsed_document(bufnr)
     local segment = doc.messages[1].segments[1]
-    assert.equals("background_tool_completed", segment.kind)
+    assert.equals("job_result", segment.kind)
     assert.equals("bg_lost1", segment.job_id)
     assert.equals("error", segment.status)
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
 
   describe("to_generic_parts", function()
-    it("converts background_tool_completed to text part with tag", function()
+    it("converts job_result to text part with tag", function()
       local nodes = require("flemma.ast.nodes")
       local evaluated_parts = {
-        nodes.background_tool_completed("bg_k7x2m", {
+        nodes.job_result("bg_k7x2m", {
           content = "47 passed, 0 failed",
           start_line = 1,
           end_line = 5,
@@ -84,7 +84,7 @@ describe("background tool completed parsing", function()
   end)
 
   describe("pipeline enrichment", function()
-    it("prefixes background completion text with the originating tool context", function()
+    it("prefixes job result text with the originating tool context", function()
       local context = require("flemma.context")
       local pipeline = require("flemma.pipeline")
       local lines = {
@@ -103,7 +103,7 @@ describe("background tool completed parsing", function()
         "```",
         "",
         "@You:",
-        "**Background Tool Completed:** `bg_k7x2m`",
+        "**Job Result:** `bg_k7x2m`",
         "",
         "```",
         "qa: OK",
@@ -113,16 +113,16 @@ describe("background tool completed parsing", function()
       local prompt =
         pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local text = prompt.history[#prompt.history].parts[1].text
-      assert.truthy(text:match("%[Background result for bash %(tool_01%)%]"))
+      assert.truthy(text:match("%[Job result for bash %(tool_01%)%]"))
       assert.truthy(text:match("qa: OK"))
     end)
 
-    it("prefixes unresolved background completion text with job context", function()
+    it("prefixes unresolved job result text with job context", function()
       local context = require("flemma.context")
       local pipeline = require("flemma.pipeline")
       local lines = {
         "@You:",
-        "**Background Tool Completed:** `bg_lost1`",
+        "**Job Result:** `bg_lost1`",
         "",
         "```",
         "late output",
@@ -132,7 +132,7 @@ describe("background tool completed parsing", function()
       local prompt =
         pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local text = prompt.history[1].parts[1].text
-      assert.truthy(text:match("%[Background result for unknown tool %(job: bg_lost1%)%]"))
+      assert.truthy(text:match("%[Job result for unknown tool %(job: bg_lost1%)%]"))
       assert.truthy(text:match("late output"))
     end)
   end)

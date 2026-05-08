@@ -42,7 +42,7 @@ local JOB_ID_LENGTH = 8
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
 
----@class flemma.tools.BackgroundCompletion
+---@class flemma.tools.JobCompletion
 ---@field job_id string
 ---@field tool_id string
 ---@field tool_name string
@@ -71,7 +71,7 @@ end
 
 ---Get or initialize the completion queue for a buffer.
 ---@param bufnr integer
----@return flemma.tools.BackgroundCompletion[]
+---@return flemma.tools.JobCompletion[]
 local function get_completion_queue(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if not buffer_state.completion_queue then
@@ -92,28 +92,28 @@ function M.generate_job_id()
   return table.concat(parts)
 end
 
----Enqueue a completed background tool result for later delivery.
+---Enqueue a completed job result for later delivery.
 ---@param bufnr integer
----@param item flemma.tools.BackgroundCompletion
-function M.enqueue_background_completion(bufnr, item)
+---@param item flemma.tools.JobCompletion
+function M.enqueue_job_completion(bufnr, item)
   local queue = get_completion_queue(bufnr)
   item.completed_at = item.completed_at or os.time()
   table.insert(queue, item)
 end
 
----Check whether any background completions are waiting for delivery.
+---Check whether any job completions are waiting for delivery.
 ---@param bufnr integer
 ---@return boolean
-function M.has_background_completions(bufnr)
+function M.has_job_completions(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   local queue = buffer_state.completion_queue
   return queue ~= nil and #queue > 0
 end
 
----Drain and return all queued background completions in FIFO order.
+---Drain and return all queued job completions in FIFO order.
 ---@param bufnr integer
----@return flemma.tools.BackgroundCompletion[]
-function M.drain_background_completions(bufnr)
+---@return flemma.tools.JobCompletion[]
+function M.drain_job_completions(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   local queue = buffer_state.completion_queue or {}
   buffer_state.completion_queue = {}
@@ -230,7 +230,7 @@ local function do_completion(bufnr, tool_id, result, opts)
     entry.completed = true
     indicators.update_tool_indicator(bufnr, tool_id, result.success)
     indicators.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
-    M.enqueue_background_completion(bufnr, {
+    M.enqueue_job_completion(bufnr, {
       job_id = entry.job_id,
       tool_id = tool_id,
       tool_name = entry.tool_name,
@@ -242,7 +242,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       tool_id = tool_id,
       status = result.success and "success" or "error",
     })
-    log.debug("executor: background tool " .. tool_id .. " (job=" .. entry.job_id .. ") completed, queued for delivery")
+    log.debug("executor: job " .. entry.job_id .. " (tool=" .. tool_id .. ") completed, queued for delivery")
 
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -251,11 +251,11 @@ local function do_completion(bufnr, tool_id, result, opts)
       local bs = state.get_buffer_state(bufnr)
       local fg_count = M.count_running(bufnr)
       if not bs.current_request and fg_count == 0 then
-        log.debug("executor: conversation idle, triggering background drain for buffer " .. bufnr)
-        bridge.drain_background_completions(bufnr)
+        log.debug("executor: conversation idle, triggering job drain for buffer " .. bufnr)
+        bridge.drain_job_completions(bufnr)
       else
         log.debug(
-          "executor: deferring background drain for buffer "
+          "executor: deferring job drain for buffer "
             .. bufnr
             .. " (request_active="
             .. tostring(bs.current_request ~= nil)
@@ -322,7 +322,7 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- tool executions, not only after the next send_to_provider() completes.
   editing.auto_write(bufnr)
 
-  if M.has_background_completions(bufnr) then
+  if M.has_job_completions(bufnr) then
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
@@ -331,10 +331,10 @@ local function do_completion(bufnr, tool_id, result, opts)
       local fg_count = M.count_running(bufnr)
       if not bs.current_request and fg_count == 0 then
         log.debug(
-          "executor: foreground tool done, conversation idle with pending background completions, triggering drain for buffer "
+          "executor: foreground tool done, conversation idle with pending job completions, triggering drain for buffer "
             .. bufnr
         )
-        bridge.drain_background_completions(bufnr)
+        bridge.drain_job_completions(bufnr)
       end
     end)
   end
@@ -841,7 +841,7 @@ function M.background_at_cursor(bufnr)
   return true, nil
 end
 
----Scan for orphaned background tool_results and inject error completion blocks.
+---Scan for orphaned job tool_results and inject error completion blocks.
 ---@param bufnr integer
 ---@return integer count Number of orphans resolved
 function M.scan_orphaned_background_jobs(bufnr)
@@ -851,8 +851,8 @@ function M.scan_orphaned_background_jobs(bufnr)
   local completed_jobs = {}
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
-      if seg.kind == "background_tool_completed" then
-        ---@cast seg flemma.ast.BackgroundToolCompletedSegment
+      if seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
         completed_jobs[seg.job_id] = true
       end
     end
@@ -889,9 +889,9 @@ function M.scan_orphaned_background_jobs(bufnr)
 
   for _, job_id in ipairs(orphans) do
     log.debug("executor: resolving orphan " .. job_id .. " with error completion")
-    injector.append_background_completion(bufnr, job_id, {
+    injector.append_job_result(bufnr, job_id, {
       success = false,
-      error = "Background job lost: session ended before completion.",
+      error = "Job lost: session ended before completion.",
     })
   end
 

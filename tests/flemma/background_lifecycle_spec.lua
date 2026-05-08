@@ -8,7 +8,7 @@ describe("background lifecycle", function()
   end)
 
   describe("scan_orphaned_background_jobs", function()
-    it("detects orphaned background tool_result and injects error completion", function()
+    it("detects orphaned job tool_result and injects error completion", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@Assistant:",
@@ -32,8 +32,8 @@ describe("background lifecycle", function()
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:match("%*%*Background Tool Completed:%*%*%s*`bg_lost1`%s*%(error%)"))
-      assert.truthy(joined:match("Background job lost: session ended before completion"))
+      assert.truthy(joined:match("%*%*Job Result:%*%*%s*`bg_lost1`%s*%(error%)"))
+      assert.truthy(joined:match("Job lost: session ended before completion"))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
@@ -55,7 +55,7 @@ describe("background lifecycle", function()
         "```",
         "",
         "@You:",
-        "**Background Tool Completed:** `bg_done1`",
+        "**Job Result:** `bg_done1`",
         "",
         "```",
         "file1.txt file2.txt",

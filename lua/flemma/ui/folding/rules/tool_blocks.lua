@@ -8,7 +8,7 @@ local ast = require("flemma.ast")
 M.name = "tool_blocks"
 M.auto_close = true
 
----Build a set of job_ids that have a BackgroundToolCompleted segment in the document.
+---Build a set of job_ids that have a JobResult segment in the document.
 ---Called once per fold-map build so individual terminal checks are O(1).
 ---@param doc flemma.ast.DocumentNode
 ---@return table<string, boolean>
@@ -16,8 +16,8 @@ local function build_completed_jobs(doc)
   local jobs = {}
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
-      if seg.kind == "background_tool_completed" then
-        ---@cast seg flemma.ast.BackgroundToolCompletedSegment
+      if seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
         jobs[seg.job_id] = true
       end
     end
@@ -29,7 +29,7 @@ end
 ---Terminal: no status with content (completed), error, denied, rejected, aborted.
 ---In-flight: pending, approved, no status with empty content (executing).
 ---Background: tool_result with meta.job is not terminal until a matching
----BackgroundToolCompleted segment exists in the document.
+---JobResult segment exists in the document.
 ---@param seg flemma.ast.ToolResultSegment
 ---@param completed_jobs table<string, boolean>
 ---@return boolean

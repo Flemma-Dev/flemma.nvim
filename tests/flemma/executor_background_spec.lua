@@ -176,24 +176,24 @@ describe("executor background filtering", function()
       local executor = require("flemma.tools.executor")
       local bufnr = vim.api.nvim_create_buf(false, true)
 
-      assert.is_false(executor.has_background_completions(bufnr))
+      assert.is_false(executor.has_job_completions(bufnr))
 
-      executor.enqueue_background_completion(bufnr, {
+      executor.enqueue_job_completion(bufnr, {
         job_id = "bg_abc12",
         tool_id = "tool_01",
         tool_name = "bash",
         result = { success = true, output = "hello" },
       })
 
-      assert.is_true(executor.has_background_completions(bufnr))
+      assert.is_true(executor.has_job_completions(bufnr))
 
-      local items = executor.drain_background_completions(bufnr)
+      local items = executor.drain_job_completions(bufnr)
       assert.equals(1, #items)
       assert.equals("bg_abc12", items[1].job_id)
       assert.equals("tool_01", items[1].tool_id)
       assert.is_true(items[1].result.success)
 
-      assert.is_false(executor.has_background_completions(bufnr))
+      assert.is_false(executor.has_job_completions(bufnr))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
@@ -201,20 +201,20 @@ describe("executor background filtering", function()
       local executor = require("flemma.tools.executor")
       local bufnr = vim.api.nvim_create_buf(false, true)
 
-      executor.enqueue_background_completion(bufnr, {
+      executor.enqueue_job_completion(bufnr, {
         job_id = "bg_first",
         tool_id = "t1",
         tool_name = "bash",
         result = { success = true, output = "a" },
       })
-      executor.enqueue_background_completion(bufnr, {
+      executor.enqueue_job_completion(bufnr, {
         job_id = "bg_second",
         tool_id = "t2",
         tool_name = "bash",
         result = { success = true, output = "b" },
       })
 
-      local items = executor.drain_background_completions(bufnr)
+      local items = executor.drain_job_completions(bufnr)
       assert.equals(2, #items)
       assert.equals("bg_first", items[1].job_id)
       assert.equals("bg_second", items[2].job_id)
@@ -260,8 +260,8 @@ describe("executor background filtering", function()
 
       executor._test_do_completion(bufnr, "tool_01", { success = true, output = "hello world" })
 
-      assert.is_true(executor.has_background_completions(bufnr))
-      local items = executor.drain_background_completions(bufnr)
+      assert.is_true(executor.has_job_completions(bufnr))
+      local items = executor.drain_job_completions(bufnr)
       assert.equals(1, #items)
       assert.equals("bg_abc12", items[1].job_id)
       assert.is_true(items[1].result.success)
@@ -314,8 +314,8 @@ describe("executor background filtering", function()
       buffer_state.current_request = nil
 
       local drain_called_with = nil
-      local original = bridge.drain_background_completions
-      bridge.drain_background_completions = function(b)
+      local original = bridge.drain_job_completions
+      bridge.drain_job_completions = function(b)
         drain_called_with = b
       end
 
@@ -327,7 +327,7 @@ describe("executor background filtering", function()
 
       assert.equals(bufnr, drain_called_with)
 
-      bridge.drain_background_completions = original
+      bridge.drain_job_completions = original
       buffer_state.pending_executions = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -401,7 +401,7 @@ describe("executor background filtering", function()
       assert.is_true(header_found, "Expected job= in tool_result header")
 
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:match("Running in background%."))
+      assert.truthy(joined:match("Running as a background job%."))
       local extmarks = get_tool_extmarks(bufnr)
       assert.truthy(next(extmarks), "background execution should keep the spinner indicator visible")
       assert.truthy(extmarks[8]:match("Executing"), "background execution should show Executing status")
@@ -492,7 +492,7 @@ describe("executor background filtering", function()
       assert.truthy(header_line:match("job="), "Expected job= in header: " .. header_line)
 
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:match("Running in background%."))
+      assert.truthy(joined:match("Running as a background job%."))
 
       assert.is_false(buffer_state.locked)
       assert.same({}, get_tool_extmarks(bufnr))

@@ -595,7 +595,7 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").background_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Failed to background tool")
+            notify.error(err or "Failed to move tool to background")
           else
             notify.info("Tool moved to background.")
           end

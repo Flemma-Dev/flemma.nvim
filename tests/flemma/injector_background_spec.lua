@@ -36,7 +36,7 @@ describe("injector background extensions", function()
     end)
   end)
 
-  describe("append_background_completion", function()
+  describe("append_job_result", function()
     it("Case 1: appends into empty trailing @You block", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
@@ -48,14 +48,14 @@ describe("injector background extensions", function()
       })
       vim.bo[bufnr].filetype = "chat"
 
-      injector.append_background_completion(bufnr, "bg_k7x2m", {
+      injector.append_job_result(bufnr, "bg_k7x2m", {
         success = true,
         output = "47 passed, 0 failed",
       })
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:match("%*%*Background Tool Completed:%*%*%s*`bg_k7x2m`"))
+      assert.truthy(joined:match("%*%*Job Result:%*%*%s*`bg_k7x2m`"))
       assert.truthy(joined:match("47 passed, 0 failed"))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -68,7 +68,7 @@ describe("injector background extensions", function()
       })
       vim.bo[bufnr].filetype = "chat"
 
-      injector.append_background_completion(bufnr, "bg_abc99", {
+      injector.append_job_result(bufnr, "bg_abc99", {
         success = true,
         output = "result here",
       })
@@ -76,7 +76,7 @@ describe("injector background extensions", function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local joined = table.concat(lines, "\n")
       assert.truthy(joined:match("@You:"))
-      assert.truthy(joined:match("%*%*Background Tool Completed:%*%*%s*`bg_abc99`"))
+      assert.truthy(joined:match("%*%*Job Result:%*%*%s*`bg_abc99`"))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
@@ -91,14 +91,14 @@ describe("injector background extensions", function()
       })
       vim.bo[bufnr].filetype = "chat"
 
-      injector.append_background_completion(bufnr, "bg_xyz42", {
+      injector.append_job_result(bufnr, "bg_xyz42", {
         success = true,
         output = "bg result",
       })
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       local joined = table.concat(lines, "\n")
-      local bg_pos = joined:find("Background Tool Completed")
+      local bg_pos = joined:find("Job Result")
       local user_pos = joined:find("I'm typing something here")
       assert.truthy(bg_pos)
       assert.truthy(user_pos)
@@ -117,7 +117,7 @@ describe("injector background extensions", function()
       })
       vim.bo[bufnr].filetype = "chat"
 
-      injector.append_background_completion(bufnr, "bg_err01", {
+      injector.append_job_result(bufnr, "bg_err01", {
         success = false,
         error = "Exit code 1",
       })

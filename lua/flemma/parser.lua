@@ -19,7 +19,7 @@ local post_parse_hook = nil
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`(.*)$"
-local BACKGROUND_COMPLETED_PATTERN = "^%*%*Background Tool Completed:%*%*%s*`([^`]+)`(.*)$"
+local JOB_RESULT_PATTERN = "^%*%*Job Result:%*%*%s*`([^`]+)`(.*)$"
 local TOOL_RESULT_SUFFIX_PATTERN = "^%s*%((.*)%)%s*$"
 local ABORTED_PATTERN = "^<!%-%-%s*flemma:aborted:%s*(.-)%s*%-%->$"
 
@@ -113,14 +113,14 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     local line = lines[i]
     local current_line_num = base_line_num + i - 1
 
-    -- Check for **Background Tool Completed:** marker
-    local background_job_id, background_raw_suffix = line:match(BACKGROUND_COMPLETED_PATTERN)
-    if background_job_id then
+    -- Check for **Job Result:** marker
+    local job_result_id, job_result_raw_suffix = line:match(JOB_RESULT_PATTERN)
+    if job_result_id then
       flush_accum()
-      local background_suffix_inner = background_raw_suffix and background_raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
-      local background_tokens = background_suffix_inner and modeline.parse(background_suffix_inner) or nil
-      local background_status, background_meta = extract_status(background_tokens)
-      local background_start_line = current_line_num
+      local job_result_suffix_inner = job_result_raw_suffix and job_result_raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+      local job_result_tokens = job_result_suffix_inner and modeline.parse(job_result_suffix_inner) or nil
+      local job_result_status, job_result_meta = extract_status(job_result_tokens)
+      local job_result_start_line = current_line_num
 
       local content_start = codeblock.skip_blank_lines(lines, i + 1)
       local block, block_end = codeblock.parse_fenced_block(lines, content_start)
@@ -128,11 +128,11 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       if block then
         table.insert(
           segments,
-          ast.background_tool_completed(background_job_id, {
+          ast.job_result(job_result_id, {
             content = block.content,
-            status = background_status == "error" and "error" or nil,
-            meta = background_meta,
-            start_line = background_start_line,
+            status = job_result_status == "error" and "error" or nil,
+            meta = job_result_meta,
+            start_line = job_result_start_line,
             end_line = base_line_num + block_end - 1,
           })
         )
@@ -140,11 +140,11 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       else
         table.insert(
           segments,
-          ast.background_tool_completed(background_job_id, {
+          ast.job_result(job_result_id, {
             content = "",
-            status = background_status == "error" and "error" or nil,
-            meta = background_meta,
-            start_line = background_start_line,
+            status = job_result_status == "error" and "error" or nil,
+            meta = job_result_meta,
+            start_line = job_result_start_line,
             end_line = current_line_num,
           })
         )

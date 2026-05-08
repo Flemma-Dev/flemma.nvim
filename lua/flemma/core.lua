@@ -44,22 +44,22 @@ local schema_definition = require("flemma.config.schema")
 local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
 
----Drain background completion queue and inject results into the buffer.
+---Drain job completion queue and inject results into the buffer.
 ---@param bufnr integer
 ---@return integer count Number of completions injected
 ---@return boolean safe_to_continue False when user content was in progress
 local function drain_and_inject_completions(bufnr)
-  if not executor.has_background_completions(bufnr) then
+  if not executor.has_job_completions(bufnr) then
     log.trace("drain_and_inject_completions(): no pending completions for buffer " .. bufnr)
     return 0, true
   end
 
-  local items = executor.drain_background_completions(bufnr)
+  local items = executor.drain_job_completions(bufnr)
   log.debug("drain_and_inject_completions(): draining " .. #items .. " completion(s) for buffer " .. bufnr)
   local user_is_typing = false
 
   for _, item in ipairs(items) do
-    local placement_case = injector.append_background_completion(bufnr, item.job_id, item.result)
+    local placement_case = injector.append_job_result(bufnr, item.job_id, item.result)
     log.debug(
       "drain_and_inject_completions(): injected "
         .. item.job_id
@@ -81,7 +81,7 @@ local function drain_and_inject_completions(bufnr)
       buffer_state.pending_executions[item.tool_id] = nil
     end
 
-    hooks.dispatch("background:completed", {
+    hooks.dispatch("job:completed", {
       bufnr = bufnr,
       job_id = item.job_id,
       tool_id = item.tool_id,
@@ -631,7 +631,7 @@ function M.send_or_execute(opts)
   end
 
   if opts.user_initiated then
-    log.trace("send_or_execute(): user-initiated send, draining background completions first")
+    log.trace("send_or_execute(): user-initiated send, draining job completions first")
     drain_and_inject_completions(bufnr)
   end
 
@@ -1400,7 +1400,7 @@ function M._run_send_pipeline(bufnr, opts)
             "send_to_provider(): post-response autopilot state="
               .. ap_state
               .. " has_bg_completions="
-              .. tostring(executor.has_background_completions(bufnr))
+              .. tostring(executor.has_job_completions(bufnr))
           )
           if ap_state == "idle" then
             hooks.dispatch("conversation:idle", { bufnr = bufnr })
@@ -1409,13 +1409,13 @@ function M._run_send_pipeline(bufnr, opts)
               log.debug(
                 "conversation:idle: drained "
                   .. drained
-                  .. " background completion(s), safe="
+                  .. " job completion(s), safe="
                   .. tostring(safe)
                   .. " autopilot="
                   .. tostring(autopilot.is_enabled(bufnr))
               )
               if safe and autopilot.is_enabled(bufnr) then
-                log.debug("conversation:idle: scheduling auto-continue after background drain")
+                log.debug("conversation:idle: scheduling auto-continue after job drain")
                 vim.schedule(function()
                   if vim.api.nvim_buf_is_valid(bufnr) then
                     M.send_or_execute({ bufnr = bufnr })
@@ -1529,12 +1529,12 @@ bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
-bridge.register("drain_background_completions", function(bufnr)
-  log.debug("bridge.drain_background_completions(): triggered for buffer " .. bufnr)
+bridge.register("drain_job_completions", function(bufnr)
+  log.debug("bridge.drain_job_completions(): triggered for buffer " .. bufnr)
   local drained, safe = drain_and_inject_completions(bufnr)
   if drained > 0 then
     log.debug(
-      "bridge.drain_background_completions(): drained "
+      "bridge.drain_job_completions(): drained "
         .. drained
         .. " completion(s), safe="
         .. tostring(safe)
@@ -1542,7 +1542,7 @@ bridge.register("drain_background_completions", function(bufnr)
         .. tostring(autopilot.is_enabled(bufnr))
     )
     if safe and autopilot.is_enabled(bufnr) then
-      log.debug("bridge.drain_background_completions(): scheduling auto-continue for buffer " .. bufnr)
+      log.debug("bridge.drain_job_completions(): scheduling auto-continue for buffer " .. bufnr)
       vim.schedule(function()
         if vim.api.nvim_buf_is_valid(bufnr) then
           M.send_or_execute({ bufnr = bufnr })

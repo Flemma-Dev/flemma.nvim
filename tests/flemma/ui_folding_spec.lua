@@ -545,7 +545,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- tool_result has content and a job modeline but no BackgroundToolCompleted
+      -- tool_result has content and a job modeline but no JobResult
       local fold_level = folding.get_fold_level(11)
       assert.are_not.equal(">2", fold_level, "Background job without completion should NOT fold")
     end)
@@ -574,7 +574,7 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Background Tool Completed:** `bg_abc12`",
+        "**Job Result:** `bg_abc12`",
         "",
         "```",
         "actual result here",

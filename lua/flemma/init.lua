@@ -203,9 +203,9 @@ M.setup = function(user_opts)
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
 
-  local background_lifecycle_group = vim.api.nvim_create_augroup("FlemmaBackgroundLifecycle", { clear = true })
+  local job_lifecycle_group = vim.api.nvim_create_augroup("FlemmaJobLifecycle", { clear = true })
   vim.api.nvim_create_autocmd("VimLeavePre", {
-    group = background_lifecycle_group,
+    group = job_lifecycle_group,
     callback = function()
       local buf_count = 0
       for bufnr, bs in state.each_buffer_state() do
@@ -224,7 +224,7 @@ M.setup = function(user_opts)
               .. bufnr
               .. " — cancelling request="
               .. tostring(has_request)
-              .. " background_jobs="
+              .. " jobs="
               .. bg_count
           )
         end
@@ -237,14 +237,14 @@ M.setup = function(user_opts)
     end,
   })
   vim.api.nvim_create_autocmd("BufReadPost", {
-    group = background_lifecycle_group,
+    group = job_lifecycle_group,
     pattern = "*.chat",
     callback = function(ev)
       vim.schedule(function()
         if vim.api.nvim_buf_is_valid(ev.buf) then
           local count = executor.scan_orphaned_background_jobs(ev.buf)
           if count > 0 then
-            notify.info(count .. " orphaned background job(s) resolved.")
+            notify.info(count .. " orphaned job(s) resolved.")
           end
         end
       end)

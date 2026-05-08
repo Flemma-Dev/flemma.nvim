@@ -128,7 +128,7 @@ describe("flemma:job_status", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@You:",
-        "**Background Tool Completed:** `bg_done1`",
+        "**Job Result:** `bg_done1`",
         "",
         "```",
         "all tests passed",

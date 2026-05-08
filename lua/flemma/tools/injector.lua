@@ -426,19 +426,19 @@ function M.set_fence_content(bufnr, tool_id, content)
   return true, nil
 end
 
----Append a **Background Tool Completed:** block to the buffer.
+---Append a **Job Result:** block to the buffer.
 ---@param bufnr integer
 ---@param job_id string
 ---@param result flemma.tools.ExecutionResult
 ---@return integer case 1, 2, or 3
-function M.append_background_completion(bufnr, job_id, result)
+function M.append_job_result(bufnr, job_id, result)
   if not vim.api.nvim_buf_is_valid(bufnr) then
-    log.warn("injector: append_background_completion skipped, buffer " .. bufnr .. " invalid")
+    log.warn("injector: append_job_result skipped, buffer " .. bufnr .. " invalid")
     return 1
   end
 
   local content_lines, is_error = format_result_lines(result)
-  local header = ("**Background Tool Completed:** `%s`"):format(job_id)
+  local header = ("**Job Result:** `%s`"):format(job_id)
   if is_error then
     header = header .. " (error)"
   end

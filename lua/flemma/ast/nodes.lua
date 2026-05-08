@@ -66,15 +66,15 @@ local M = {}
 ---@field message string
 ---@field position flemma.ast.Position
 
----@class flemma.ast.BackgroundToolCompletedSegment
----@field kind "background_tool_completed"
+---@class flemma.ast.JobResultSegment
+---@field kind "job_result"
 ---@field job_id string
 ---@field content string
 ---@field status? "error"
 ---@field meta? table<string, any>
 ---@field position flemma.ast.Position
 
----@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment|flemma.ast.BackgroundToolCompletedSegment
+---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment|flemma.ast.JobResultSegment
 
 ---@class flemma.ast.Diagnostic
 ---@field type string Diagnostic category. Internal types are unprefixed (e.g., "frontmatter", "expression", "file"). Custom types from symbols.DIAGNOSTICS must use the "custom:" prefix (e.g., "custom:file_drift").
@@ -95,7 +95,7 @@ local M = {}
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"
 ---@field text string
----@field _bg_job_id? string Internal marker for background completion enrichment
+---@field _bg_job_id? string Internal marker for job result enrichment
 
 ---@class flemma.ast.GenericBinaryPart
 ---@field mime_type string
@@ -271,11 +271,11 @@ end
 
 ---@param job_id string
 ---@param opts? { content?: string, status?: "error", meta?: table<string, any>, start_line?: integer, end_line?: integer }
----@return flemma.ast.BackgroundToolCompletedSegment
-function M.background_tool_completed(job_id, opts)
+---@return flemma.ast.JobResultSegment
+function M.job_result(job_id, opts)
   opts = opts or {}
   return {
-    kind = "background_tool_completed",
+    kind = "job_result",
     job_id = job_id,
     content = opts.content or "",
     status = opts.status,
@@ -389,8 +389,8 @@ function M.to_generic_parts(evaluated_parts, source_file)
         parts = tool_parts,
         is_error = p.status == "error",
       })
-    elseif p.kind == "background_tool_completed" then
-      ---@cast p flemma.ast.BackgroundToolCompletedSegment
+    elseif p.kind == "job_result" then
+      ---@cast p flemma.ast.JobResultSegment
       if p.content and #p.content > 0 then
         table.insert(parts, { kind = "text", text = p.content, _bg_job_id = p.job_id })
       end

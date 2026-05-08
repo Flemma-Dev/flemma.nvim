@@ -187,7 +187,7 @@ function M.compile(segments)
       or segment.kind == "tool_use"
       or segment.kind == "thinking"
       or segment.kind == "aborted"
-      or segment.kind == "background_tool_completed"
+      or segment.kind == "job_result"
     then
       -- Opaque structural pass-through (tool_result with no inner segments, or other kinds).
       add_line_fn("__emit_part(__segments[" .. (seg_index or "nil") .. "])", lnum)
@@ -267,8 +267,8 @@ local function structural_segment_to_part(segment)
   elseif segment.kind == "aborted" then
     ---@cast segment flemma.ast.AbortedSegment
     return { kind = "aborted", message = segment.message }
-  elseif segment.kind == "background_tool_completed" then
-    ---@cast segment flemma.ast.BackgroundToolCompletedSegment
+  elseif segment.kind == "job_result" then
+    ---@cast segment flemma.ast.JobResultSegment
     return segment
   end
   return nil

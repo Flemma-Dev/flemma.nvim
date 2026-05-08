@@ -171,7 +171,7 @@ function M.run(doc, context, opts)
         local info = job_id_to_tool[part._bg_job_id]
         if info then
           log.trace(
-            "pipeline: enriching background completion "
+            "pipeline: enriching job result "
               .. part._bg_job_id
               .. " → "
               .. info.tool_name
@@ -179,12 +179,10 @@ function M.run(doc, context, opts)
               .. info.tool_use_id
               .. ")"
           )
-          part.text = "[Background result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text
+          part.text = "[Job result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text
         else
-          log.warn(
-            "pipeline: no tool_result found for background job " .. part._bg_job_id .. ", using fallback enrichment"
-          )
-          part.text = "[Background result for unknown tool (job: " .. part._bg_job_id .. ")]\n" .. part.text
+          log.warn("pipeline: no tool_result found for job " .. part._bg_job_id .. ", using fallback enrichment")
+          part.text = "[Job result for unknown tool (job: " .. part._bg_job_id .. ")]\n" .. part.text
         end
         part._bg_job_id = nil
       end

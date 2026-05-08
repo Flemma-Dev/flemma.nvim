@@ -71,7 +71,7 @@ M.definitions = {
       local found_in_buffer = false
       for _, msg in ipairs(doc.messages) do
         for _, seg in ipairs(msg.segments) do
-          if seg.kind == "background_tool_completed" and seg.job_id == job_id then
+          if seg.kind == "job_result" and seg.job_id == job_id then
             found_in_buffer = true
             break
           end

@@ -42,7 +42,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
 ---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
 ---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
----@field completion_queue? flemma.tools.BackgroundCompletion[] Completed background tool results awaiting delivery
+---@field completion_queue? flemma.tools.JobCompletion[] Completed job results awaiting delivery
 ---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
 ---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
 ---@field diagnostics_baseline_provider? string Provider that produced the current diagnostics baseline
