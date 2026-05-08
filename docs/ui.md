@@ -169,6 +169,25 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
+Four highlight groups control indicator and fold icon colours by status:
+
+| Group                 | Default link            | When it's used                             |
+| --------------------- | ----------------------- | ------------------------------------------ |
+| `FlemmaToolPending`   | `FlemmaToolResultTitle` | Pending indicator (inline `⬢` + EOL `⏸`)  |
+| `FlemmaToolExecuting` | `FlemmaToolResultTitle` | Executing spinner                          |
+| `FlemmaToolSuccess`   | `FlemmaToolResultTitle` | Completion indicator + fold `⬢` on success |
+| `FlemmaToolError`     | `DiagnosticError`       | Failure indicator + fold `⬢` on error      |
+
+By default, non-error states inherit the `Tool Result:` header colour so indicators blend with the surrounding text. To make each status visually distinct:
+
+```lua
+-- After Flemma loads (e.g., in a ColorScheme autocmd or after setup)
+vim.api.nvim_set_hl(0, "FlemmaToolPending",   { link = "DiagnosticHint" })
+vim.api.nvim_set_hl(0, "FlemmaToolExecuting", { link = "DiagnosticInfo" })
+vim.api.nvim_set_hl(0, "FlemmaToolSuccess",   { link = "DiagnosticOk" })
+-- FlemmaToolError already uses DiagnosticError
+```
+
 ### Tool previews
 
 When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.

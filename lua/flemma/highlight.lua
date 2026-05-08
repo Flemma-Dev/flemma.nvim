@@ -454,9 +454,9 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
 
   -- Tool execution indicator highlights
-  set_highlight("FlemmaToolPending", { link = "DiagnosticHint", default = true })
-  set_highlight("FlemmaToolExecuting", { link = "DiagnosticInfo", default = true })
-  set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
+  set_highlight("FlemmaToolPending", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolExecuting", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolSuccess", { link = "FlemmaToolResultTitle", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
   -- Integration busy indicator highlight
