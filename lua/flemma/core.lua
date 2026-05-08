@@ -1562,13 +1562,18 @@ bridge.register("drain_job_completions", function(bufnr)
         .. " autopilot="
         .. tostring(autopilot.is_enabled(bufnr))
     )
-    if safe and autopilot.is_enabled(bufnr) then
-      log.debug("bridge.drain_job_completions(): scheduling auto-continue for buffer " .. bufnr)
+    local ap_state = autopilot.get_state(bufnr)
+    if safe and autopilot.is_enabled(bufnr) and ap_state ~= "idle" then
+      log.debug("bridge.drain_job_completions(): scheduling auto-continue for buffer " .. bufnr .. " (autopilot=" .. ap_state .. ")")
       vim.schedule(function()
         if vim.api.nvim_buf_is_valid(bufnr) then
           M.send_or_execute({ bufnr = bufnr })
         end
       end)
+    elseif not safe then
+      log.debug("bridge.drain_job_completions(): skipping auto-continue (user is typing)")
+    elseif ap_state == "idle" then
+      log.debug("bridge.drain_job_completions(): skipping auto-continue (autopilot idle, likely disarmed)")
     end
   end
 end)

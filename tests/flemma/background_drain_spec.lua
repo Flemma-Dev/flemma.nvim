@@ -254,4 +254,74 @@ describe("job completion drain", function()
 
     core.send_or_execute = real_send
   end)
+
+  it("does not auto-continue when autopilot was disarmed (e.g., after Ctrl+C)", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({ tools = { autopilot = { enabled = true } } })
+    local executor = require("flemma.tools.executor")
+    local ap = require("flemma.autopilot")
+    local bridge = require("flemma.bridge")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    -- Simulate: autopilot was armed, then user pressed Ctrl+C which disarmed it.
+    ap.arm(bufnr)
+    ap.disarm(bufnr)
+    assert.equals("idle", ap.get_state(bufnr))
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_disarm1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "completed after cancel" },
+    })
+
+    local core = require("flemma.core")
+    local send_called = false
+    local real_send = core.send_or_execute
+    core.send_or_execute = function(...)
+      send_called = true
+      return real_send(...)
+    end
+
+    bridge.drain_job_completions(bufnr)
+
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local joined = table.concat(lines, "\n")
+    assert.truthy(joined:match("%*%*Job Result:%*%*%s*`job_disarm1`"), "Job result should be in the buffer")
+
+    vim.wait(50, function()
+      return send_called
+    end)
+
+    assert.is_false(send_called, "Autopilot must not auto-continue after disarm (Ctrl+C)")
+
+    core.send_or_execute = real_send
+  end)
 end)
