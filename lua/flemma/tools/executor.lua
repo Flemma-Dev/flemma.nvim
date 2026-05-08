@@ -28,7 +28,7 @@ local messages = require("flemma.messages")
 local tools_module = require("flemma.tools")
 
 local JOB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
-local JOB_ID_LENGTH = 5
+local JOB_ID_LENGTH = 8
 
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string

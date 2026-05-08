@@ -153,11 +153,11 @@ describe("executor background filtering", function()
   end)
 
   describe("generate_job_id", function()
-    it("returns a string starting with bg_ followed by 5 alphanumeric chars", function()
+    it("returns a string starting with bg_ followed by 8 alphanumeric chars", function()
       local executor = require("flemma.tools.executor")
       local id = executor.generate_job_id()
       assert.is_string(id)
-      assert.truthy(id:match("^bg_[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$"))
+      assert.truthy(id:match("^bg_[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$"))
     end)
 
     it("generates unique IDs", function()
