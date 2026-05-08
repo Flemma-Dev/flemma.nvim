@@ -665,12 +665,20 @@ function M.cancel(tool_id)
     end
     local entry = pending[tool_id]
     if entry and not entry.completed then
-      -- Call cancel function if available
+      local is_background = entry.job_id ~= nil
+      log.info(
+        "executor: cancelling "
+          .. (is_background and "background" or "foreground")
+          .. " tool "
+          .. tool_id
+          .. (entry.job_id and (" (job=" .. entry.job_id .. ")") or "")
+          .. " in buffer "
+          .. bufnr
+      )
       if entry.cancel_fn then
         pcall(entry.cancel_fn)
       end
 
-      -- Record cancellation as error result (cancel is always called from main thread)
       handle_completion(bufnr, tool_id, {
         success = false,
         error = "User aborted tool execution.",
@@ -679,6 +687,7 @@ function M.cancel(tool_id)
     end
     ::continue::
   end
+  log.debug("executor: cancel(" .. tool_id .. ") — tool not found or already completed")
   return false
 end
 
@@ -691,12 +700,15 @@ function M.cancel_all(bufnr)
     return
   end
 
-  -- Collect tool_ids to cancel (don't modify during iteration)
   local to_cancel = {}
   for tool_id, entry in pairs(pending) do
     if not entry.completed then
       table.insert(to_cancel, tool_id)
     end
+  end
+
+  if #to_cancel > 0 then
+    log.info("executor: cancel_all() — cancelling " .. #to_cancel .. " tool(s) in buffer " .. bufnr)
   end
 
   for _, tool_id in ipairs(to_cancel) do
@@ -726,32 +738,35 @@ function M.get_pending(bufnr)
   return result
 end
 
----Cancel the active operation for a buffer (API request or first pending tool)
+---Cancel the active operation for a buffer: API request, queued send, or tool under cursor.
+---Does NOT fall back to "oldest pending tool" — if the cursor isn't on a tool, the caller
+---should handle the miss (e.g., double-tap RAGE cancel).
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
+    log.debug("cancel_for_buffer(): cancelling active API request in buffer " .. bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
   if buffer_state.pending_send then
+    log.debug("cancel_for_buffer(): cancelling queued send in buffer " .. bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
-  local pending = M.get_pending(bufnr)
-  if #pending > 0 then
-    table.sort(pending, function(a, b)
-      return a.started_at < b.started_at
-    end)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, _ = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if ctx then
+    log.debug("cancel_for_buffer(): cursor on tool " .. ctx.tool_id .. ", attempting cancel")
     autopilot.disarm(bufnr)
-    M.cancel(pending[1].tool_id)
-    return true
+    return M.cancel(ctx.tool_id)
   end
+  log.debug("cancel_for_buffer(): nothing to cancel in buffer " .. bufnr)
   return false
 end
 
----Cancel the tool at cursor position, or the first pending tool if no cursor match
+---Cancel the tool at cursor position (foreground or background).
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
@@ -760,14 +775,6 @@ function M.cancel_at_cursor(bufnr)
   if ctx then
     autopilot.disarm(bufnr)
     return M.cancel(ctx.tool_id)
-  end
-  local pending = M.get_pending(bufnr)
-  if #pending > 0 then
-    table.sort(pending, function(a, b)
-      return a.started_at < b.started_at
-    end)
-    autopilot.disarm(bufnr)
-    return M.cancel(pending[1].tool_id)
   end
   return false
 end

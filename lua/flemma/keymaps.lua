@@ -3,12 +3,15 @@
 ---@class flemma.Keymaps
 local M = {}
 
+local bridge = require("flemma.bridge")
 local config_facade = require("flemma.config")
 local core = require("flemma.core")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
+local log = require("flemma.logging")
 local navigation = require("flemma.navigation")
 local notify = require("flemma.notify")
+local state = require("flemma.state")
 local textobject = require("flemma.textobject")
 local buffer_utils = require("flemma.utilities.buffer")
 local folding = require("flemma.ui.folding")
@@ -16,6 +19,10 @@ local ui = require("flemma.ui")
 
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
 local CANCEL_WINDOW_MS = 800
+local RAGE_CANCEL_MS = 500
+
+---@type integer? Monotonic timestamp (ms) of the last Ctrl+C miss (nothing was cancelled)
+local last_cancel_miss_at = nil
 
 ---Handle colon insertion in insert mode.
 ---If the text before the cursor is a valid role marker at the start of
@@ -98,9 +105,26 @@ M.setup = function()
           vim.keymap.set("n", config.keymaps.normal.cancel, function()
             local bufnr = vim.api.nvim_get_current_buf()
 
-            if not executor.cancel_for_buffer(bufnr) then
-              notify.info("Nothing to cancel")
+            if executor.cancel_for_buffer(bufnr) then
+              last_cancel_miss_at = nil
+              return
             end
+
+            local now = vim.uv.now()
+            if last_cancel_miss_at and (now - last_cancel_miss_at) < RAGE_CANCEL_MS then
+              last_cancel_miss_at = nil
+              log.info("RAGE cancel: user double-tapped Ctrl+C, cancelling all tools in buffer " .. bufnr)
+              executor.cancel_all(bufnr)
+              local buffer_state = state.get_buffer_state(bufnr)
+              if buffer_state.current_request then
+                bridge.cancel_request({ bufnr = bufnr })
+              end
+              return
+            end
+
+            last_cancel_miss_at = now
+            log.debug("keymaps: Ctrl+C miss in buffer " .. bufnr .. ", awaiting double-tap for RAGE cancel")
+            notify.info("Nothing to cancel (press again to cancel all)")
           end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
         end
 

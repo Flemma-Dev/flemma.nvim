@@ -2601,7 +2601,7 @@ describe("UI Folding", function()
         "@Assistant:",
         "Here are the results.",
         "",
-        '**Tool Use:** `bash` (`toolu_01`)',
+        "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
         '{"command":"sleep 10 && df -h","background":true}',
         "```",
