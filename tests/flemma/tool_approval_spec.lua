@@ -2446,20 +2446,20 @@ end)
 -- ============================================================================
 
 describe("Injector resolve_error_message", function()
-  it("returns DENIED_MESSAGE for denied status", function()
-    assert.equals(injector.DENIED_MESSAGE, injector.resolve_error_message("denied"))
+  it("returns denied message for denied status", function()
+    assert.equals("The tool was denied by a policy.", injector.resolve_error_message("denied"))
   end)
 
-  it("returns DENIED_MESSAGE for denied status even with content", function()
-    assert.equals(injector.DENIED_MESSAGE, injector.resolve_error_message("denied", "user content"))
+  it("returns denied message for denied status even with content", function()
+    assert.equals("The tool was denied by a policy.", injector.resolve_error_message("denied", "user content"))
   end)
 
-  it("returns REJECTED_MESSAGE for rejected status with no content", function()
-    assert.equals(injector.REJECTED_MESSAGE, injector.resolve_error_message("rejected"))
+  it("returns rejected message for rejected status with no content", function()
+    assert.equals("This tool has been rejected by the user.", injector.resolve_error_message("rejected"))
   end)
 
-  it("returns REJECTED_MESSAGE for rejected status with empty content", function()
-    assert.equals(injector.REJECTED_MESSAGE, injector.resolve_error_message("rejected", ""))
+  it("returns rejected message for rejected status with empty content", function()
+    assert.equals("This tool has been rejected by the user.", injector.resolve_error_message("rejected", ""))
   end)
 
   it("returns user content for rejected status with non-empty content", function()

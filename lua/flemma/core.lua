@@ -36,6 +36,7 @@ local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
+local messages = require("flemma.messages")
 local preprocessor = require("flemma.preprocessor")
 local str = require("flemma.utilities.string")
 local usage = require("flemma.usage")
@@ -43,7 +44,6 @@ local usage = require("flemma.usage")
 local nav = require("flemma.schema.navigation")
 local schema_definition = require("flemma.config.schema")
 
-local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
 
 ---Drain job completion queue and inject results into the buffer.
@@ -436,7 +436,7 @@ function M.cancel_request(opts)
             line_count,
             line_count,
             false,
-            vim.list_extend(separator, { "<!-- flemma:aborted: " .. ABORT_MESSAGE .. " -->" })
+            vim.list_extend(separator, { "<!-- flemma:aborted: " .. messages.render("request-aborted") .. " -->" })
           )
         end)
         editing.auto_write(bufnr)
@@ -523,7 +523,7 @@ local function advance_phase2(opts)
   for _, ctx in ipairs(aborted) do
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
-      error = ctx.aborted_message or ABORT_MESSAGE,
+      error = ctx.aborted_message or messages.render("request-aborted"),
     })
   end
 

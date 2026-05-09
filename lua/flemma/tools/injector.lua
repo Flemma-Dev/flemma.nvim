@@ -7,13 +7,10 @@ local buffer = require("flemma.utilities.buffer")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local ast = require("flemma.ast")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
-
---- Error messages for tool status resolution
-M.DENIED_MESSAGE = "The tool was denied by a policy."
-M.REJECTED_MESSAGE = "This tool has been rejected by the user."
 
 ---Resolve the error message for a denied or rejected tool status.
 ---For rejected: uses user-provided content if non-empty, otherwise the default message.
@@ -23,9 +20,9 @@ M.REJECTED_MESSAGE = "This tool has been rejected by the user."
 ---@return string
 function M.resolve_error_message(status, content)
   if status == "rejected" then
-    return (content and content ~= "") and content or M.REJECTED_MESSAGE
+    return (content and content ~= "") and content or messages.render("tool-rejected")
   end
-  return M.DENIED_MESSAGE
+  return messages.render("tool-denied")
 end
 
 ---Find the tool_use segment for a given tool ID

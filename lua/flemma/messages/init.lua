@@ -24,14 +24,10 @@ end
 
 ---Read a template file from the messages directory.
 ---@param name string Template name (without extension)
----@return string|nil content File contents, or nil if not found
+---@return string content
 local function read_template(name)
   local path = get_base_directory() .. "/" .. name .. ".chat"
-  local file = io.open(path, "r")
-  if not file then
-    log.warn("messages: template not found: " .. path)
-    return nil
-  end
+  local file = assert(io.open(path, "r"), "messages: template not found: " .. path)
   local content = file:read("*a")
   file:close()
   return content
@@ -41,14 +37,11 @@ end
 ---Uses the existing templating engine so templates support full `{{ expression }}`
 ---syntax including Lua code, not just simple variable substitution.
 ---@param name string Template name (without .chat extension)
----@param variables table<string, any> Variables available as `{{ name }}` in the template
----@return string|nil rendered Rendered template, or nil if template not found
+---@param variables? table<string, any> Variables available as `{{ name }}` in the template
+---@return string rendered Rendered template
 function M.render(name, variables)
   local content = read_template(name)
-  if not content then
-    return nil
-  end
-  local parts, diagnostics = renderer.render(content, variables)
+  local parts, diagnostics = renderer.render(content, variables or {})
   for _, diagnostic in ipairs(diagnostics) do
     log.warn("messages: template '" .. name .. "': " .. (diagnostic.error or "unknown error"))
   end

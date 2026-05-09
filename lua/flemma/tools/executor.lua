@@ -556,9 +556,9 @@ function M.execute(bufnr, context, opts)
     end
     local placeholder_text
     if is_tool_available("flemma:jobs:status", bufnr) then
-      placeholder_text = messages.render("background_available", { job_id = job_id })
+      placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
     else
-      placeholder_text = messages.render("background_unavailable", {})
+      placeholder_text = messages.render("job-executing--untracked")
     end
     local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text or "Running in background.")
     if not f_ok then
@@ -816,9 +816,9 @@ function M.background_at_cursor(bufnr)
 
   local job_placeholder_text
   if is_tool_available("flemma:jobs:status", bufnr) then
-    job_placeholder_text = messages.render("background_available", { job_id = job_id })
+    job_placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
   else
-    job_placeholder_text = messages.render("background_unavailable", {})
+    job_placeholder_text = messages.render("job-executing--untracked")
   end
   local content_ok, content_err =
     injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text or "Running in background.")
