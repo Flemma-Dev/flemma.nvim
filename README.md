@@ -396,7 +396,7 @@ Yes. Register custom tools, approval resolvers, credential resolvers, sandbox ba
 - **Prompt caching optimization.** Tool definitions are sorted alphabetically, JSON keys are ordered for maximum shared prefix, and environment data (date, time) is cached per buffer -- all to keep the request body byte-identical between turns so provider-side caching actually works.
 - **Cross-provider thinking preservation.** Thinking blocks carry provider-namespaced signatures (`anthropic:signature="..."`, `openai:signature="..."`). When you switch providers mid-conversation, old signatures stay in the buffer but are filtered out of the new provider's request -- so you can switch back without losing reasoning state.
 - **Background jobs.** Async tools can run in the background without blocking the conversation. Results queue up and are injected as `**Job Result:**` blocks when the model is idle. Orphaned jobs from interrupted sessions are detected and resolved on file reload. A floating bar tracks active jobs with a spinner and shows a countdown when autopilot is about to resume.
-- **Graduated hooks.** Beyond User autocmds, internal modules subscribe via `hooks.on()` -- synchronous Lua callbacks with per-subscriber error isolation, fired before the autocmd so the UI can react before external consumers.
+- **Lifecycle hooks.** Subscribe to events like `FlemmaRequestFinished` or `FlemmaJobCompleted` from your own plugins using standard Neovim autocmds. Flemma's own jobs bar, bufferline integration, and autopilot resume are all built on the same hooks -- they don't reach into the request engine, they just listen and react.
 
 </details>
 
