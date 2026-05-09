@@ -78,7 +78,7 @@ secret-tool store --label="Moonshot API Key" service moonshot key api
 3. Ensure `gcloud` is on your `$PATH` -- Flemma uses `gcloud auth print-access-token` to refresh tokens.
 4. Set `project_id` in your config or via `:Flemma switch vertex gemini-3.1-pro-preview project_id=my-project`.
 
-Flemma tries each resolver in order and uses the first one that returns a credential. When everything fails, the notification tells you exactly which resolvers were tried and why each one couldn't help. You can also write custom resolvers for tools like Bitwarden or 1Password -- read more in [extending.md](docs/extending.md#credential-resolution).
+Flemma tries each source in order and uses the first one that returns a credential. When everything fails, the notification tells you exactly which sources were tried and why each one couldn't help. You can also add custom sources for tools like Bitwarden or 1Password -- read more in [extending.md](docs/extending.md#credential-resolution).
 
 </details>
 
@@ -283,12 +283,12 @@ Individual `.chat` files can override any of these settings. Detailed references
 Flemma is designed to be extended. Everything plugs in through clean registries:
 
 - **Custom tools** -- define your own with `require("flemma.tools").register()`. Read more in [tools.md](docs/tools.md#registering-custom-tools).
-- **Approval policies** -- priority-based resolver chain for tool approval. Read more in [tools.md](docs/tools.md#approval-resolvers).
-- **Hooks** -- lifecycle events (`FlemmaRequestSending`, `FlemmaToolCompleted`, etc.) as standard `User` autocmds. Read more in [extending.md](docs/extending.md).
-- **Custom providers** -- inherit from the base class or `openai_chat` for compatible APIs. Read more in [extending.md](docs/extending.md).
+- **Approval policies** -- control which tools run automatically, which need your review, and which are blocked entirely. Read more in [tools.md](docs/tools.md#approval-resolvers).
+- **Hooks** -- react to lifecycle events (`FlemmaRequestSending`, `FlemmaToolCompleted`, etc.) using standard Neovim autocmds. Read more in [extending.md](docs/extending.md).
+- **Custom providers** -- add your own API providers for compatible services. Read more in [extending.md](docs/extending.md).
 - **Sandbox backends** -- add platform-specific sandboxing beyond Bubblewrap. Read more in [sandbox.md](docs/sandbox.md#custom-backends).
-- **Template system** -- Lua/JSON per-file configuration, inline expressions, file includes, composable system prompts. Read more in [templates.md](docs/templates.md).
-- **Personalities** -- dynamic system prompt generators that assemble tools, environment, and project context (reads `CLAUDE.md`, `.cursorrules`, etc.). Read more in [personalities.md](docs/personalities.md).
+- **Template system** -- per-file configuration, inline expressions, file includes, and composable system prompts. Read more in [templates.md](docs/templates.md).
+- **Personalities** -- reusable system prompts that adapt to your project, pulling in context from `CLAUDE.md`, `.cursorrules`, and more. Read more in [personalities.md](docs/personalities.md).
 
 Integrations with lualine, bufferline.nvim, and nvim-treesitter-context are documented in [integrations.md](docs/integrations.md). nvim-web-devicons gets a `.chat` file icon automatically.
 
@@ -387,10 +387,10 @@ Yes. Register custom tools, approval resolvers, credential resolvers, sandbox ba
 <details>
 <summary>For the curious -- things Flemma does that you'll probably never think about, but that make the experience work.</summary>
 
-- **Copy-on-Write configuration.** Config isn't merged tables. It's an operation log across four priority layers where scalars resolve top-down and lists accumulate with `append`/`remove`/`prepend` semantics. That's how a single `.chat` file can remove one tool from the approval list without replacing the whole thing.
-- **Jinja-style template engine.** Beyond simple `{{ expressions }}`, Flemma supports `{% code %}` blocks for loops, conditionals, and variable assignment -- with whitespace trimming (`{%- -%}`), graceful error degradation, and strict undefined-variable detection. It compiles templates to Lua and runs them in a sandboxed environment.
-- **Sinks.** Streaming data from providers is accumulated in hidden scratch buffers with batched flushing on a 50ms timer, handling partial lines across network chunks. Buffers are lazily created on first write and cleaned up automatically. If you wanted to, you can hook into these buffers to get a live view of the response as it streams in.
-- **Full AST.** Every `.chat` file is parsed into a structured document tree -- messages, segments, tool blocks, thinking blocks, expressions, all with position tracking and diagnostics. During streaming, only the newly appended lines are re-parsed; the rest is frozen in a snapshot.
+- **Layered configuration.** A single `.chat` file can tweak one setting -- say, remove `bash` from the approval list -- without replacing the whole config. Settings stack across four priority layers, and list operations like `append`/`remove` compose naturally.
+- **Jinja-style template engine.** Beyond simple `{{ expressions }}`, Flemma supports `{% code %}` blocks for loops, conditionals, and variable assignment -- with whitespace trimming (`{%- -%}`), graceful error degradation, and strict undefined-variable detection. Templates compile to Lua and run in a sandboxed environment.
+- **Smooth streaming.** Responses arrive in chunks over the network, often mid-line. Flemma stitches them together in hidden scratch buffers with batched flushing on a 50ms timer, so what you see in the buffer is always clean text. You can hook into these buffers for a live view of the raw stream.
+- **Structured parsing.** Flemma understands the structure of your conversation -- messages, tool calls, thinking blocks, expressions -- not just the text. This powers folding, syntax highlighting, LSP hover, and go-to-definition. During streaming, only the newly appended lines are re-parsed; the rest is frozen.
 - **In-process LSP.** Flemma runs an LSP server inside Neovim for `.chat` buffers. Hover shows AST node details for the element under cursor. Go-to-definition jumps between tool use and result blocks, and resolves `include()` paths and `@./file` references. `gf` works on file references too.
 - **Output truncation.** Large tool outputs (over 2,000 lines or 50KB) are automatically truncated to keep the context window manageable. The full output is saved to a temp file so nothing is lost.
 - **Prompt caching optimization.** Tool definitions are sorted alphabetically, JSON keys are ordered for maximum shared prefix, and environment data (date, time) is cached per buffer -- all to keep the request body byte-identical between turns so provider-side caching actually works.
