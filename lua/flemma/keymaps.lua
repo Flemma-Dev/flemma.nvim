@@ -110,12 +110,18 @@ M.setup = function()
               return
             end
 
+            local buffer_state = state.get_buffer_state(bufnr)
+            if buffer_state.resume_delay_timer then
+              bridge.cancel_request({ bufnr = bufnr })
+              last_cancel_miss_at = nil
+              return
+            end
+
             local now = vim.uv.now()
             if last_cancel_miss_at and (now - last_cancel_miss_at) < RAGE_CANCEL_MS then
               last_cancel_miss_at = nil
               log.info("RAGE cancel: user double-tapped Ctrl+C, cancelling all tools in buffer " .. bufnr)
               executor.cancel_all(bufnr)
-              local buffer_state = state.get_buffer_state(bufnr)
               if buffer_state.current_request then
                 bridge.cancel_request({ bufnr = bufnr })
               end

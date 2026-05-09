@@ -479,4 +479,24 @@ describe("RAGE cancel (double-tap Ctrl+C)", function()
     fire_cancel()
     assert.is_false(bg_cancelled, "background tool should NOT be cancelled — timer was reset by successful cancel")
   end)
+
+  it("Ctrl+C cancels pending resume delay timer via keymap", function()
+    local bufnr = setup_and_extract_cancel({
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+
+    local buffer_state = state.get_buffer_state(bufnr)
+    local timer = assert(vim.uv.new_timer())
+    buffer_state.resume_delay_timer = timer
+    timer:start(5000, 0, function() end)
+
+    fire_cancel()
+
+    assert.is_nil(buffer_state.resume_delay_timer, "Resume delay timer should be cancelled by Ctrl+C")
+    assert.is_true(timer:is_closing(), "Timer should be closed")
+  end)
 end)
