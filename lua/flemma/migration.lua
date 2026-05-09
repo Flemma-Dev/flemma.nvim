@@ -2,6 +2,8 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local bridge = require("flemma.bridge")
+local notify = require("flemma.notify")
 
 local ROLES = { System = true, You = true, Assistant = true }
 
@@ -78,6 +80,23 @@ function M.migrate_buffer(bufnr)
       end
     end
   end
+end
+
+---Run all load-time buffer migrations in sequence.
+---@param bufnr integer
+function M.migrate(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  M.migrate_buffer(bufnr)
+  vim.schedule(function()
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      local count = bridge.resolve_orphaned_jobs(bufnr)
+      if count > 0 then
+        notify.info(count .. " orphaned job(s) resolved.")
+      end
+    end
+  end)
 end
 
 return M

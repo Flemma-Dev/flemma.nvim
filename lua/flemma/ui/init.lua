@@ -496,7 +496,7 @@ function M.setup_chat_filetype_autocmds()
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
     group = augroup,
     pattern = "*.chat",
-    desc = "Flemma: migrate legacy .chat, set filetype, apply buffer+window settings",
+    desc = "Flemma: run load-time migrations, set filetype, apply buffer+window settings",
     callback = function(ev)
       -- Clear any orphaned cursorline extmark from a prior session.
       -- :e reload fires BufUnload first, which calls cleanup_buffer_state() and
@@ -506,7 +506,7 @@ function M.setup_chat_filetype_autocmds()
       -- line that no code path can remove. Clearing the namespace here runs
       -- once per reload, not on every cursor move.
       vim.api.nvim_buf_clear_namespace(ev.buf, cursorline_ns, 0, -1)
-      migration.migrate_buffer(ev.buf)
+      migration.migrate(ev.buf)
       vim.bo[ev.buf].filetype = "chat"
       apply_chat_buffer_settings(ev.buf)
       bridge.auto_prompt(ev.buf)

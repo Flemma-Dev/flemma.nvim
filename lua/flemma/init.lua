@@ -236,21 +236,6 @@ M.setup = function(user_opts)
       log.info("VimLeavePre: cleaned up " .. buf_count .. " buffer(s)")
     end,
   })
-  vim.api.nvim_create_autocmd("BufReadPost", {
-    group = job_lifecycle_group,
-    pattern = "*.chat",
-    callback = function(ev)
-      vim.schedule(function()
-        if vim.api.nvim_buf_is_valid(ev.buf) then
-          local count = executor.resolve_orphaned_jobs(ev.buf)
-          if count > 0 then
-            notify.info(count .. " orphaned job(s) resolved.")
-          end
-        end
-      end)
-    end,
-  })
-
   -- Initialize templating registry with built-in populators
   templating.setup()
 

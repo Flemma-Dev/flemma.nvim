@@ -7,9 +7,9 @@
 --- Only use this when a direct require would create a circular dependency.
 --- For everything else, require the owning module directly.
 ---
---- Registrants: flemma.core, flemma.buffer.editing
---- Callers:     flemma.autopilot, flemma.tools.executor, flemma.ui,
----              flemma.provider.adapters.{anthropic,vertex,moonshot}
+--- Registrants: flemma.core, flemma.buffer.editing, flemma.tools.executor
+--- Callers:     flemma.autopilot, flemma.migration, flemma.tools.executor,
+---              flemma.ui, flemma.provider.adapters.{anthropic,vertex,moonshot}
 ---@class flemma.Bridge
 local M = {}
 
@@ -63,6 +63,13 @@ end
 function M.drain_job_completions(bufnr)
   assert(handlers.drain_job_completions, "bridge: drain_job_completions not registered")
   handlers.drain_job_completions(bufnr)
+end
+
+---@param bufnr integer
+---@return integer count
+function M.resolve_orphaned_jobs(bufnr)
+  assert(handlers.resolve_orphaned_jobs, "bridge: resolve_orphaned_jobs not registered")
+  return handlers.resolve_orphaned_jobs(bufnr)
 end
 
 return M

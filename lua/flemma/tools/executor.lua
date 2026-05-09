@@ -1092,4 +1092,6 @@ function M._test_complete_execution(bufnr, tool_id, result, opts)
   do_completion(bufnr, tool_id, result, opts)
 end
 
+bridge.register("resolve_orphaned_jobs", M.resolve_orphaned_jobs)
+
 return M
