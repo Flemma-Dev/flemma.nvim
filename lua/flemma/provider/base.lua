@@ -867,7 +867,7 @@ end
 ---@param callbacks flemma.provider.Callbacks
 function M._warn_truncated(self, callbacks)
   log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
-  notify.warn("Response truncated \u{2013} model reached max output tokens")
+  notify.warn("Response truncated – model reached max output tokens")
   if callbacks.on_response_complete then
     callbacks.on_response_complete()
   end

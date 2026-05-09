@@ -12,6 +12,9 @@ local spinners = require("flemma.ui.spinners")
 
 local PRIORITY_TOOL_EXECUTION = 250
 local TOOL_RESULT_ICON = "⬢"
+local STATUS_PENDING = " ⏸ Pending"
+local STATUS_COMPLETE = " ✔ Complete"
+local STATUS_FAILED = " ⚠ Failed"
 
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 
@@ -100,7 +103,7 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
   })
 
   local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { " ⏸ Pending", "FlemmaToolPending" } },
+    virt_text = { { STATUS_PENDING, "FlemmaToolPending" } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -205,11 +208,11 @@ function M.update_tool_indicator(bufnr, tool_id, success)
   local prefix_hl, status_text, status_hl
   if success then
     prefix_hl = "FlemmaToolIconSuccess"
-    status_text = " ✔ Complete"
+    status_text = STATUS_COMPLETE
     status_hl = "FlemmaToolSuccess"
   else
     prefix_hl = "FlemmaToolIconError"
-    status_text = " ⚠ Failed"
+    status_text = STATUS_FAILED
     status_hl = "FlemmaToolError"
   end
 
@@ -261,11 +264,11 @@ function M.show_job_result_indicator(bufnr, job_id, header_line, success)
   local prefix_hl, status_text, status_hl
   if success then
     prefix_hl = "FlemmaToolIconSuccess"
-    status_text = " ✔ Complete"
+    status_text = STATUS_COMPLETE
     status_hl = "FlemmaToolSuccess"
   else
     prefix_hl = "FlemmaToolIconError"
-    status_text = " ⚠ Failed"
+    status_text = STATUS_FAILED
     status_hl = "FlemmaToolError"
   end
 

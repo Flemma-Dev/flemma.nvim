@@ -38,11 +38,11 @@ local state = require("flemma.state")
 -- Constants
 -- ============================================================================
 
-local CHAR_TOP = "\u{256d}" -- ╭
-local CHAR_MIDDLE = "\u{2502}" -- │
-local CHAR_BOTTOM = "\u{2570}" -- ╰
-local CHAR_PENDING = "\u{250a}" -- ┊ (incomplete/streaming interior)
-local CHAR_PENDING_END = "\u{2514}" -- └ (incomplete turn end — sharp corner vs rounded ╰)
+local CHAR_TOP = "╭"
+local CHAR_MIDDLE = "│"
+local CHAR_BOTTOM = "╰"
+local CHAR_PENDING = "┊"
+local CHAR_PENDING_END = "└"
 
 -- ============================================================================
 -- Per-buffer cache

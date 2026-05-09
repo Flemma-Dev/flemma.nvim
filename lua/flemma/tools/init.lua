@@ -26,10 +26,10 @@ local BUILTIN_TOOLS = {
 
 local BACKGROUND_PARAM_DESCRIPTION = "Set to true to run this tool in the background. "
   .. "The conversation continues immediately with a placeholder; the actual result is delivered "
-  .. "as a separate message later \u{2014} you cannot access it until then. Default to foreground. "
+  .. "as a separate message later — you cannot access it until then. Default to foreground. "
   .. "Use background only when you have other meaningful work to do while waiting and no upcoming "
   .. "tool call or decision depends on this result, even indirectly. Avoid backgrounding all tool "
-  .. "calls in a single response \u{2014} keep at least one foreground result to act on."
+  .. "calls in a single response — keep at least one foreground result to act on."
 
 --------------------------------------------------------------------------------
 -- Async source tracking
@@ -277,7 +277,7 @@ function M.get_for_prompt(bufnr)
         done({ ok = true })
       end)
     end)
-    error(readiness.Suspense.new("Waiting for tool definitions to load\u{2026}", boundary))
+    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
   end
   ensure_modules_loaded()
   if bufnr then

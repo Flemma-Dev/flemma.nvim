@@ -240,7 +240,7 @@ return s.object({
 
   ruler = s.object({
     enabled = s.boolean(true),
-    char = s.string("\u{2500}"),
+    char = s.string("─"),
     hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
   }),
 
@@ -408,7 +408,7 @@ return s.object({
   integrations = s.object({
     devicons = s.object({
       enabled = s.boolean(true),
-      icon = s.string("\u{2234}"), -- ∴ U+2234 Therefore
+      icon = s.string("∴"),
     }),
   }),
 

@@ -36,7 +36,7 @@ local function resolve_params(params, label)
 
   local lnum = params.position.line + 1
   local col = params.position.character + 1
-  log.debug("lsp " .. label .. ": " .. uri .. "#L" .. lnum .. "C" .. col .. " \u{2192} bufnr=" .. bufnr)
+  log.debug("lsp " .. label .. ": " .. uri .. "#L" .. lnum .. "C" .. col .. " → bufnr=" .. bufnr)
   return bufnr, lnum, col
 end
 
