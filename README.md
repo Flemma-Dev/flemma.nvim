@@ -152,19 +152,22 @@ Flemma can work autonomously. When the model needs to read a file, edit code, or
 3. Flemma executes approved tools and sends the results back.
 4. The model decides what to do next. Repeat until the task is done.
 
+Long-running tools can run in the background while the conversation continues -- results are delivered when the model is ready for them. Read more in [tools.md](docs/tools.md#background-jobs).
+
 You can watch the whole thing happen in the buffer. Every tool call, every result, every decision is visible text that you can read, edit, or undo.
 
 ### Built-in tools
 
-| Tool    | What it does                            |
-| ------- | --------------------------------------- |
-| `bash`  | Runs shell commands                     |
-| `read`  | Reads file contents                     |
-| `edit`  | Find-and-replace in files               |
-| `write` | Creates or overwrites files             |
-| `grep`  | Searches with ripgrep (experimental)    |
-| `find`  | Finds files by pattern (experimental)   |
-| `ls`    | Lists directory contents (experimental) |
+| Tool                 | What it does                            |
+| -------------------- | --------------------------------------- |
+| `bash`               | Runs shell commands                     |
+| `read`               | Reads file contents                     |
+| `edit`               | Find-and-replace in files               |
+| `write`              | Creates or overwrites files             |
+| `grep`               | Searches with ripgrep (experimental)    |
+| `find`               | Finds files by pattern (experimental)   |
+| `ls`                 | Lists directory contents (experimental) |
+| `flemma:jobs:status` | Queries background job status           |
 
 ### Safety
 
@@ -216,29 +219,30 @@ What it doesn't try to do:
 
 All commands live under `:Flemma` with tab completion. Misspelled commands get did-you-mean suggestions.
 
-| `:Flemma` Command                        | Purpose                                                                     |
-| ---------------------------------------- | --------------------------------------------------------------------------- |
-| `send`                                   | Send the buffer to the provider                                             |
-| `cancel`                                 | Abort the active request or tool                                            |
-| `switch ...`                             | Change provider, model, or parameters                                       |
-| `status [verbose]`                       | Show runtime status and resolved configuration                              |
-| `import`                                 | Import from Claude Workbench format (see [importing.md](docs/importing.md)) |
-| `usage:estimate`                         | Estimate input tokens and cost for the next send                            |
-| `usage:recall`                           | Re-show the most recent usage bar                                           |
-| `autopilot:enable\|disable\|status`      | Toggle or inspect autonomous mode                                           |
-| `sandbox:enable\|disable\|status`        | Toggle or inspect sandboxing                                                |
-| `tool:execute\|cancel\|cancel-all\|list` | Manage tool executions                                                      |
-| `message:next\|previous`                 | Jump between messages                                                       |
-| `logging:enable\|disable\|open`          | Structured logging                                                          |
-| `diagnostics:enable\|disable\|diff`      | Request diagnostics (useful for debugging cache)                            |
+| `:Flemma` Command                                    | Purpose                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| `send`                                               | Send the buffer to the provider                                             |
+| `cancel`                                             | Abort the active request or tool                                            |
+| `switch ...`                                         | Change provider, model, or parameters                                       |
+| `status [verbose]`                                   | Show runtime status and resolved configuration                              |
+| `import`                                             | Import from Claude Workbench format (see [importing.md](docs/importing.md)) |
+| `usage:estimate`                                     | Estimate input tokens and cost for the next send                            |
+| `usage:recall`                                       | Re-show the most recent usage bar                                           |
+| `autopilot:enable\|disable\|status`                  | Toggle or inspect autonomous mode                                           |
+| `sandbox:enable\|disable\|status`                    | Toggle or inspect sandboxing                                                |
+| `tool:execute\|background\|cancel\|cancel-all\|list` | Manage tool executions                                                      |
+| `message:next\|previous`                             | Jump between messages                                                       |
+| `logging:enable\|disable\|open`                      | Structured logging                                                          |
+| `diagnostics:enable\|disable\|diff`                  | Request diagnostics (useful for debugging cache)                            |
 
 ### Keymaps (buffer-local to `.chat` files, all configurable)
 
 | Mode               | Key                  | Action                                                |
 | ------------------ | -------------------- | ----------------------------------------------------- |
 | Normal<br />Insert | <kbd>Ctrl-]</kbd>    | Send to provider (or advance the tool approval cycle) |
-| Normal             | <kbd>Ctrl-C</kbd>    | Cancel                                                |
+| Normal             | <kbd>Ctrl-C</kbd>    | Cancel (double-tap to cancel all)                     |
 | Normal             | <kbd>Alt-Enter</kbd> | Execute the tool under cursor                         |
+| Normal             | <kbd>Alt-B</kbd>     | Move executing tool to background                     |
 | Normal             | `]m` / `[m`          | Next / previous message                               |
 | Normal             | <kbd>Space</kbd>     | Toggle message fold                                   |
 | Operator           | `im` / `am`          | Inner / around message text objects                   |
@@ -391,6 +395,8 @@ Yes. Register custom tools, approval resolvers, credential resolvers, sandbox ba
 - **Output truncation.** Large tool outputs (over 2,000 lines or 50KB) are automatically truncated to keep the context window manageable. The full output is saved to a temp file so nothing is lost.
 - **Prompt caching optimization.** Tool definitions are sorted alphabetically, JSON keys are ordered for maximum shared prefix, and environment data (date, time) is cached per buffer -- all to keep the request body byte-identical between turns so provider-side caching actually works.
 - **Cross-provider thinking preservation.** Thinking blocks carry provider-namespaced signatures (`anthropic:signature="..."`, `openai:signature="..."`). When you switch providers mid-conversation, old signatures stay in the buffer but are filtered out of the new provider's request -- so you can switch back without losing reasoning state.
+- **Background jobs.** Async tools can run in the background without blocking the conversation. Results queue up and are injected as `**Job Result:**` blocks when the model is idle. Orphaned jobs from interrupted sessions are detected and resolved on file reload. A floating bar tracks active jobs with a spinner and shows a countdown when autopilot is about to resume.
+- **Graduated hooks.** Beyond User autocmds, internal modules subscribe via `hooks.on()` -- synchronous Lua callbacks with per-subscriber error isolation, fired before the autocmd so the UI can react before external consumers.
 
 </details>
 
