@@ -8,6 +8,7 @@ local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
@@ -23,13 +24,6 @@ local BUILTIN_TOOLS = {
   "flemma.tools.definitions.builtin.mcporter",
   "flemma.tools.definitions.harness.jobs",
 }
-
-local BACKGROUND_PARAM_DESCRIPTION = "Set to true to run this tool in the background. "
-  .. "The conversation continues immediately with a placeholder; the actual result is delivered "
-  .. "as a separate message later — you cannot access it until then. Default to foreground. "
-  .. "Use background only when you have other meaningful work to do while waiting and no upcoming "
-  .. "tool call or decision depends on this result, even indirectly. Avoid backgrounding all tool "
-  .. "calls in a single response — keep at least one foreground result to act on."
 
 --------------------------------------------------------------------------------
 -- Async source tracking
@@ -243,7 +237,7 @@ function M.to_json_schema_for_prompt(definition)
     schema.properties.background = {
       type = "boolean",
       default = false,
-      description = BACKGROUND_PARAM_DESCRIPTION,
+      description = messages.render("tool-parameter--background"),
     }
     log.trace("tools: injected background parameter into schema for " .. definition.name)
   end

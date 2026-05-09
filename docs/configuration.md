@@ -43,6 +43,7 @@ require("flemma").setup({
     autopilot = {
       enabled = true,                        -- Auto-execute approved tools and re-send
       max_turns = 100,                       -- Safety limit on consecutive autonomous turns
+      resume_delay = 2000,                   -- Delay (ms) before auto-continue after background job completion
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
@@ -135,6 +136,9 @@ require("flemma").setup({
       position = "bottom left",                -- Same anchor enum as ui.usage.position
       highlight = "StatusLine",                -- Highlight group(s) for the progress bar; first with both fg+bg wins
     },
+    jobs = {
+      position = "bottom right",               -- Background jobs bar position
+    },
     pricing = { enabled = true },
     statusline = {
       format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
@@ -151,6 +155,7 @@ require("flemma").setup({
       thinking = true,                       -- Auto-close thinking blocks when they become terminal
       tool_use = true,                       -- Auto-close tool_use blocks when completed
       tool_result = true,                    -- Auto-close tool_result blocks when terminal
+      job_result = true,                     -- Auto-close job_result blocks when delivered
       frontmatter = false,                   -- Auto-close frontmatter blocks (disabled by default)
     },
   },
@@ -195,12 +200,13 @@ require("flemma").setup({
       send = "<C-]>",                        -- Hybrid: execute pending tools or send
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
+      tool_background = "<M-b>",             -- Move executing tool to background
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
-      conceal_toggle = "yoe",                 -- Toggle conceal level; false to disable
-      conceal_on = "]oe",                      -- Enable conceal; false to disable
-      conceal_off = "[oe",                     -- Disable conceal; false to disable
+      conceal_toggle = "yoe",                -- Toggle conceal level; false to disable
+      conceal_on = "]oe",                    -- Enable conceal; false to disable
+      conceal_off = "[oe",                   -- Disable conceal; false to disable
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
@@ -339,14 +345,17 @@ Old `.chat` files that use the previous inline role marker format (e.g., `@You: 
 
 Autopilot turns Flemma into an autonomous agent. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
 
-| Key                         | Default | Effect                                                                                                                                                                |
-| --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tools.autopilot.enabled`   | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
-| `tools.autopilot.max_turns` | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
+| Key                            | Default | Effect                                                                                                                                                                |
+| ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tools.autopilot.enabled`      | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
+| `tools.autopilot.max_turns`    | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
+| `tools.autopilot.resume_delay` | `2000`  | Milliseconds to wait before auto-continuing after a background job completes. Press <kbd>Ctrl-C</kbd> during the delay to cancel. Set `0` for immediate resume.       |
 
 When a tool requires user approval, autopilot injects a tool_result placeholder with a `(pending)` header suffix and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `(pending)` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `(pending)` suffix is cleared from the header and your content is sent to the model. If you edit the content of an `(approved)` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
 
-Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop.
+Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop. If nothing is active, a second <kbd>Ctrl-C</kbd> within 500ms cancels all background jobs in the buffer.
+
+When background jobs complete while the conversation is idle, autopilot schedules a debounced auto-continue after `resume_delay` milliseconds. The delay gives you time to review the result or press <kbd>Ctrl-C</kbd> to cancel. If you enter insert mode during the delay, auto-continue is also cancelled. During an active autopilot loop (tools still executing in the foreground), background completions are drained immediately without the delay.
 
 Toggle autopilot at runtime without changing your config:
 
@@ -422,6 +431,7 @@ When blocks reach a terminal state (e.g., a thinking block finishes streaming, a
 | `editing.auto_close.thinking`    | `true`  | Auto-close `<thinking>` blocks when they finish streaming.                 |
 | `editing.auto_close.tool_use`    | `true`  | Auto-close `**Tool Use:**` blocks after the tool executes.                 |
 | `editing.auto_close.tool_result` | `true`  | Auto-close `**Tool Result:**` blocks when they reach a terminal state.     |
+| `editing.auto_close.job_result`  | `true`  | Auto-close `**Job Result:**` blocks when delivered from background jobs.   |
 | `editing.auto_close.frontmatter` | `false` | Auto-close frontmatter blocks. Disabled by default so you can edit freely. |
 
 ### Tool concurrency
