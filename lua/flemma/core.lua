@@ -663,6 +663,12 @@ function M.send_or_execute(opts)
   end
 
   if opts.user_initiated then
+    if buffer_state.resume_delay_timer then
+      buffer_state.resume_delay_timer:stop()
+      buffer_state.resume_delay_timer:close()
+      buffer_state.resume_delay_timer = nil
+      hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+    end
     log.trace("send_or_execute(): user-initiated send, draining job completions first")
     drain_and_inject_completions(bufnr)
   end
