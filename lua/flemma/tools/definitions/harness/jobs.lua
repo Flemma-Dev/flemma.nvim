@@ -19,6 +19,10 @@ M.definitions = {
     strict = true,
     async = false,
     backgroundable = false,
+    ---@return flemma.tools.ToolPreview
+    format_preview = function(input)
+      return input.job_id
+    end,
     input_schema = s.object({
       job_id = s.string("The job ID (e.g., 'job_xxx') from the tool result placeholder."),
     }),
