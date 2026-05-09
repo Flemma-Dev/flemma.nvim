@@ -14,6 +14,16 @@ local symbols = require("flemma.symbols")
 -- Reusable type helpers
 -- ---------------------------------------------------------------------------
 
+---@type string[]
+local BAR_POSITIONS = { "top", "bottom", "top left", "top right", "bottom left", "bottom right" }
+
+--- Bar position enum with a caller-supplied default.
+---@param default string
+---@return flemma.schema.Node
+local function position(default)
+  return s.enum(BAR_POSITIONS, default)
+end
+
 --- HighlightValue: string | { dark: string, light: string }
 --- String defaults produce a union with the string branch carrying the default.
 --- Table defaults produce a union with the object branch carrying the defaults.
@@ -149,7 +159,7 @@ return s.object({
     autopilot = s.object({
       enabled = s.boolean(true),
       max_turns = s.integer(100),
-      resume_delay = s.integer(1000),
+      resume_delay = s.integer(2000),
     }):coerce(function(value, _ctx)
       if type(value) == "boolean" then
         return { enabled = value }
@@ -280,26 +290,15 @@ return s.object({
     usage = s.object({
       enabled = s.boolean(true),
       timeout = s.integer(10000),
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "top"),
+      position = position("top"),
       highlight = s.string("@text.note,PmenuSel"),
     }),
     progress = s.object({
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "bottom left"),
+      position = position("bottom left"),
       highlight = s.string("StatusLine"),
+    }),
+    jobs = s.object({
+      position = position("bottom right"),
     }),
     pricing = s.object({
       enabled = s.boolean(true),

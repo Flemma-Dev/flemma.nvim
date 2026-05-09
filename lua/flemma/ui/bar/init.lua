@@ -96,11 +96,11 @@ local function compute_geometry(position, W, H, G, T, icon_width, icon_in_gutter
   local row = is_bottom and (H - 1) or 0
 
   if is_right then
-    -- Width = leading-pad(1) + icon_width + body(T). Mirrors the trailing
-    -- breathing of left-anchored bars: instead of wasting the +1 against
-    -- the window's right border, we put it on the left so the icon does
-    -- not sit flush against buffer text at col W-width-1.
-    local width = math.min(T + icon_width + 1, W)
+    -- Width = leading-pad(1) + icon_width + body(T) + trailing-pad(1).
+    -- The leading space keeps the icon from sitting flush against buffer
+    -- text; the trailing space keeps the body from jamming against the
+    -- window's right border.
+    local width = math.min(T + icon_width + 2, W)
     return {
       row = row,
       main_col = W - width,
@@ -417,7 +417,7 @@ function Bar:_render()
     text = string.rep(" ", G) .. text
   end
   if geom.lead_pad_for_right then
-    text = " " .. text
+    text = " " .. text .. " "
   end
 
   -- Ensure main float buffer.

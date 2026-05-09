@@ -142,6 +142,27 @@ function M.count_running(bufnr)
   return n
 end
 
+---Count background jobs still in progress for a buffer.
+---Includes jobs that are executing and jobs whose results are queued but not yet
+---drained into the buffer. This is the user-facing "active" count: a job is
+---active until its result is visible in the conversation.
+---@param bufnr integer
+---@return integer
+function M.count_active_jobs(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
+  if not pending then
+    return 0
+  end
+  local n = 0
+  for _, entry in pairs(pending) do
+    if entry.job_id then
+      n = n + 1
+    end
+  end
+  return n
+end
+
 ---Unlock the buffer if no more tools are actively executing
 ---@param bufnr integer
 local function maybe_unlock_buffer(bufnr)
@@ -565,6 +586,13 @@ function M.execute(bufnr, context, opts)
       log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
     end
     log.debug("executor: wrote background placeholder for " .. tool_id .. " (job=" .. job_id .. ")")
+    hooks.dispatch("job:submitted", {
+      bufnr = bufnr,
+      job_id = job_id,
+      tool_id = tool_id,
+      tool_name = tool_name,
+      active_count = M.count_active_jobs(bufnr),
+    })
   end
 
   -- Show execution indicator

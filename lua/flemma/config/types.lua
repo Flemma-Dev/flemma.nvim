@@ -147,6 +147,7 @@
 ---@field padding { left: integer, right: integer }|integer
 
 ---@class flemma.config.Ui
+---@field jobs flemma.config.UiJobs
 ---@field pricing flemma.config.UiPricing
 ---@field progress flemma.config.UiProgress
 ---@field statusline flemma.config.UiStatusline
@@ -242,6 +243,9 @@
 
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
+
+---@class flemma.config.UiJobs
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 
 ---@class flemma.config.UiPricing
 ---@field enabled boolean

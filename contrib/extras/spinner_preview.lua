@@ -1,19 +1,32 @@
 --- Spinner preview — shows all Flemma spinner animations in a floating window.
 --- Run with:  nvim +"luafile contrib/extras/spinner_preview.lua"
 
--- Make flemma modules requireable
+-- Force load from the working directory, not a cached/packaged copy
 vim.opt.rtp:prepend(".")
+package.loaded["flemma.ui.spinners"] = nil
 
 local spinners = require("flemma.ui.spinners")
 
-local LABELS = { "waiting", "thinking", "streaming", "buffering", "tool" }
-local HIGHLIGHTS = {
+local DISPLAY_ORDER = { "waiting", "thinking", "streaming", "buffering", "tool", "countdown" }
+local HIGHLIGHT_MAP = {
   waiting = "DiagnosticInfo",
   thinking = "DiagnosticHint",
   streaming = "DiagnosticOk",
   buffering = "DiagnosticWarn",
   tool = "DiagnosticError",
+  countdown = "DiagnosticInfo",
 }
+
+-- Build LABELS from the loaded module — skip any name not present in FRAMES
+-- so the preview works even against older builds of spinners.lua.
+local LABELS = {}
+local HIGHLIGHTS = {}
+for _, name in ipairs(DISPLAY_ORDER) do
+  if spinners.FRAMES[name] then
+    LABELS[#LABELS + 1] = name
+    HIGHLIGHTS[name] = HIGHLIGHT_MAP[name] or "Normal"
+  end
+end
 
 local INTERVAL_MS = 100
 local MIDDLE_DOT = " · "
@@ -74,7 +87,7 @@ timer:start(
     local new_lines = {}
     for i, label in ipairs(LABELS) do
       local frames = spinners.FRAMES[label]
-      local speed = spinners.SPEED[label] or 1
+      local speed = math.max(1, spinners.SPEED[label] or 1)
       local frame = frames[(math.floor(tick / speed) % #frames) + 1]
       new_lines[#new_lines + 1] = frame .. " " .. label .. MIDDLE_DOT .. elapsed
       if i < #LABELS then

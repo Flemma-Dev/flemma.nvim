@@ -15,6 +15,7 @@ local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
 local activity = require("flemma.ui.activity")
+local jobs_bar = require("flemma.ui.jobs")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 local autopilot = require("flemma.autopilot")
@@ -97,6 +98,7 @@ local function drain_and_inject_completions(bufnr)
       tool_id = item.tool_id,
       tool_name = item.tool_name,
       success = item.result.success,
+      active_count = executor.count_active_jobs(bufnr),
     })
   end
 
@@ -387,7 +389,9 @@ function M.cancel_request(opts)
 
   if buffer_state.resume_delay_timer then
     buffer_state.resume_delay_timer:stop()
+    buffer_state.resume_delay_timer:close()
     buffer_state.resume_delay_timer = nil
+    hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
     notify.info("Cancelled pending auto-continue.")
     return
   end
@@ -1585,9 +1589,11 @@ function M.drain_job_completions(bufnr)
       if bs.resume_delay_timer then
         bs.resume_delay_timer:stop()
         bs.resume_delay_timer:close()
+        hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
       end
       local timer = assert(vim.uv.new_timer())
       bs.resume_delay_timer = timer
+      hooks.dispatch("autopilot:resume-scheduled", { bufnr = bufnr, delay_ms = delay_ms })
       timer:start(
         delay_ms,
         0,
@@ -1596,6 +1602,7 @@ function M.drain_job_completions(bufnr)
           timer:stop()
           timer:close()
           if not vim.api.nvim_buf_is_valid(bufnr) or autopilot.was_disarmed(bufnr) then
+            hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
             return
           end
           local win = vim.fn.bufwinid(bufnr)
@@ -1603,9 +1610,11 @@ function M.drain_job_completions(bufnr)
             local mode = vim.fn.mode()
             if mode == "i" or mode == "R" then
               log.debug("resume_delay: user entered insert mode during delay, skipping auto-continue")
+              hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
               return
             end
           end
+          hooks.dispatch("autopilot:resumed", { bufnr = bufnr })
           M.send_or_execute({ bufnr = bufnr })
         end)
       )
@@ -1631,6 +1640,10 @@ bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
 bridge.register("drain_job_completions", M.drain_job_completions)
 
+state.register_cleanup("core.jobs_bar", function(bufnr)
+  jobs_bar.cleanup(bufnr)
+end)
+
 state.register_cleanup("core.pending_send", function(bufnr)
   local bs = state.get_buffer_state(bufnr)
   if bs.pending_send then
@@ -1645,6 +1658,7 @@ state.register_cleanup("core.resume_delay_timer", function(bufnr)
     bs.resume_delay_timer:stop()
     bs.resume_delay_timer:close()
     bs.resume_delay_timer = nil
+    hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
   end
 end)
 
