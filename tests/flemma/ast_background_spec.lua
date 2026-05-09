@@ -66,7 +66,7 @@ describe("job result parsing", function()
   end)
 
   describe("to_generic_parts", function()
-    it("converts job_result to text part with tag", function()
+    it("converts job_result to a GenericJobResultPart", function()
       local nodes = require("flemma.ast.nodes")
       local evaluated_parts = {
         nodes.job_result("job_k7x2m", {
@@ -77,9 +77,9 @@ describe("job result parsing", function()
       }
       local generic_parts = nodes.to_generic_parts(evaluated_parts, "test.chat")
       assert.equals(1, #generic_parts)
-      assert.equals("text", generic_parts[1].kind)
+      assert.equals("job_result", generic_parts[1].kind)
       assert.truthy(generic_parts[1].text:match("47 passed"))
-      assert.equals("job_k7x2m", generic_parts[1]._job_id)
+      assert.equals("job_k7x2m", generic_parts[1].job_id)
     end)
   end)
 

@@ -95,7 +95,11 @@ local M = {}
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"
 ---@field text string
----@field _job_id? string Internal marker for job result enrichment
+
+---@class flemma.ast.GenericJobResultPart
+---@field kind "job_result"
+---@field job_id string
+---@field text string
 
 ---@class flemma.ast.GenericBinaryPart
 ---@field mime_type string
@@ -144,7 +148,7 @@ local M = {}
 ---@field parts flemma.ast.GenericPart[]
 ---@field is_error boolean
 
----@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
+---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericJobResultPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
 
 --- Constructors for AST nodes. Positions are 1-based line/column.
 
@@ -392,7 +396,7 @@ function M.to_generic_parts(evaluated_parts, source_file)
     elseif p.kind == "job_result" then
       ---@cast p flemma.ast.JobResultSegment
       if p.content and #p.content > 0 then
-        table.insert(parts, { kind = "text", text = p.content, _job_id = p.job_id })
+        table.insert(parts, { kind = "job_result", job_id = p.job_id, text = p.content })
       end
     end
   end
