@@ -61,7 +61,7 @@ local function drain_and_inject_completions(bufnr)
   local user_is_typing = false
 
   for _, item in ipairs(items) do
-    local placement_case = injector.append_job_result(bufnr, item.job_id, item.result)
+    local placement = injector.append_job_result(bufnr, item.job_id, item.result)
     log.debug(
       "drain_and_inject_completions(): injected "
         .. item.job_id
@@ -69,11 +69,11 @@ local function drain_and_inject_completions(bufnr)
         .. item.tool_name
         .. ", "
         .. item.tool_id
-        .. ") case="
-        .. placement_case
+        .. ") placement="
+        .. placement
         .. (item.result.success and "" or " [error]")
     )
-    if placement_case == 3 then
+    if placement == "displaced" then
       user_is_typing = true
       log.debug("drain_and_inject_completions(): user is typing in last @You block, skipping auto-continue")
     end

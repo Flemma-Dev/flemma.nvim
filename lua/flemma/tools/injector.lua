@@ -451,15 +451,17 @@ function M.set_fence_content(bufnr, tool_id, content)
   return true, nil
 end
 
+---@alias flemma.tools.injector.Placement "appended"|"created"|"displaced"
+
 ---Append a **Job Result:** block to the buffer.
 ---@param bufnr integer
 ---@param job_id string
 ---@param result flemma.tools.ExecutionResult
----@return integer case 1, 2, or 3
+---@return flemma.tools.injector.Placement
 function M.append_job_result(bufnr, job_id, result)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     log.warn("injector: append_job_result skipped, buffer " .. bufnr .. " invalid")
-    return 1
+    return "appended"
   end
 
   local content_lines, is_error = format_result_lines(result)
@@ -487,8 +489,10 @@ function M.append_job_result(bufnr, job_id, result)
         end
         table.insert(block, "")
         set_lines(bufnr, prev_end, prev_end, block)
-        log.debug("injector: appended " .. job_id .. " (case=3 merged into job-result @You at line " .. prev_end .. ")")
-        return 3
+        log.debug(
+          "injector: appended " .. job_id .. " (displaced, merged into job-result @You at line " .. prev_end .. ")"
+        )
+        return "displaced"
       end
 
       local insert_at = last_msg.position.start_line - 1
@@ -499,9 +503,9 @@ function M.append_job_result(bufnr, job_id, result)
       table.insert(block, "")
       set_lines(bufnr, insert_at, insert_at, block)
       log.debug(
-        "injector: appended " .. job_id .. " (case=3 user-typing, inserted before @You at line " .. insert_at .. ")"
+        "injector: appended " .. job_id .. " (displaced, user-typing, inserted before @You at line " .. insert_at .. ")"
       )
-      return 3
+      return "displaced"
     end
 
     local you_end = last_msg.position.end_line --[[@as integer]]
@@ -514,8 +518,8 @@ function M.append_job_result(bufnr, job_id, result)
       table.insert(block, line)
     end
     set_lines(bufnr, you_end, you_end, block)
-    log.debug("injector: appended " .. job_id .. " (case=1 into existing @You at line " .. you_end .. ")")
-    return 1
+    log.debug("injector: appended " .. job_id .. " (appended into existing @You at line " .. you_end .. ")")
+    return "appended"
   end
 
   local total = vim.api.nvim_buf_line_count(bufnr)
@@ -532,8 +536,8 @@ function M.append_job_result(bufnr, job_id, result)
     table.insert(block, line)
   end
   set_lines(bufnr, total, total, block)
-  log.debug("injector: appended " .. job_id .. " (case=2 new @You block at line " .. total .. ")")
-  return 2
+  log.debug("injector: appended " .. job_id .. " (created new @You block at line " .. total .. ")")
+  return "created"
 end
 
 return M
