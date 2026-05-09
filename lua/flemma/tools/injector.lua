@@ -105,7 +105,7 @@ local function format_result_lines(result)
   local content
 
   if is_error then
-    content = result.error or "Unknown error"
+    content = result.error or messages.render("tool-error--unknown")
     if result.output and result.output ~= "" then
       content = content .. "\n\nPartial output:\n" .. result.output
     end

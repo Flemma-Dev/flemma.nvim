@@ -560,7 +560,7 @@ function M.execute(bufnr, context, opts)
     else
       placeholder_text = messages.render("job-executing--untracked")
     end
-    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text or "Running in background.")
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
     if not f_ok then
       log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
     end
@@ -681,7 +681,7 @@ function M.cancel(tool_id)
 
       handle_completion(bufnr, tool_id, {
         success = false,
-        error = "User aborted tool execution.",
+        error = messages.render("tool-aborted"),
       }, { async = false })
       return true
     end
@@ -820,8 +820,7 @@ function M.background_at_cursor(bufnr)
   else
     job_placeholder_text = messages.render("job-executing--untracked")
   end
-  local content_ok, content_err =
-    injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text or "Running in background.")
+  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text)
   if not content_ok then
     log.warn(
       "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
@@ -909,7 +908,7 @@ function M.resolve_orphaned_jobs(bufnr)
     injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
     injector.append_job_result(bufnr, orphan.job_id, {
       success = false,
-      error = "Job lost: session ended before completion.",
+      error = messages.render("job-lost"),
     })
   end
 
