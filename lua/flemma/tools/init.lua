@@ -7,19 +7,22 @@ local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
+local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
 
 local BUILTIN_TOOLS = {
-  "flemma.tools.definitions.bash",
-  "flemma.tools.definitions.read",
-  "flemma.tools.definitions.edit",
-  "flemma.tools.definitions.write",
-  "flemma.tools.definitions.grep",
-  "flemma.tools.definitions.find",
-  "flemma.tools.definitions.ls",
-  "flemma.tools.definitions.mcporter",
+  "flemma.tools.definitions.builtin.bash",
+  "flemma.tools.definitions.builtin.read",
+  "flemma.tools.definitions.builtin.edit",
+  "flemma.tools.definitions.builtin.write",
+  "flemma.tools.definitions.builtin.grep",
+  "flemma.tools.definitions.builtin.find",
+  "flemma.tools.definitions.builtin.ls",
+  "flemma.tools.definitions.builtin.mcporter",
+  "flemma.tools.definitions.harness.jobs",
 }
 
 --------------------------------------------------------------------------------
@@ -222,6 +225,25 @@ function M.to_json_schema(definition)
   return schema --[[@as flemma.tools.JSONSchema]]
 end
 
+---Serialize a tool's input_schema for prompt inclusion, injecting the
+---`background` parameter for async tools that haven't opted out.
+---@param definition flemma.tools.ToolDefinition
+---@return flemma.tools.JSONSchema
+function M.to_json_schema_for_prompt(definition)
+  local schema = M.to_json_schema(definition)
+  if definition.async and definition.backgroundable ~= false then
+    schema = vim.deepcopy(schema)
+    schema.properties = schema.properties or {}
+    schema.properties.background = {
+      type = "boolean",
+      default = false,
+      description = messages.render("tool-parameter--background"),
+    }
+    log.trace("tools: injected background parameter into schema for " .. definition.name)
+  end
+  return schema
+end
+
 ---Get all registered tools (excludes disabled tools by default).
 ---Loads any pending third-party modules before returning.
 ---@param opts? { include_disabled?: boolean, config?: flemma.Config }
@@ -249,7 +271,7 @@ function M.get_for_prompt(bufnr)
         done({ ok = true })
       end)
     end)
-    error(readiness.Suspense.new("Waiting for tool definitions to load\u{2026}", boundary))
+    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
   end
   ensure_modules_loaded()
   if bufnr then

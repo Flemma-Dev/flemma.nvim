@@ -487,4 +487,279 @@ describe("ast.query", function()
       assert.equals("res_b", siblings["id_2"].result.content)
     end)
   end)
+
+  describe("find_tool_segment_at_line", function()
+    it("returns job_result segment", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Job Result:** `job_abc12345`",
+        "",
+        "```",
+        "test output",
+        "```",
+      })
+
+      local seg, kind = ast.find_tool_segment_at_line(doc, 2)
+      assert.is_not_nil(seg)
+      assert.equals("job_result", kind)
+      assert.equals("job_abc12345", seg.job_id)
+    end)
+  end)
+
+  describe("find_job_result", function()
+    it("finds a job_result by job_id", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Job Result:** `job_find1`",
+        "",
+        "```",
+        "result data",
+        "```",
+      })
+
+      local seg, msg = ast.find_job_result(doc, "job_find1")
+      assert.is_not_nil(seg)
+      assert.equals("job_result", seg.kind)
+      assert.equals("job_find1", seg.job_id)
+      assert.is_not_nil(msg)
+      assert.equals("You", msg.role)
+    end)
+
+    it("returns nil for non-existent job_id", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Job Result:** `job_exists`",
+        "",
+        "```",
+        "data",
+        "```",
+      })
+
+      local seg = ast.find_job_result(doc, "job_nope")
+      assert.is_nil(seg)
+    end)
+  end)
+
+  describe("find_tool_result_for_job", function()
+    it("finds a tool_result with matching job= meta", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_bg1`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_bg1` (job=job_match1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+      })
+
+      local seg, msg = ast.find_tool_result_for_job(doc, "job_match1")
+      assert.is_not_nil(seg)
+      assert.equals("tool_result", seg.kind)
+      assert.equals("call_bg1", seg.tool_use_id)
+      assert.is_not_nil(msg)
+    end)
+
+    it("returns nil when no tool_result references the job", function()
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Tool Result:** `call_plain`",
+        "",
+        "```",
+        "output",
+        "```",
+      })
+
+      local seg = ast.find_tool_result_for_job(doc, "job_orphan")
+      assert.is_nil(seg)
+    end)
+  end)
+
+  describe("effective_tool_result_status", function()
+    it("returns the tool_result's own status when set", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_es1`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_es1` (error)",
+        "",
+        "```",
+        "permission denied",
+        "```",
+      })
+
+      local seg = nil
+      for _, msg in ipairs(doc.messages) do
+        for _, s in ipairs(msg.segments) do
+          if s.kind == "tool_result" then
+            seg = s
+          end
+        end
+      end
+      assert.is_not_nil(seg)
+      assert.equals("error", ast.effective_tool_result_status(seg, doc))
+    end)
+
+    it("returns nil for a successful tool_result without job", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_es2`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_es2`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      })
+
+      local seg = nil
+      for _, msg in ipairs(doc.messages) do
+        for _, s in ipairs(msg.segments) do
+          if s.kind == "tool_result" then
+            seg = s
+          end
+        end
+      end
+      assert.is_not_nil(seg)
+      assert.is_nil(ast.effective_tool_result_status(seg, doc))
+    end)
+
+    it("inherits error from a failed job_result", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_es3`)",
+        "```json",
+        '{"command": "sleep 999"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_es3` (job=job_fail1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+        "",
+        "@You:",
+        "**Job Result:** `job_fail1` (error)",
+        "",
+        "```",
+        "Exit code 1",
+        "```",
+      })
+
+      local seg = nil
+      for _, msg in ipairs(doc.messages) do
+        for _, s in ipairs(msg.segments) do
+          if s.kind == "tool_result" then
+            seg = s
+          end
+        end
+      end
+      assert.is_not_nil(seg)
+      assert.equals("error", ast.effective_tool_result_status(seg, doc))
+    end)
+
+    it("returns nil for a successful job_result", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_es4`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_es4` (job=job_ok1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+        "",
+        "@You:",
+        "**Job Result:** `job_ok1`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      })
+
+      local seg = nil
+      for _, msg in ipairs(doc.messages) do
+        for _, s in ipairs(msg.segments) do
+          if s.kind == "tool_result" then
+            seg = s
+          end
+        end
+      end
+      assert.is_not_nil(seg)
+      assert.is_nil(ast.effective_tool_result_status(seg, doc))
+    end)
+
+    it("returns nil when job has not been delivered yet", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_es5`)",
+        "```json",
+        '{"command": "sleep 999"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_es5` (job=job_pending1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+      })
+
+      local seg = nil
+      for _, msg in ipairs(doc.messages) do
+        for _, s in ipairs(msg.segments) do
+          if s.kind == "tool_result" then
+            seg = s
+          end
+        end
+      end
+      assert.is_not_nil(seg)
+      assert.is_nil(ast.effective_tool_result_status(seg, doc))
+    end)
+
+    it("prefers tool_result's own status over job status", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_es6`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_es6` (error job=job_override1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+        "",
+        "@You:",
+        "**Job Result:** `job_override1`",
+        "",
+        "```",
+        "success",
+        "```",
+      })
+
+      local seg = nil
+      for _, msg in ipairs(doc.messages) do
+        for _, s in ipairs(msg.segments) do
+          if s.kind == "tool_result" then
+            seg = s
+          end
+        end
+      end
+      assert.is_not_nil(seg)
+      assert.equals("error", ast.effective_tool_result_status(seg, doc))
+    end)
+  end)
 end)

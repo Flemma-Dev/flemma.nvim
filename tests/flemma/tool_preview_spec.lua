@@ -475,10 +475,10 @@ describe("Tool Preview", function()
       package.loaded["flemma.tools.registry"] = nil
       package.loaded["flemma.tools"] = nil
       package.loaded["extras.flemma.tools.calculator"] = nil
-      package.loaded["flemma.tools.definitions.bash"] = nil
-      package.loaded["flemma.tools.definitions.read"] = nil
-      package.loaded["flemma.tools.definitions.edit"] = nil
-      package.loaded["flemma.tools.definitions.write"] = nil
+      package.loaded["flemma.tools.definitions.builtin.bash"] = nil
+      package.loaded["flemma.tools.definitions.builtin.read"] = nil
+      package.loaded["flemma.tools.definitions.builtin.edit"] = nil
+      package.loaded["flemma.tools.definitions.builtin.write"] = nil
 
       require("flemma").setup({})
       require("flemma.tools").register("extras.flemma.tools.calculator")
@@ -492,7 +492,7 @@ describe("Tool Preview", function()
 
     it("calculator_async shows expression and delay", function()
       local result = ui_preview.format_tool_preview("calculator_async", { expression = "sqrt(16)", delay = 500 })
-      assert.are.equal("calculator_async: sqrt(16)  # 500ms", result)
+      assert.are.equal("calculator_async: sqrt(16) — ⏲500ms", result)
     end)
 
     it("calculator_async omits delay when nil", function()
@@ -500,9 +500,9 @@ describe("Tool Preview", function()
       assert.are.equal("calculator_async: 1+1", result)
     end)
 
-    it("bash shows label — $ command with label", function()
+    it("bash shows $ command — label with label", function()
       local result = ui_preview.format_tool_preview("bash", { command = "ls -la /tmp", label = "list files" })
-      assert.are.equal("bash: list files — $ ls -la /tmp", result)
+      assert.are.equal("bash: $ ls -la /tmp — list files", result)
     end)
 
     it("bash omits label when not provided", function()
@@ -510,12 +510,12 @@ describe("Tool Preview", function()
       assert.are.equal("bash: $ echo hello", result)
     end)
 
-    it("read shows label — path with offset and limit", function()
+    it("read shows path — label with offset and limit", function()
       local result = ui_preview.format_tool_preview(
         "read",
         { path = "./src/main.lua", offset = 10, limit = 50, label = "read config" }
       )
-      assert.are.equal("read: read config — ./src/main.lua  +10,50", result)
+      assert.are.equal("read: ./src/main.lua  +10,50 — read config", result)
     end)
 
     it("read shows path with offset only", function()
@@ -528,17 +528,17 @@ describe("Tool Preview", function()
       assert.are.equal("read: ./src/main.lua  +0,50", result)
     end)
 
-    it("read shows label — path without offset or limit", function()
+    it("read shows path — label without offset or limit", function()
       local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", label = "check file" })
-      assert.are.equal("read: check file — ./src/main.lua", result)
+      assert.are.equal("read: ./src/main.lua — check file", result)
     end)
 
-    it("edit shows label — path with label", function()
+    it("edit shows path — label with label", function()
       local result = ui_preview.format_tool_preview(
         "edit",
         { path = "./src/main.lua", oldText = "foo", newText = "bar", label = "fix typo" }
       )
-      assert.are.equal("edit: fix typo — ./src/main.lua", result)
+      assert.are.equal("edit: ./src/main.lua — fix typo", result)
     end)
 
     it("edit shows plain path without label", function()
@@ -547,11 +547,11 @@ describe("Tool Preview", function()
       assert.are.equal("edit: ./src/main.lua", result)
     end)
 
-    it("write shows label — path with byte size and label", function()
+    it("write shows path — label with byte size and label", function()
       local content = string.rep("x", 1536)
       local result =
         ui_preview.format_tool_preview("write", { path = "./src/main.lua", content = content, label = "create module" })
-      assert.are.equal("write: create module — ./src/main.lua  (1.5KB)", result)
+      assert.are.equal("write: ./src/main.lua  (1.5KB) — create module", result)
     end)
 
     it("write shows bytes for small content", function()
@@ -559,10 +559,10 @@ describe("Tool Preview", function()
       assert.are.equal("write: ./readme.txt  (5B)", result)
     end)
 
-    it("write shows label — path with size when content is empty", function()
+    it("write shows path — label with size when content is empty", function()
       local result =
         ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
-      assert.are.equal("write: create empty — ./empty.txt  (0B)", result)
+      assert.are.equal("write: ./empty.txt  (0B) — create empty", result)
     end)
   end)
 end)
@@ -1260,6 +1260,64 @@ describe("format_message_fold_preview with tool results", function()
     assert.is_truthy(result:match("bash: file1%.txt"), "Should show tool result")
     assert.is_truthy(result:match("Please continue"), "Should show text")
     assert.is_truthy(result:match(" | "), "Should have pipe separator")
+  end)
+
+  it("shows job_result preview in @You message", function()
+    local you_msg = make_message("You", {
+      ast.job_result("job_abc", { content = "ls output", start_line = 3, end_line = 8 }),
+    })
+    local doc = make_doc({ you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("ls output"), "Should show job result content")
+  end)
+
+  it("shows error marker for error job_result", function()
+    local you_msg = make_message("You", {
+      ast.job_result("job_abc", { content = "timeout", status = "error", start_line = 3, end_line = 8 }),
+    })
+    local doc = make_doc({ you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local error_chunk = find_chunk(chunks, "%(error%)")
+    assert.is_not_nil(error_chunk, "Should have error marker for error job_result")
+    assert.are.equal("FlemmaToolResultError", error_chunk[2])
+  end)
+
+  it("tool_result shows error when linked job_result has error", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "sleep 999" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "running", start_line = 7, end_line = 12, meta = { job = "job_err" } }),
+    })
+    local job_msg = make_message("You", {
+      ast.job_result("job_err", { status = "error", content = "failed", start_line = 14, end_line = 19 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg, job_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local error_chunk = find_chunk(chunks, "%(error%)")
+    assert.is_not_nil(error_chunk, "Should propagate error from linked job_result")
+    assert.are.equal("FlemmaToolResultError", error_chunk[2])
+  end)
+
+  it("tool_result shows no error when linked job_result succeeded", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "running", start_line = 7, end_line = 12, meta = { job = "job_ok" } }),
+    })
+    local job_msg = make_message("You", {
+      ast.job_result("job_ok", { content = "done", start_line = 14, end_line = 19 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg, job_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local error_chunk = find_chunk(chunks, "%(error%)")
+    assert.is_nil(error_chunk, "Should NOT show error when linked job_result succeeded")
   end)
 end)
 

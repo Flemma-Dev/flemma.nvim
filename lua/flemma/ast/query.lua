@@ -21,11 +21,11 @@ function M.find_thinking_at_line(doc, lnum)
   return nil
 end
 
----Find a tool_use or tool_result segment starting at the given line number.
+---Find a tool_use, tool_result, or job_result segment starting at the given line number.
 ---@param doc flemma.ast.DocumentNode
 ---@param lnum integer 1-indexed line number
----@return flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil segment
----@return "tool_use"|"tool_result"|nil kind
+---@return flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.JobResultSegment|nil segment
+---@return "tool_use"|"tool_result"|"job_result"|nil kind
 function M.find_tool_segment_at_line(doc, lnum)
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
@@ -36,6 +36,9 @@ function M.find_tool_segment_at_line(doc, lnum)
         elseif seg.kind == "tool_result" then
           ---@cast seg flemma.ast.ToolResultSegment
           return seg, "tool_result"
+        elseif seg.kind == "job_result" then
+          ---@cast seg flemma.ast.JobResultSegment
+          return seg, "job_result"
         end
       end
     end
@@ -58,6 +61,25 @@ function M.find_message_at_line(doc, lnum)
   for _, msg in ipairs(doc.messages) do
     if lnum >= msg.position.start_line and lnum <= msg.position.end_line then
       return msg
+    end
+  end
+  return nil
+end
+
+---Resolve the effective status of a tool_result segment.
+---For tool_results linked to a job (meta.job), inherits the job's error
+---status when the job_result has been delivered to the buffer.
+---@param seg flemma.ast.ToolResultSegment
+---@param doc flemma.ast.DocumentNode
+---@return flemma.ast.ToolStatus|nil
+function M.effective_tool_result_status(seg, doc)
+  if seg.status then
+    return seg.status
+  end
+  if seg.meta and seg.meta.job then
+    local job_seg = M.find_job_result(doc, seg.meta.job --[[@as string]])
+    if job_seg and job_seg.status then
+      return job_seg.status
     end
   end
   return nil
@@ -93,6 +115,44 @@ end
 ---@field use_message? flemma.ast.MessageNode
 ---@field result? flemma.ast.ToolResultSegment
 ---@field result_message? flemma.ast.MessageNode
+
+---Find a job_result segment by job_id.
+---@param doc flemma.ast.DocumentNode
+---@param job_id string
+---@return flemma.ast.JobResultSegment|nil segment
+---@return flemma.ast.MessageNode|nil message
+function M.find_job_result(doc, job_id)
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
+        if seg.job_id == job_id then
+          return seg, msg
+        end
+      end
+    end
+  end
+  return nil, nil
+end
+
+---Find a tool_result segment that references a job_id via meta.job.
+---@param doc flemma.ast.DocumentNode
+---@param job_id string
+---@return flemma.ast.ToolResultSegment|nil segment
+---@return flemma.ast.MessageNode|nil message
+function M.find_tool_result_for_job(doc, job_id)
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" then
+        ---@cast seg flemma.ast.ToolResultSegment
+        if seg.meta and seg.meta.job == job_id then
+          return seg, msg
+        end
+      end
+    end
+  end
+  return nil, nil
+end
 
 ---Find the counterpart of a tool_use or tool_result segment.
 ---Given a tool_use, returns the matching tool_result and its parent message.

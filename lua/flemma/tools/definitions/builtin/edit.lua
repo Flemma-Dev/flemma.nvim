@@ -4,7 +4,7 @@
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
 local s = require("flemma.schema")
 
----@class flemma.tools.definitions.Edit
+---@class flemma.tools.definitions.builtin.Edit
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 

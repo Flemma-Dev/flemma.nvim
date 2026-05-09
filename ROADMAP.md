@@ -22,6 +22,12 @@ A full slash-command engine for `.chat` buffers. The scope includes:
 - **Personality wiring** — activating a personality via slash command (e.g., `/coding-assistant language=php`), with promotion from `@You` to `@System` so users don't have to manage role placement manually.
 - **Completion** — a completion source that triggers on `/` at line start and enumerates available commands and their arguments.
 
+### Customisable buffer messages
+
+Flemma injects short text fragments into the conversation buffer — tool result placeholders, abort notices, job status text. These are currently hard-coded in `.chat` template files under `lua/flemma/messages/` and rendered through the templating engine (`{{ expression }}` syntax).
+
+The plan is to let users override individual messages via config or by placing replacement `.chat` files in a known location (e.g., `~/.config/flemma/messages/`). This would allow customising the text the model sees when a tool is denied, a request is aborted, or a background job is lost — without forking the plugin.
+
 ---
 
 This roadmap reflects current intentions and is subject to change. Follow the [changelog](CHANGELOG.md) for what has shipped.

@@ -1,6 +1,6 @@
 --- Ls tool definition
 --- List directory contents with configurable depth and entry limit
----@class flemma.tools.definitions.Ls
+---@class flemma.tools.definitions.builtin.Ls
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 

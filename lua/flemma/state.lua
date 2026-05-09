@@ -24,6 +24,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field pending_send? { subscription: flemma.readiness.Subscription, opts: table } Queued send awaiting async readiness
+---@field resume_delay_timer? uv.uv_timer_t Debounce timer for auto-continue after background job drain
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
 ---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming
@@ -36,12 +37,14 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
+---@field pending_folds_retried? boolean True after a deferred retry has been scheduled for the current pending set
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
 ---@field personality_environment? flemma.personalities.CachedEnvironment Cached date/time for prompt caching (captured on first request)
 ---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
 ---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
 ---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
+---@field delivery_queue? flemma.tools.JobDelivery[] Completed job results awaiting delivery
 ---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
 ---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
 ---@field diagnostics_baseline_provider? string Provider that produced the current diagnostics baseline

@@ -147,6 +147,7 @@
 ---@field padding { left: integer, right: integer }|integer
 
 ---@class flemma.config.Ui
+---@field jobs flemma.config.UiJobs
 ---@field pricing flemma.config.UiPricing
 ---@field progress flemma.config.UiProgress
 ---@field statusline flemma.config.UiStatusline
@@ -154,6 +155,7 @@
 
 ---@class flemma.config.EditingAutoClose
 ---@field frontmatter boolean
+---@field job_result boolean
 ---@field thinking boolean
 ---@field tool_result boolean
 ---@field tool_use boolean
@@ -171,11 +173,14 @@
 
 ---@class flemma.config.KeymapsNormal
 ---@field cancel string
+---@field conceal_off string|false
+---@field conceal_on string|false
 ---@field conceal_toggle string|false
 ---@field fold_toggle string|false
 ---@field message_next string
 ---@field message_prev string
 ---@field send string
+---@field tool_background string
 ---@field tool_execute string
 
 ---@class flemma.config.ParametersAnthropic : flemma.config.ParametersBase
@@ -210,6 +215,7 @@
 ---@class flemma.config.ToolsAutopilot
 ---@field enabled boolean
 ---@field max_turns integer
+---@field resume_delay integer
 
 ---@class flemma.config.ToolsBash
 ---@field cwd? string
@@ -237,6 +243,9 @@
 
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
+
+---@class flemma.config.UiJobs
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 
 ---@class flemma.config.UiPricing
 ---@field enabled boolean

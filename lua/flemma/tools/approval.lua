@@ -237,6 +237,12 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
         else
           log.warn("approval: failed to load module resolver '" .. entry .. "': " .. tostring(resolver))
         end
+      elseif entry:find("*", 1, true) then
+        local escaped = entry:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1")
+        local pattern = "^" .. escaped:gsub("%*", ".*") .. "$"
+        if tool_name:find(pattern) then
+          return "approve"
+        end
       elseif entry == tool_name then
         return "approve"
       end

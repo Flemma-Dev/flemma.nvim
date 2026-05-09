@@ -15,6 +15,7 @@ local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
 local activity = require("flemma.ui.activity")
+local jobs_bar = require("flemma.ui.jobs")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 local autopilot = require("flemma.autopilot")
@@ -24,9 +25,11 @@ local context_module = require("flemma.context")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
+local indicators = require("flemma.ui.indicators")
 local injector = require("flemma.tools.injector")
 local path_util = require("flemma.utilities.path")
 local parser = require("flemma.parser")
+local query = require("flemma.ast.query")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
@@ -34,6 +37,7 @@ local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
+local messages = require("flemma.messages")
 local preprocessor = require("flemma.preprocessor")
 local str = require("flemma.utilities.string")
 local usage = require("flemma.usage")
@@ -41,8 +45,81 @@ local usage = require("flemma.usage")
 local nav = require("flemma.schema.navigation")
 local schema_definition = require("flemma.config.schema")
 
-local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
+
+---Drain job completion queue and inject results into the buffer.
+---@param bufnr integer
+---@return integer count Number of completions injected
+---@return boolean safe_to_continue False when user content was in progress
+local function drain_and_inject_completions(bufnr)
+  if not executor.has_job_completions(bufnr) then
+    log.trace("drain_and_inject_completions(): no pending completions for buffer " .. bufnr)
+    return 0, true
+  end
+
+  local items = executor.drain_job_completions(bufnr)
+  log.debug("drain_and_inject_completions(): draining " .. #items .. " completion(s) for buffer " .. bufnr)
+  local user_is_typing = false
+
+  for _, item in ipairs(items) do
+    local placement = injector.append_job_result(bufnr, item.job_id, item.result)
+    log.debug(
+      "drain_and_inject_completions(): injected "
+        .. item.job_id
+        .. " ("
+        .. item.tool_name
+        .. ", "
+        .. item.tool_id
+        .. ") placement="
+        .. placement
+        .. (item.result.success and "" or " [error]")
+    )
+    if placement == "displaced" then
+      user_is_typing = true
+      log.debug("drain_and_inject_completions(): user is typing in last @You block, skipping auto-continue")
+    end
+
+    local job_doc = parser.get_parsed_document(bufnr)
+    local job_seg = query.find_job_result(job_doc, item.job_id)
+    if job_seg and job_seg.position then
+      local header_line = job_seg.position.start_line
+      indicators.show_job_result_indicator(bufnr, item.job_id, header_line, item.result.success)
+      indicators.schedule_tool_indicator_clear(bufnr, item.job_id, 1500)
+    end
+
+    local buffer_state = state.get_buffer_state(bufnr)
+    if buffer_state.pending_executions then
+      buffer_state.pending_executions[item.tool_id] = nil
+    end
+
+    hooks.dispatch("job:completed", {
+      bufnr = bufnr,
+      job_id = item.job_id,
+      tool_id = item.tool_id,
+      tool_name = item.tool_name,
+      success = item.result.success,
+      active_count = executor.count_active_jobs(bufnr),
+    })
+  end
+
+  if #items > 0 then
+    editing.auto_write(bufnr)
+    ui.update_ui(bufnr)
+  end
+
+  -- Insert mode in the target buffer means the user intends to type, even if
+  -- the @You block is still empty (case 1). Without this guard, autopilot
+  -- would lock the buffer while the user is mid-keystroke → E21.
+  if not user_is_typing and vim.fn.bufwinid(bufnr) == vim.api.nvim_get_current_win() then
+    local mode = vim.fn.mode()
+    if mode == "i" or mode == "R" then
+      user_is_typing = true
+      log.debug("drain_and_inject_completions(): user is in insert mode, treating as typing")
+    end
+  end
+
+  return #items, not user_is_typing
+end
 
 -- For testing purposes
 local last_request_body_for_testing = nil
@@ -310,6 +387,15 @@ function M.cancel_request(opts)
   local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
 
+  if buffer_state.resume_delay_timer then
+    buffer_state.resume_delay_timer:stop()
+    buffer_state.resume_delay_timer:close()
+    buffer_state.resume_delay_timer = nil
+    hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+    notify.info("Cancelled pending auto-continue.")
+    return
+  end
+
   if buffer_state.pending_send then
     buffer_state.pending_send.subscription:cancel()
     buffer_state.pending_send = nil
@@ -354,7 +440,7 @@ function M.cancel_request(opts)
             line_count,
             line_count,
             false,
-            vim.list_extend(separator, { "<!-- flemma:aborted: " .. ABORT_MESSAGE .. " -->" })
+            vim.list_extend(separator, { "<!-- flemma:aborted: " .. messages.render("request-aborted") .. " -->" })
           )
         end)
         editing.auto_write(bufnr)
@@ -441,7 +527,7 @@ local function advance_phase2(opts)
   for _, ctx in ipairs(aborted) do
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
-      error = ctx.aborted_message or ABORT_MESSAGE,
+      error = ctx.aborted_message or messages.render("request-aborted"),
     })
   end
 
@@ -457,7 +543,13 @@ local function advance_phase2(opts)
       throttled = true
       break
     end
-    local ok, err = executor.execute(bufnr, ctx)
+    local is_background = ctx.input.background == true
+    if is_background then
+      ctx.input = vim.tbl_extend("keep", {}, ctx.input)
+      ctx.input.background = nil
+      log.debug("advance_phase2: tool " .. ctx.tool_id .. " (" .. ctx.tool_name .. ") requested background execution")
+    end
+    local ok, err = executor.execute(bufnr, ctx, { background = is_background })
     if not ok then
       notify.error(err or "Execution failed")
     else
@@ -568,6 +660,17 @@ function M.send_or_execute(opts)
   if buffer_state.current_request then
     notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
     return
+  end
+
+  if opts.user_initiated then
+    if buffer_state.resume_delay_timer then
+      buffer_state.resume_delay_timer:stop()
+      buffer_state.resume_delay_timer:close()
+      buffer_state.resume_delay_timer = nil
+      hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+    end
+    log.trace("send_or_execute(): user-initiated send, draining job completions first")
+    drain_and_inject_completions(bufnr)
   end
 
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
@@ -1330,6 +1433,36 @@ function M._run_send_pipeline(bufnr, opts)
           -- Hook autopilot: check if assistant response contains tool_use
           autopilot.on_response_complete(bufnr)
 
+          local ap_state = autopilot.get_state(bufnr)
+          log.debug(
+            "send_to_provider(): post-response autopilot state="
+              .. ap_state
+              .. " has_job_completions="
+              .. tostring(executor.has_job_completions(bufnr))
+          )
+          if ap_state == "idle" then
+            hooks.dispatch("conversation:idle", { bufnr = bufnr })
+            local drained, safe = drain_and_inject_completions(bufnr)
+            if drained > 0 then
+              log.debug(
+                "conversation:idle: drained "
+                  .. drained
+                  .. " job completion(s), safe="
+                  .. tostring(safe)
+                  .. " autopilot="
+                  .. tostring(autopilot.is_enabled(bufnr))
+              )
+              if safe and autopilot.is_enabled(bufnr) then
+                log.debug("conversation:idle: scheduling auto-continue after job drain")
+                vim.schedule(function()
+                  if vim.api.nvim_buf_is_valid(bufnr) then
+                    M.send_or_execute({ bufnr = bufnr })
+                  end
+                end)
+              end
+            end
+          end
+
           hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = latest_request })
         else
           -- cURL request failed (exit code ~= 0)
@@ -1428,18 +1561,110 @@ function M.update_ui(bufnr)
   return ui.update_ui(bufnr)
 end
 
+---Drain completed background jobs and auto-continue when autopilot is active.
+---@param bufnr integer
+function M.drain_job_completions(bufnr)
+  log.debug("drain_job_completions(): triggered for buffer " .. bufnr)
+  local drained, safe = drain_and_inject_completions(bufnr)
+  if drained == 0 then
+    return
+  end
+  log.debug(
+    "drain_job_completions(): drained "
+      .. drained
+      .. " completion(s), safe="
+      .. tostring(safe)
+      .. " autopilot="
+      .. tostring(autopilot.is_enabled(bufnr))
+  )
+  local ap_state = autopilot.get_state(bufnr)
+  local disarmed = autopilot.was_disarmed(bufnr)
+  if safe and autopilot.is_enabled(bufnr) and not disarmed then
+    local bs = state.get_buffer_state(bufnr)
+    local delay_ms = (ap_state == "idle") and config_facade.get(bufnr).tools.autopilot.resume_delay or 0
+    log.debug(
+      "drain_job_completions(): scheduling auto-continue for buffer "
+        .. bufnr
+        .. " (autopilot="
+        .. ap_state
+        .. " resume_delay="
+        .. delay_ms
+        .. "ms)"
+    )
+    if delay_ms > 0 then
+      if bs.resume_delay_timer then
+        bs.resume_delay_timer:stop()
+        bs.resume_delay_timer:close()
+        hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+      end
+      local timer = assert(vim.uv.new_timer())
+      bs.resume_delay_timer = timer
+      hooks.dispatch("autopilot:resume-scheduled", { bufnr = bufnr, delay_ms = delay_ms })
+      timer:start(
+        delay_ms,
+        0,
+        vim.schedule_wrap(function()
+          bs.resume_delay_timer = nil
+          timer:stop()
+          timer:close()
+          if not vim.api.nvim_buf_is_valid(bufnr) or autopilot.was_disarmed(bufnr) then
+            hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+            return
+          end
+          local win = vim.fn.bufwinid(bufnr)
+          if win == vim.api.nvim_get_current_win() then
+            local mode = vim.fn.mode()
+            if mode == "i" or mode == "R" then
+              log.debug("resume_delay: user entered insert mode during delay, skipping auto-continue")
+              hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+              return
+            end
+          end
+          hooks.dispatch("autopilot:resumed", { bufnr = bufnr })
+          M.send_or_execute({ bufnr = bufnr })
+        end)
+      )
+    else
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          M.send_or_execute({ bufnr = bufnr })
+        end
+      end)
+    end
+  elseif not safe then
+    log.debug("drain_job_completions(): skipping auto-continue (user is typing)")
+  elseif disarmed then
+    log.debug("drain_job_completions(): skipping auto-continue (autopilot disarmed)")
+  end
+end
+
 -- Register core functions with the bridge so modules that cannot
 -- require core directly (due to circular dependencies) can dispatch to them.
 bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
+bridge.register("drain_job_completions", M.drain_job_completions)
+
+state.register_cleanup("core.jobs_bar", function(bufnr)
+  jobs_bar.cleanup(bufnr)
+end)
 
 state.register_cleanup("core.pending_send", function(bufnr)
   local bs = state.get_buffer_state(bufnr)
   if bs.pending_send then
     bs.pending_send.subscription:cancel()
     bs.pending_send = nil
+  end
+end)
+
+state.register_cleanup("core.resume_delay_timer", function(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.resume_delay_timer then
+    bs.resume_delay_timer:stop()
+    bs.resume_delay_timer:close()
+    bs.resume_delay_timer = nil
+    hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
   end
 end)
 

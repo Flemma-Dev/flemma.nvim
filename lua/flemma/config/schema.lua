@@ -14,6 +14,16 @@ local symbols = require("flemma.symbols")
 -- Reusable type helpers
 -- ---------------------------------------------------------------------------
 
+---@type string[]
+local BAR_POSITIONS = { "top", "bottom", "top left", "top right", "bottom left", "bottom right" }
+
+--- Bar position enum with a caller-supplied default.
+---@param default string
+---@return flemma.schema.Node
+local function position(default)
+  return s.enum(BAR_POSITIONS, default)
+end
+
 --- HighlightValue: string | { dark: string, light: string }
 --- String defaults produce a union with the string branch carrying the default.
 --- Table defaults produce a union with the object branch carrying the defaults.
@@ -149,6 +159,7 @@ return s.object({
     autopilot = s.object({
       enabled = s.boolean(true),
       max_turns = s.integer(100),
+      resume_delay = s.integer(2000),
     }):coerce(function(value, _ctx)
       if type(value) == "boolean" then
         return { enabled = value }
@@ -239,7 +250,7 @@ return s.object({
 
   ruler = s.object({
     enabled = s.boolean(true),
-    char = s.string("\u{2500}"),
+    char = s.string("─"),
     hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
   }),
 
@@ -279,26 +290,15 @@ return s.object({
     usage = s.object({
       enabled = s.boolean(true),
       timeout = s.integer(10000),
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "top"),
+      position = position("top"),
       highlight = s.string("@text.note,PmenuSel"),
     }),
     progress = s.object({
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "bottom left"),
+      position = position("bottom left"),
       highlight = s.string("StatusLine"),
+    }),
+    jobs = s.object({
+      position = position("bottom right"),
     }),
     pricing = s.object({
       enabled = s.boolean(true),
@@ -336,6 +336,7 @@ return s.object({
       thinking = s.boolean(true),
       tool_use = s.boolean(true),
       tool_result = s.boolean(true),
+      job_result = s.boolean(true),
       frontmatter = s.boolean(false),
     }),
   }),
@@ -345,10 +346,13 @@ return s.object({
       send = s.string("<C-]>"),
       cancel = s.string("<C-c>"),
       tool_execute = s.string("<M-CR>"),
+      tool_background = s.string("<M-b>"),
       message_next = s.string("]m"),
       message_prev = s.string("[m"),
       fold_toggle = s.union(s.string("<Space>"), s.literal(false)),
-      conceal_toggle = s.union(s.string("<Space><Space>"), s.literal(false)),
+      conceal_toggle = s.union(s.string("yoe"), s.literal(false)),
+      conceal_on = s.union(s.string("]oe"), s.literal(false)),
+      conceal_off = s.union(s.string("[oe"), s.literal(false)),
     }),
     insert = s.object({
       send = s.string("<C-]>"),
@@ -403,7 +407,7 @@ return s.object({
   integrations = s.object({
     devicons = s.object({
       enabled = s.boolean(true),
-      icon = s.string("\u{2234}"), -- ∴ U+2234 Therefore
+      icon = s.string("∴"),
     }),
   }),
 

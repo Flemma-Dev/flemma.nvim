@@ -2,13 +2,13 @@ package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["extras.flemma.tools.calculator"] = nil
-package.loaded["flemma.tools.definitions.bash"] = nil
-package.loaded["flemma.tools.definitions.read"] = nil
-package.loaded["flemma.tools.definitions.edit"] = nil
-package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.tools.definitions.grep"] = nil
-package.loaded["flemma.tools.definitions.find"] = nil
-package.loaded["flemma.tools.definitions.ls"] = nil
+package.loaded["flemma.tools.definitions.builtin.bash"] = nil
+package.loaded["flemma.tools.definitions.builtin.read"] = nil
+package.loaded["flemma.tools.definitions.builtin.edit"] = nil
+package.loaded["flemma.tools.definitions.builtin.write"] = nil
+package.loaded["flemma.tools.definitions.builtin.grep"] = nil
+package.loaded["flemma.tools.definitions.builtin.find"] = nil
+package.loaded["flemma.tools.definitions.builtin.ls"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
 package.loaded["flemma.provider.adapters.anthropic"] = nil
 package.loaded["flemma.provider.adapters.openai"] = nil
@@ -479,7 +479,7 @@ describe("Anthropic Provider Tool Support", function()
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tools, "Request should include tools array")
-    assert.equals(8, #req.tools)
+    assert.equals(9, #req.tools)
     local calc = find_anthropic_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
   end)
@@ -776,7 +776,7 @@ describe("Request Body Validation", function()
 
     -- Validate tools array
     assert.is_not_nil(req.tools)
-    assert.equals(8, #req.tools)
+    assert.equals(9, #req.tools)
     local calc = find_anthropic_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.is_not_nil(calc.input_schema)
@@ -845,7 +845,7 @@ describe("OpenAI Provider Request Building with Tools", function()
     local req = provider:build_request(prompt, context)
 
     assert.is_not_nil(req.tools, "Request should include tools array")
-    assert.equals(8, #req.tools)
+    assert.equals(9, #req.tools)
     local calc = find_openai_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.equals("function", calc.type)
@@ -1125,7 +1125,7 @@ describe("OpenAI Request Body Validation with Tools", function()
 
     -- Validate tools array in OpenAI format
     assert.is_not_nil(req.tools)
-    assert.equals(8, #req.tools)
+    assert.equals(9, #req.tools)
     local calc = find_openai_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.equals("function", calc.type)
@@ -1182,7 +1182,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
     assert.is_not_nil(req.tools, "Request should include tools array")
     assert.equals(1, #req.tools)
     assert.is_not_nil(req.tools[1].functionDeclarations)
-    assert.equals(8, #req.tools[1].functionDeclarations)
+    assert.equals(9, #req.tools[1].functionDeclarations)
     local calc = find_vertex_decl(req.tools[1].functionDeclarations, "calculator")
     assert.is_not_nil(calc, "calculator functionDeclaration should be present")
     assert.is_not_nil(calc.parametersJsonSchema)
@@ -1878,7 +1878,7 @@ describe("Vertex AI Request Body Validation with Tools", function()
     assert.is_not_nil(req.tools)
     assert.equals(1, #req.tools)
     assert.is_not_nil(req.tools[1].functionDeclarations)
-    assert.equals(8, #req.tools[1].functionDeclarations)
+    assert.equals(9, #req.tools[1].functionDeclarations)
     local calc = find_vertex_decl(req.tools[1].functionDeclarations, "calculator")
     assert.is_not_nil(calc, "calculator functionDeclaration should be present")
 

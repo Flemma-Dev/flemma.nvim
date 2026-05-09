@@ -3,12 +3,15 @@
 ---@class flemma.Keymaps
 local M = {}
 
+local bridge = require("flemma.bridge")
 local config_facade = require("flemma.config")
 local core = require("flemma.core")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
+local log = require("flemma.logging")
 local navigation = require("flemma.navigation")
 local notify = require("flemma.notify")
+local state = require("flemma.state")
 local textobject = require("flemma.textobject")
 local buffer_utils = require("flemma.utilities.buffer")
 local folding = require("flemma.ui.folding")
@@ -16,6 +19,10 @@ local ui = require("flemma.ui")
 
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
 local CANCEL_WINDOW_MS = 800
+local RAGE_CANCEL_MS = 500
+
+---@type integer? Monotonic timestamp (ms) of the last Ctrl+C miss (nothing was cancelled)
+local last_cancel_miss_at = nil
 
 ---Handle colon insertion in insert mode.
 ---If the text before the cursor is a valid role marker at the start of
@@ -81,13 +88,49 @@ M.setup = function()
           end, { buffer = true, desc = "Execute Flemma tool at cursor" })
         end
 
+        if config.keymaps.normal.tool_background then
+          vim.keymap.set("n", config.keymaps.normal.tool_background, function()
+            local bufnr = vim.api.nvim_get_current_buf()
+
+            local ok, err = executor.background_at_cursor(bufnr)
+            if not ok then
+              notify.error(err or "Failed to move tool to background")
+            else
+              notify.info("Tool moved to background.")
+            end
+          end, { buffer = true, desc = "Move Flemma tool to background" })
+        end
+
         if config.keymaps.normal.cancel then
           vim.keymap.set("n", config.keymaps.normal.cancel, function()
             local bufnr = vim.api.nvim_get_current_buf()
 
-            if not executor.cancel_for_buffer(bufnr) then
-              notify.info("Nothing to cancel")
+            if executor.cancel_for_buffer(bufnr) then
+              last_cancel_miss_at = nil
+              return
             end
+
+            local buffer_state = state.get_buffer_state(bufnr)
+            if buffer_state.resume_delay_timer then
+              bridge.cancel_request({ bufnr = bufnr })
+              last_cancel_miss_at = nil
+              return
+            end
+
+            local now = vim.uv.now()
+            if last_cancel_miss_at and (now - last_cancel_miss_at) < RAGE_CANCEL_MS then
+              last_cancel_miss_at = nil
+              log.info("RAGE cancel: user double-tapped Ctrl+C, cancelling all tools in buffer " .. bufnr)
+              executor.cancel_all(bufnr)
+              if buffer_state.current_request then
+                bridge.cancel_request({ bufnr = bufnr })
+              end
+              return
+            end
+
+            last_cancel_miss_at = now
+            log.debug("keymaps: Ctrl+C miss in buffer " .. bufnr .. ", awaiting double-tap for RAGE cancel")
+            notify.info("Nothing to cancel (press again to cancel all)")
           end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
         end
 
@@ -124,21 +167,21 @@ M.setup = function()
           end
         end
 
-        -- Conceal toggle keymap (skip when the key starts with mapleader,
-        -- or when editing.conceal is not configured)
-        local conceal_toggle_key = config.keymaps.normal.conceal_toggle
-        if conceal_toggle_key then
-          local leader = vim.g.mapleader or "\\"
-          if not vim.startswith(vim.keycode(conceal_toggle_key), vim.keycode(leader)) then
-            local cfg = config_facade.get()
-            local has_conceal = cfg and cfg.editing and cfg.editing.conceal ~= nil and cfg.editing.conceal ~= false
-            if has_conceal then
-              vim.keymap.set(
-                "n",
-                conceal_toggle_key,
-                ui.toggle_conceal,
-                { buffer = true, desc = "Toggle conceal level" }
-              )
+        -- Conceal keymaps (toggle / on / off) — only when editing.conceal is configured
+        local cfg_for_conceal = config_facade.get()
+        local has_conceal = cfg_for_conceal
+          and cfg_for_conceal.editing
+          and cfg_for_conceal.editing.conceal ~= nil
+          and cfg_for_conceal.editing.conceal ~= false
+        if has_conceal then
+          local conceal_maps = {
+            { key = config.keymaps.normal.conceal_toggle, fn = ui.toggle_conceal, desc = "Toggle conceal level" },
+            { key = config.keymaps.normal.conceal_on, fn = ui.enable_conceal, desc = "Enable conceal" },
+            { key = config.keymaps.normal.conceal_off, fn = ui.disable_conceal, desc = "Disable conceal" },
+          }
+          for _, m in ipairs(conceal_maps) do
+            if m.key then
+              vim.keymap.set("n", m.key, m.fn, { buffer = true, desc = m.desc })
             end
           end
         end

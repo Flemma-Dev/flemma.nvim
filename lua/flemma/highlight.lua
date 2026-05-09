@@ -440,6 +440,15 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolResultAborted", syntax_config.highlights.tool_result_aborted)
   set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
 
+  -- Job result syntax highlights (linked to tool result counterparts)
+  set_highlight("FlemmaJobResultTitle", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaJobResultError", { link = "FlemmaToolResultError", default = true })
+  set_highlight("FlemmaJobResultPending", { link = "FlemmaToolResultPending", default = true })
+  set_highlight("FlemmaJobResultApproved", { link = "FlemmaToolResultApproved", default = true })
+  set_highlight("FlemmaJobResultRejected", { link = "FlemmaToolResultRejected", default = true })
+  set_highlight("FlemmaJobResultDenied", { link = "FlemmaToolResultDenied", default = true })
+  set_highlight("FlemmaJobResultAborted", { link = "FlemmaToolResultAborted", default = true })
+
   -- Set highlight for fold text segments
   set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
   set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
@@ -453,8 +462,14 @@ M.apply_syntax = function()
   -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
   set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
 
-  -- Tool execution indicator highlights
-  set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
+  -- Tool indicator icon highlights (inline ⬢ prefix and fold icon)
+  set_highlight("FlemmaToolIconPending", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconExecuting", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconSuccess", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconError", { link = "DiagnosticError", default = true })
+  -- Tool indicator status highlights (EOL text)
+  set_highlight("FlemmaToolPending", { link = "DiagnosticHint", default = true })
+  set_highlight("FlemmaToolExecuting", { link = "DiagnosticInfo", default = true })
   set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 

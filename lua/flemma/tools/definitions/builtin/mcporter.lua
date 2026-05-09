@@ -4,7 +4,7 @@
 --- Exports `{ resolve, timeout }` for the async source pattern consumed by
 --- `tools.init.register_async()`. Discovery is gated behind
 --- `tools.mcporter.enabled` (default false).
----@class flemma.tools.definitions.MCPorter
+---@class flemma.tools.definitions.builtin.MCPorter
 local M = {}
 
 local config_facade = require("flemma.config")

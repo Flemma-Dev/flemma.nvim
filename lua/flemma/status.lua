@@ -17,6 +17,11 @@ local display = require("flemma.utilities.display")
 local registry = require("flemma.provider.registry")
 
 local MARKER_SANDBOX = "⊡"
+local ICON_APPROVED = "✓"
+local ICON_DENIED = "✗"
+local ICON_PENDING_APPROVAL = "⋯"
+local ICON_BOOTING = "⧖"
+local ICON_BOOT_COMPLETE = "✔"
 
 --- Base code point for the decorative letter block used as source layer icons.
 --- Change this single value to switch icon style (e.g. 0x24B6 for circled,
@@ -1238,11 +1243,11 @@ local function format_tools_section(b, data, is_last, verbose)
   -- booting indicator (kept stable across refreshes to avoid layout jumps)
   if t.booting then
     b:leaf(false)
-    b:put("⧖ loading async tool sources…", "FlemmaStatusBooting")
+    b:put(ICON_BOOTING .. " loading async tool sources…", "FlemmaStatusBooting")
     b:nl()
   elseif t.boot_completed then
     b:leaf(false)
-    b:put("✔ finished loading tool sources", "FlemmaStatusEnabled")
+    b:put(ICON_BOOT_COMPLETE .. " finished loading tool sources", "FlemmaStatusEnabled")
     b:nl()
   end
 
@@ -1309,7 +1314,7 @@ local function format_approval_section(b, data, is_last)
     if has_approved then
       groups_shown = groups_shown + 1
       b:branch(groups_shown == total_groups)
-      b:put("✓ ", "FlemmaStatusToolEnabled")
+      b:put(ICON_APPROVED .. " ", "FlemmaStatusToolEnabled")
       b:put("auto-approve", "FlemmaStatusToolEnabled")
       b:nl()
 
@@ -1329,7 +1334,7 @@ local function format_approval_section(b, data, is_last)
     if has_denied then
       groups_shown = groups_shown + 1
       b:branch(groups_shown == total_groups)
-      b:put("✗ ", "FlemmaStatusToolDisabled")
+      b:put(ICON_DENIED .. " ", "FlemmaStatusToolDisabled")
       b:put("deny", "FlemmaStatusToolDisabled")
       b:nl()
 
@@ -1349,7 +1354,7 @@ local function format_approval_section(b, data, is_last)
     if has_pending then
       groups_shown = groups_shown + 1
       b:branch(groups_shown == total_groups)
-      b:put("⋯ ", "FlemmaStatusToolPending")
+      b:put(ICON_PENDING_APPROVAL .. " ", "FlemmaStatusToolPending")
       b:put("require approval", "FlemmaStatusToolPending")
       b:nl()
 

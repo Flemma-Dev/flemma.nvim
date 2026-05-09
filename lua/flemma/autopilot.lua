@@ -16,16 +16,26 @@ local tool_context = require("flemma.tools.context")
 
 ---Check whether tool executions are currently in progress for a buffer.
 ---Reads directly from state to avoid circular dependency with executor module.
+---Excludes background entries (those with job_id); only foreground tools count.
 ---@param bufnr integer
 ---@return boolean
 local function has_executing_tools(bufnr)
   local pending = state.get_buffer_state(bufnr).pending_executions
-  return pending ~= nil and next(pending) ~= nil
+  if not pending then
+    return false
+  end
+  for _, entry in pairs(pending) do
+    if not entry.job_id then
+      return true
+    end
+  end
+  return false
 end
 
 ---@class flemma.autopilot.BufferState
 ---@field state flemma.autopilot.State
 ---@field iteration integer
+---@field disarmed boolean
 
 ---Get or initialize autopilot state for a buffer
 ---@param bufnr integer
@@ -33,7 +43,7 @@ end
 local function get_state(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if not buffer_state.autopilot then
-    buffer_state.autopilot = { state = "idle", iteration = 0 }
+    buffer_state.autopilot = { state = "idle", iteration = 0, disarmed = false }
   end
   return buffer_state.autopilot
 end
@@ -65,11 +75,20 @@ function M.get_state(bufnr)
   return get_state(bufnr).state
 end
 
+---Check whether autopilot was explicitly disarmed (Ctrl+C, error, abort)
+---as opposed to naturally reaching idle after a response with no tool_use.
+---@param bufnr integer
+---@return boolean
+function M.was_disarmed(bufnr)
+  return get_state(bufnr).disarmed
+end
+
 ---Set buffer state to armed (tools are executing, will fire on completion)
 ---@param bufnr integer
 function M.arm(bufnr)
   local bs = get_state(bufnr)
   bs.state = "armed"
+  bs.disarmed = false
   log.debug("autopilot: armed buffer " .. bufnr)
 end
 
@@ -79,6 +98,7 @@ function M.disarm(bufnr)
   local bs = get_state(bufnr)
   bs.state = "idle"
   bs.iteration = 0
+  bs.disarmed = true
   log.debug("autopilot: disarmed buffer " .. bufnr)
 end
 
@@ -116,7 +136,13 @@ function M.on_response_complete(bufnr)
   end
 
   if not has_tool_use then
-    log.debug("autopilot: no tool_use in last assistant message, staying idle")
+    local bs = get_state(bufnr)
+    if bs.state ~= "idle" then
+      log.debug("autopilot: no tool_use in last assistant message, transitioning " .. bs.state .. " → idle")
+      bs.state = "idle"
+    else
+      log.debug("autopilot: no tool_use in last assistant message, staying idle")
+    end
     return
   end
 
@@ -128,7 +154,7 @@ function M.on_response_complete(bufnr)
   local max_turns = cfg.tools.autopilot.max_turns
 
   if bs.iteration > max_turns then
-    bs.state = "idle"
+    M.disarm(bufnr)
     notify.warn("Autopilot stopped – exceeded " .. max_turns .. " consecutive turns.")
     log.warn("autopilot: exceeded max_turns (" .. max_turns .. ") for buffer " .. bufnr)
     return

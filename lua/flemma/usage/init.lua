@@ -23,6 +23,11 @@ local Bar = require("flemma.ui.bar")
 local state = require("flemma.state")
 local notify = require("flemma.notify")
 
+local ICON_INPUT = "↑"
+local ICON_OUTPUT = "↓"
+local ICON_THINKING = "⁂"
+local ICON_SESSION = "Σ"
+
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
   MODEL_NAME = 110,
@@ -135,7 +140,7 @@ function M.build_segments(request, session)
     -- Input tokens (total including cached)
     table.insert(request_items, {
       key = "request_input_tokens",
-      text = M.format_number(request:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
+      text = M.format_number(request:get_total_input_tokens()) .. ICON_INPUT,
       priority = PRIORITY.REQUEST_INPUT_TOKENS,
       highlight = { group = "FlemmaUsageBarSecondary" },
     })
@@ -144,7 +149,7 @@ function M.build_segments(request, session)
     local total_output_tokens = request:get_total_output_tokens()
     table.insert(request_items, {
       key = "request_output_tokens",
-      text = M.format_number(total_output_tokens) .. "\xE2\x86\x93", -- ↓
+      text = M.format_number(total_output_tokens) .. ICON_OUTPUT,
       priority = PRIORITY.REQUEST_OUTPUT_TOKENS,
       highlight = { group = "FlemmaUsageBarSecondary" },
     })
@@ -153,7 +158,7 @@ function M.build_segments(request, session)
     if request.thoughts_tokens > 0 then
       table.insert(request_items, {
         key = "thinking_tokens",
-        text = M.format_number(request.thoughts_tokens) .. "\xE2\x81\x82", -- ⁂
+        text = M.format_number(request.thoughts_tokens) .. ICON_THINKING,
         priority = PRIORITY.THINKING_TOKENS,
         highlight = { group = "FlemmaUsageBarSecondary" },
       })
@@ -185,7 +190,7 @@ function M.build_segments(request, session)
     -- Session input tokens
     table.insert(session_items, {
       key = "session_input_tokens",
-      text = M.format_number(session:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
+      text = M.format_number(session:get_total_input_tokens()) .. ICON_INPUT,
       priority = PRIORITY.SESSION_INPUT_TOKENS,
       highlight = { group = "FlemmaUsageBarSecondary" },
     })
@@ -193,14 +198,14 @@ function M.build_segments(request, session)
     -- Session output tokens
     table.insert(session_items, {
       key = "session_output_tokens",
-      text = M.format_number(session:get_total_output_tokens()) .. "\xE2\x86\x93", -- ↓
+      text = M.format_number(session:get_total_output_tokens()) .. ICON_OUTPUT,
       priority = PRIORITY.SESSION_OUTPUT_TOKENS,
       highlight = { group = "FlemmaUsageBarSecondary" },
     })
 
     table.insert(segments, {
       key = "session",
-      label = "Σ" .. tostring(session:get_request_count()),
+      label = ICON_SESSION .. tostring(session:get_request_count()),
       label_highlight = "FlemmaUsageBarMuted",
       separator_highlight = "FlemmaUsageBarMuted",
       items = session_items,

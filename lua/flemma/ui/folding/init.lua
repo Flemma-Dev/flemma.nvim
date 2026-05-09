@@ -301,8 +301,8 @@ function M.get_fold_text()
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
       local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
-      if label then
-        fixed_chrome = fixed_chrome + str.strwidth(label) + separator_width -- label + em-dash separator
+      if detail then
+        fixed_chrome = fixed_chrome + str.strwidth(detail) + separator_width
       end
       local available = text_width - fixed_chrome
 
@@ -311,19 +311,18 @@ function M.get_fold_text()
       if label or detail then
         table.insert(chunks, { ": ", "FlemmaToolName" })
 
-        if label then
-          table.insert(chunks, { label, "FlemmaToolLabel" })
-          if detail and available > 0 then
-            local detail_text = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
-            if detail_text ~= "" then
-              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
+        if detail then
+          table.insert(chunks, { detail, "FlemmaToolDetail" })
+          if label and available > 0 then
+            local label_text = str.truncate(label, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
             end
           end
         else
-          -- No label: show detail only (reclaim separator space)
-          local detail_text =
-            str.truncate(detail --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
-          table.insert(chunks, { detail_text, "FlemmaToolDetail" })
+          local label_text =
+            str.truncate(label --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(chunks, { label_text, "FlemmaToolLabel" })
         end
         table.insert(chunks, { " ", "FlemmaFoldPreview" })
       else
@@ -337,10 +336,18 @@ function M.get_fold_text()
       local tool_info = tool_use_index[tool_seg.tool_use_id]
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
+      local effective_status = query.effective_tool_result_status(tool_seg, doc)
+
+      local icon_hl = "FlemmaToolIcon"
+      if effective_status == "error" then
+        icon_hl = "FlemmaToolIconError"
+      elseif not effective_status and tool_seg.content ~= "" then
+        icon_hl = "FlemmaToolIconSuccess"
+      end
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { TOOL_RESULT_ICON .. " ", "FlemmaToolIcon" },
+        { TOOL_RESULT_ICON .. " ", icon_hl },
         { "Tool Result: ", "FlemmaToolResultTitle" },
         { tool_name, "FlemmaToolName" },
       }
@@ -351,12 +358,69 @@ function M.get_fold_text()
         + str.strwidth(": ")
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
-      if tool_seg.status == "error" then
+      if effective_status == "error" then
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+      local available = text_width - fixed_chrome
+
+      table.insert(chunks, { ": ", "FlemmaFoldPreview" })
+      if effective_status == "error" then
+        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      end
+
+      local body = preview.format_content_preview(tool_seg.content, available)
       if tool_label then
-        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + result_separator_width -- label + em-dash separator
+        if body ~= "" then
+          local body_text = str.truncate(body, available - result_separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          if body_text ~= "" then
+            table.insert(chunks, { body_text, "FlemmaFoldPreview" })
+            available = available - str.strwidth(body_text)
+          end
+          if available > result_separator_width then
+            local label_text =
+              str.truncate(tool_label, available - result_separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
+            end
+          end
+        else
+          local label_text = str.truncate(tool_label, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          if label_text ~= "" then
+            table.insert(chunks, { label_text, "FlemmaToolLabel" })
+          end
+        end
+      elseif body ~= "" then
+        table.insert(chunks, { body, "FlemmaFoldPreview" })
+      end
+
+      table.insert(chunks, { " ", "FlemmaFoldPreview" })
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+      return chunks
+    elseif tool_kind == "job_result" then
+      ---@cast tool_seg flemma.ast.JobResultSegment
+      local icon_hl = "FlemmaToolIcon"
+      if tool_seg.status == "error" then
+        icon_hl = "FlemmaToolIconError"
+      elseif tool_seg.content ~= "" then
+        icon_hl = "FlemmaToolIconSuccess"
+      end
+
+      ---@type {[1]:string, [2]:string}[]
+      local chunks = {
+        { TOOL_RESULT_ICON .. " ", icon_hl },
+        { "Job Result: ", "FlemmaJobResultTitle" },
+        { tool_seg.job_id, "FlemmaToolName" },
+      }
+
+      local fixed_chrome = str.strwidth(TOOL_RESULT_ICON .. " ")
+        + str.strwidth("Job Result: ")
+        + str.strwidth(tool_seg.job_id)
+        + str.strwidth(": ")
+        + str.strwidth(" ")
+        + str.strwidth(suffix)
+      if tool_seg.status == "error" then
+        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local available = text_width - fixed_chrome
 
@@ -365,19 +429,9 @@ function M.get_fold_text()
         table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
       end
 
-      if tool_label then
-        table.insert(chunks, { tool_label, "FlemmaToolLabel" })
-        if available > 0 then
-          local body = preview.format_content_preview(tool_seg.content, available)
-          if body ~= "" then
-            table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
-          end
-        end
-      else
-        local body = preview.format_content_preview(tool_seg.content, available)
-        if body ~= "" then
-          table.insert(chunks, { body, "FlemmaFoldPreview" })
-        end
+      local body = preview.format_content_preview(tool_seg.content, available)
+      if body ~= "" then
+        table.insert(chunks, { body, "FlemmaFoldPreview" })
       end
 
       table.insert(chunks, { " ", "FlemmaFoldPreview" })
@@ -563,7 +617,11 @@ local function safe_foldclose(winid, start_lnum, end_lnum)
   local fold_level = vim.api.nvim_win_call(winid, function()
     return vim.fn.foldlevel(start_lnum)
   end)
-  if not fold_level or fold_level <= 0 then
+  -- All auto-closeable ranges are level-2 folds (tool blocks, thinking,
+  -- job results, frontmatter). If foldlevel is only 1, the inner fold
+  -- hasn't been established yet (foldexpr is lazy) and :foldclose would
+  -- close the enclosing level-1 message fold instead.
+  if not fold_level or fold_level < 2 then
     return false
   end
   local fold_closed = vim.api.nvim_win_call(winid, function()
@@ -597,6 +655,9 @@ function M.fold_completed_blocks(bufnr)
   if winid == -1 then
     log.debug("fold_completed_blocks(): Buffer " .. bufnr .. " has no window. Cannot close folds.")
     return
+  end
+  if buffer_state.fold_completed_tick ~= tick then
+    buffer_state.pending_folds_retried = nil
   end
   buffer_state.fold_completed_tick = tick
 
@@ -640,9 +701,30 @@ function M.fold_completed_blocks(bufnr)
 
   -- Track pending folds for retry on subsequent calls
   buffer_state.pending_folds = next(pending) ~= nil and pending or nil
+  if not buffer_state.pending_folds then
+    buffer_state.pending_folds_retried = nil
+  end
 
   if #new_folds > 0 then
     log.debug("fold_completed_blocks(): Auto-closed " .. #new_folds .. " fold(s) in buffer " .. bufnr)
+  end
+
+  -- When folds fail because foldexpr hasn't been fully evaluated yet
+  -- (newly inserted lines lack fold boundaries), schedule a single
+  -- deferred retry. The :redraw forces Vim to evaluate foldexpr for all
+  -- visible lines, establishing the fold boundaries that :foldclose needs.
+  if buffer_state.pending_folds and not buffer_state.pending_folds_retried then
+    buffer_state.pending_folds_retried = true
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local retry_winid = vim.fn.bufwinid(bufnr)
+      if retry_winid ~= -1 then
+        vim.fn.win_execute(retry_winid, "redraw")
+      end
+      M.fold_completed_blocks(bufnr)
+    end)
   end
 end
 

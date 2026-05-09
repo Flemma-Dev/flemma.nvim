@@ -8,8 +8,10 @@ local schema_definition = require("flemma.config.schema")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
 local core = require("flemma.core")
+local bridge = require("flemma.bridge")
 local presets = require("flemma.presets")
 local state = require("flemma.state")
+local editing = require("flemma.buffer.editing")
 local ui = require("flemma.ui")
 local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
@@ -19,6 +21,7 @@ local loader = require("flemma.loader")
 local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
+local executor = require("flemma.tools.executor")
 local preprocessor = require("flemma.preprocessor")
 local templating = require("flemma.templating")
 local tools_approval = require("flemma.tools.approval")
@@ -200,6 +203,39 @@ M.setup = function(user_opts)
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
 
+  local job_lifecycle_group = vim.api.nvim_create_augroup("FlemmaJobLifecycle", { clear = true })
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = job_lifecycle_group,
+    callback = function()
+      local buf_count = 0
+      for bufnr, bs in state.each_buffer_state() do
+        local has_request = bs.current_request ~= nil
+        local job_count = 0
+        if bs.pending_executions then
+          for _, entry in pairs(bs.pending_executions) do
+            if entry.job_id then
+              job_count = job_count + 1
+            end
+          end
+        end
+        if has_request or job_count > 0 then
+          log.info(
+            "VimLeavePre: buffer "
+              .. bufnr
+              .. " — cancelling request="
+              .. tostring(has_request)
+              .. " jobs="
+              .. job_count
+          )
+        end
+        bridge.cancel_request({ bufnr = bufnr })
+        executor.cancel_all(bufnr)
+        editing.auto_write(bufnr)
+        buf_count = buf_count + 1
+      end
+      log.info("VimLeavePre: cleaned up " .. buf_count .. " buffer(s)")
+    end,
+  })
   -- Initialize templating registry with built-in populators
   templating.setup()
 

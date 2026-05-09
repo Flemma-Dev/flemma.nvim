@@ -4,7 +4,7 @@ package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
-package.loaded["flemma.tools.definitions.edit"] = nil
+package.loaded["flemma.tools.definitions.builtin.edit"] = nil
 package.loaded["flemma.sandbox"] = nil
 package.loaded["flemma.sandbox.backends.bwrap"] = nil
 

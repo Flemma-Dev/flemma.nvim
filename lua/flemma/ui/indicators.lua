@@ -1,6 +1,7 @@
 --- Tool execution indicators (pending, spinner, complete/error).
---- Each tool call gets an EOL extmark on its result header line that
---- animates during execution and settles to a final state on completion.
+--- Pending/completion states use two extmarks: inline prefix (⬢ dot) + EOL status text.
+--- Executing state uses a single EOL extmark with animated spinner.
+--- Both extmarks are removed after the completion flash (schedule_tool_indicator_clear).
 ---@class flemma.ui.Indicators
 local M = {}
 
@@ -10,11 +11,16 @@ local state = require("flemma.state")
 local spinners = require("flemma.ui.spinners")
 
 local PRIORITY_TOOL_EXECUTION = 250
+local TOOL_RESULT_ICON = "⬢"
+local STATUS_PENDING = " ⏸ Pending"
+local STATUS_COMPLETE = " ✔ Complete"
+local STATUS_FAILED = " ⚠ Failed"
 
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 
 ---@class flemma.ui.ToolIndicator
----@field extmark_id integer
+---@field prefix_extmark_id integer
+---@field status_extmark_id integer
 ---@field timer integer|nil
 
 ---Get or initialize the tool indicators table for a buffer
@@ -40,6 +46,30 @@ local function get_extmark_line(bufnr, extmark_id)
   return nil
 end
 
+---Move an extmark to the target line when Neovim drifted it away.
+---@param bufnr integer
+---@param extmark_id integer
+---@param target_line integer
+---@param virt_text_pos string
+local function reposition_extmark(bufnr, extmark_id, target_line, virt_text_pos)
+  local current_line = get_extmark_line(bufnr, extmark_id)
+  if not current_line or current_line == target_line then
+    return
+  end
+
+  local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, extmark_id, { details = true })
+  if ok and pos and #pos >= 3 then
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
+      id = extmark_id,
+      virt_text = pos[3].virt_text,
+      virt_text_pos = virt_text_pos,
+      hl_mode = "combine",
+      priority = PRIORITY_TOOL_EXECUTION,
+      spell = false,
+    })
+  end
+end
+
 ---Check whether a tool_id has an active indicator. Used by tool previews
 ---to decide visibility when the header status suffix has been cleared.
 ---@param bufnr integer
@@ -49,8 +79,8 @@ function M.has_indicator(bufnr, tool_id)
   return indicators_for(bufnr)[tool_id] ~= nil
 end
 
---- Show pending-approval indicator for a tool
---- Creates a static extmark (no spinner) at the tool result header line.
+--- Show pending-approval indicator for a tool.
+--- Creates static prefix (⬢ dot) and EOL (⏸ Pending) extmarks.
 --- Automatically replaced when `show_tool_indicator` starts the execution spinner.
 ---@param bufnr integer
 ---@param tool_id string
@@ -64,8 +94,16 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
 
   local line_idx = header_line - 1
 
-  local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { " ● Pending", "FlemmaToolPending" } },
+  local prefix_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { TOOL_RESULT_ICON .. " ", "FlemmaToolIconPending" } },
+    virt_text_pos = "inline",
+    hl_mode = "combine",
+    priority = PRIORITY_TOOL_EXECUTION,
+    spell = false,
+  })
+
+  local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { STATUS_PENDING, "FlemmaToolPending" } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -73,13 +111,14 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
   })
 
   indicators_for(bufnr)[tool_id] = {
-    extmark_id = extmark_id,
+    prefix_extmark_id = prefix_id,
+    status_extmark_id = status_id,
     timer = nil,
   }
 end
 
---- Show execution indicator for a tool
---- Creates extmark with animated spinner at the tool result header line
+--- Show execution indicator for a tool.
+--- Creates an animated EOL spinner extmark only (no inline prefix during execution).
 ---@param bufnr integer
 ---@param tool_id string
 ---@param header_line integer 1-based line number of the tool result header
@@ -88,14 +127,13 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
     return
   end
 
-  -- Clean up any existing indicator for this tool
   M.clear_tool_indicator(bufnr, tool_id)
 
   local line_idx = header_line - 1
   local frame = 1
 
-  local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolPending" } },
+  local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolExecuting" } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -105,26 +143,25 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   local timer ---@type integer
   timer = vim.fn.timer_start(200, function()
     if not vim.api.nvim_buf_is_valid(bufnr) then
-      -- Buffer gone — stop ourselves; buffer state cleanup may have already run
       vim.fn.timer_stop(timer)
       return
     end
 
     local indicators = indicators_for(bufnr)
     local ind = indicators[tool_id]
-    if not ind then
+    if not ind or not ind.status_extmark_id then
       return
     end
 
-    local current_line = get_extmark_line(bufnr, ind.extmark_id)
+    local current_line = get_extmark_line(bufnr, ind.status_extmark_id)
     if not current_line then
       return
     end
 
     frame = (frame % #spinners.FRAMES.tool) + 1
     pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
-      id = ind.extmark_id,
-      virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolPending" } },
+      id = ind.status_extmark_id,
+      virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolExecuting" } },
       virt_text_pos = "eol",
       hl_mode = "combine",
       priority = PRIORITY_TOOL_EXECUTION,
@@ -133,13 +170,15 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   end, { ["repeat"] = -1 })
 
   indicators_for(bufnr)[tool_id] = {
-    extmark_id = extmark_id,
+    prefix_extmark_id = status_id,
+    status_extmark_id = status_id,
     timer = timer,
   }
 end
 
---- Update indicator to show completion/error state
---- Stops animation, shows final state
+--- Update indicator to show completion/error state.
+--- Stops animation, transitions prefix to colored ⬢ dot,
+--- transitions EOL to ✔ Complete / ⚠ Failed.
 ---@param bufnr integer
 ---@param tool_id string
 ---@param success boolean
@@ -150,7 +189,6 @@ function M.update_tool_indicator(bufnr, tool_id, success)
     return
   end
 
-  -- Stop animation timer
   if ind.timer then
     vim.fn.timer_stop(ind.timer)
     ind.timer = nil
@@ -161,26 +199,46 @@ function M.update_tool_indicator(bufnr, tool_id, success)
     return
   end
 
-  -- Query extmark's current position (may have shifted due to buffer edits)
-  local current_line = get_extmark_line(bufnr, ind.extmark_id)
+  local current_line = get_extmark_line(bufnr, ind.status_extmark_id)
   if not current_line then
     indicators[tool_id] = nil
     return
   end
 
-  -- Show final state
-  local text, hl
+  local prefix_hl, status_text, status_hl
   if success then
-    text = " ✓ Complete"
-    hl = "FlemmaToolSuccess"
+    prefix_hl = "FlemmaToolIconSuccess"
+    status_text = STATUS_COMPLETE
+    status_hl = "FlemmaToolSuccess"
   else
-    text = " ✗ Failed"
-    hl = "FlemmaToolError"
+    prefix_hl = "FlemmaToolIconError"
+    status_text = STATUS_FAILED
+    status_hl = "FlemmaToolError"
+  end
+
+  local has_separate_prefix = ind.prefix_extmark_id ~= ind.status_extmark_id
+  if has_separate_prefix then
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
+      id = ind.prefix_extmark_id,
+      virt_text = { { TOOL_RESULT_ICON .. " ", prefix_hl } },
+      virt_text_pos = "inline",
+      hl_mode = "combine",
+      priority = PRIORITY_TOOL_EXECUTION,
+      spell = false,
+    })
+  else
+    ind.prefix_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, current_line, 0, {
+      virt_text = { { TOOL_RESULT_ICON .. " ", prefix_hl } },
+      virt_text_pos = "inline",
+      hl_mode = "combine",
+      priority = PRIORITY_TOOL_EXECUTION,
+      spell = false,
+    })
   end
 
   pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
-    id = ind.extmark_id,
-    virt_text = { { text, hl } },
+    id = ind.status_extmark_id,
+    virt_text = { { status_text, status_hl } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -188,7 +246,56 @@ function M.update_tool_indicator(bufnr, tool_id, success)
   })
 end
 
---- Clear indicator for a tool (removes extmark and stops timer)
+---Show a completion indicator on a job_result header line.
+---Creates static prefix (⬢ dot) and EOL (✔ Complete / ⚠ Failed) extmarks.
+---Uses the same indicator table keyed by job_id, so schedule_tool_indicator_clear works.
+---@param bufnr integer
+---@param job_id string
+---@param header_line integer 1-based line number of the job result header
+---@param success boolean
+function M.show_job_result_indicator(bufnr, job_id, header_line, success)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  M.clear_tool_indicator(bufnr, job_id)
+
+  local line_idx = header_line - 1
+  local prefix_hl, status_text, status_hl
+  if success then
+    prefix_hl = "FlemmaToolIconSuccess"
+    status_text = STATUS_COMPLETE
+    status_hl = "FlemmaToolSuccess"
+  else
+    prefix_hl = "FlemmaToolIconError"
+    status_text = STATUS_FAILED
+    status_hl = "FlemmaToolError"
+  end
+
+  local prefix_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { TOOL_RESULT_ICON .. " ", prefix_hl } },
+    virt_text_pos = "inline",
+    hl_mode = "combine",
+    priority = PRIORITY_TOOL_EXECUTION,
+    spell = false,
+  })
+
+  local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { status_text, status_hl } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY_TOOL_EXECUTION,
+    spell = false,
+  })
+
+  indicators_for(bufnr)[job_id] = {
+    prefix_extmark_id = prefix_id,
+    status_extmark_id = status_id,
+    timer = nil,
+  }
+end
+
+--- Clear indicator for a tool (removes both extmarks and stops timer)
 ---@param bufnr integer
 ---@param tool_id string
 function M.clear_tool_indicator(bufnr, tool_id)
@@ -203,7 +310,10 @@ function M.clear_tool_indicator(bufnr, tool_id)
   end
 
   if vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, ind.extmark_id)
+    pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, ind.prefix_extmark_id)
+    if ind.status_extmark_id then
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, ind.status_extmark_id)
+    end
   end
 
   indicators[tool_id] = nil
@@ -213,7 +323,7 @@ end
 --- When inject_placeholder or inject_result replaces lines containing an extmark,
 --- Neovim pushes that extmark to the start of the replacement range, which may be
 --- a different tool's header. This function uses the AST to find each tool_result's
---- actual position and moves the extmark there.
+--- actual position and moves both extmarks there.
 ---@param bufnr integer
 function M.reposition_tool_indicators(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -228,28 +338,20 @@ function M.reposition_tool_indicators(bufnr)
     local sibling = siblings[tool_id]
     local target_line = sibling and sibling.result and (sibling.result.position.start_line - 1) or nil
     if target_line then
-      local current_line = get_extmark_line(bufnr, ind.extmark_id)
-      if current_line and current_line ~= target_line then
-        -- Read current virtual text to preserve it during repositioning
-        local ok, pos =
-          pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, ind.extmark_id, { details = true })
-        if ok and pos and #pos >= 3 then
-          pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
-            id = ind.extmark_id,
-            virt_text = pos[3].virt_text,
-            virt_text_pos = "eol",
-            hl_mode = "combine",
-            priority = PRIORITY_TOOL_EXECUTION,
-            spell = false,
-          })
-        end
+      local has_separate_prefix = ind.prefix_extmark_id ~= ind.status_extmark_id
+      if has_separate_prefix then
+        reposition_extmark(bufnr, ind.prefix_extmark_id, target_line, "inline")
+      end
+      if ind.status_extmark_id then
+        reposition_extmark(bufnr, ind.status_extmark_id, target_line, "eol")
       end
     end
   end
 end
 
---- Schedule indicator clear after a delay, or immediately on user edit
---- Uses extmark_id guard to avoid clearing a newer indicator if tool is re-executed.
+--- Schedule indicator clear after a delay, or immediately on user edit.
+--- Clears both extmarks (prefix and EOL) and removes the indicator entry.
+--- Uses prefix_extmark_id guard to avoid clearing a newer indicator if tool is re-executed.
 --- The on_lines listener only fires when the buffer is idle (not locked by tool
 --- execution and no active API request), so programmatic edits from other tool
 --- completions or streaming responses won't prematurely dismiss the indicator.
@@ -262,7 +364,7 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
   if not ind then
     return
   end
-  local expected_extmark = ind.extmark_id
+  local expected_prefix = ind.prefix_extmark_id
   local cleared = false
 
   local function do_clear()
@@ -270,12 +372,18 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
       return
     end
     local current = indicators_for(bufnr)[tool_id]
-    if not current or current.extmark_id ~= expected_extmark then
+    if not current or current.prefix_extmark_id ~= expected_prefix then
       cleared = true
-      return -- indicator was replaced by re-execution
+      return
     end
     cleared = true
-    M.clear_tool_indicator(bufnr, tool_id)
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      if current.status_extmark_id then
+        pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, current.status_extmark_id)
+      end
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, current.prefix_extmark_id)
+    end
+    indicators[tool_id] = nil
   end
 
   vim.defer_fn(function()
@@ -285,8 +393,6 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
   if vim.api.nvim_buf_is_valid(bufnr) then
     vim.api.nvim_buf_attach(bufnr, false, {
       on_lines = function()
-        -- Ignore programmatic edits: tool result injection (buffer locked) and
-        -- streaming responses (active API request). Only dismiss on user edits.
         local buffer_state = state.get_buffer_state(bufnr)
         if buffer_state.locked or buffer_state.current_request then
           return
@@ -294,7 +400,7 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
         vim.schedule(function()
           do_clear()
         end)
-        return true -- detach after first user edit
+        return true
       end,
     })
   end
@@ -313,7 +419,6 @@ function M.clear_all_tool_indicators(bufnr)
     M.clear_tool_indicator(bufnr, tool_id)
   end
 
-  -- Also clear the namespace for this buffer
   if vim.api.nvim_buf_is_valid(bufnr) then
     pcall(vim.api.nvim_buf_clear_namespace, bufnr, tool_exec_ns, 0, -1)
   end

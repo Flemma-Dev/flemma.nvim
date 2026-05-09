@@ -44,7 +44,7 @@ describe("flemma.hooks", function()
     it("transforms multi-segment names", function()
       assert.equals("FlemmaBootComplete", hooks._name_to_pattern("boot:complete"))
       assert.equals("FlemmaSinkCreated", hooks._name_to_pattern("sink:created"))
-      assert.equals("FlemmaToolFinished", hooks._name_to_pattern("tool:finished"))
+      assert.equals("FlemmaToolCompleted", hooks._name_to_pattern("tool:completed"))
       assert.equals("FlemmaConfigUpdated", hooks._name_to_pattern("config:updated"))
       assert.equals("FlemmaUsageEstimated", hooks._name_to_pattern("usage:estimated"))
     end)
@@ -109,6 +109,122 @@ describe("flemma.hooks", function()
       hooks.dispatch("tool:executing", { bufnr = 2, tool_name = "write", tool_id = "t2" })
       assert.is_not_nil(received)
       assert.equals(2, received.data.bufnr)
+    end)
+  end)
+
+  describe("on()", function()
+    after_each(function()
+      hooks._clear_subscribers()
+    end)
+
+    it("fires internal subscriber with payload", function()
+      local received = nil
+      hooks.on("request:sending", function(data)
+        received = data
+      end)
+
+      hooks.dispatch("request:sending", { bufnr = 7 })
+
+      assert.is_not_nil(received)
+      assert.equals(7, received.bufnr)
+    end)
+
+    it("fires multiple subscribers in registration order", function()
+      local order = {}
+      hooks.on("tool:completed", function()
+        order[#order + 1] = "first"
+      end)
+      hooks.on("tool:completed", function()
+        order[#order + 1] = "second"
+      end)
+
+      hooks.dispatch("tool:completed", { bufnr = 1, tool_name = "x", tool_id = "t1", status = "success" })
+
+      assert.are.same({ "first", "second" }, order)
+    end)
+
+    it("fires subscribers before autocmd handlers", function()
+      local order = {}
+      hooks.on("sink:created", function()
+        order[#order + 1] = "subscriber"
+      end)
+      track_autocmd("FlemmaSinkCreated", function()
+        order[#order + 1] = "autocmd"
+      end)
+
+      hooks.dispatch("sink:created", { bufnr = 1, name = "test" })
+
+      assert.are.same({ "subscriber", "autocmd" }, order)
+    end)
+
+    it("isolates errors between subscribers", function()
+      local second_called = false
+      hooks.on("boot:complete", function()
+        error("subscriber exploded")
+      end)
+      hooks.on("boot:complete", function()
+        second_called = true
+      end)
+
+      vim.cmd('silent! lua require("flemma.hooks").dispatch("boot:complete")')
+
+      assert.is_true(second_called)
+    end)
+
+    it("continues to fire autocmd after subscriber error", function()
+      hooks.on("config:updated", function()
+        error("subscriber exploded")
+      end)
+
+      local autocmd_called = false
+      track_autocmd("FlemmaConfigUpdated", function()
+        autocmd_called = true
+      end)
+
+      vim.cmd('silent! lua require("flemma.hooks").dispatch("config:updated")')
+
+      assert.is_true(autocmd_called)
+    end)
+
+    it("returns handle with off() for unsubscription", function()
+      local call_count = 0
+      local handle = hooks.on("conversation:idle", function()
+        call_count = call_count + 1
+      end)
+
+      hooks.dispatch("conversation:idle", { bufnr = 1 })
+      assert.equals(1, call_count)
+
+      handle.off()
+
+      hooks.dispatch("conversation:idle", { bufnr = 1 })
+      assert.equals(1, call_count)
+    end)
+
+    it("off() is idempotent", function()
+      local handle = hooks.on("request:sending", function() end)
+      handle.off()
+      assert.has_no.errors(function()
+        handle.off()
+      end)
+    end)
+  end)
+
+  describe("new hook name transforms", function()
+    it("transforms job:submitted", function()
+      assert.equals("FlemmaJobSubmitted", hooks._name_to_pattern("job:submitted"))
+    end)
+
+    it("transforms autopilot:resume-scheduled", function()
+      assert.equals("FlemmaAutopilotResumeScheduled", hooks._name_to_pattern("autopilot:resume-scheduled"))
+    end)
+
+    it("transforms autopilot:resume-cancelled", function()
+      assert.equals("FlemmaAutopilotResumeCancelled", hooks._name_to_pattern("autopilot:resume-cancelled"))
+    end)
+
+    it("transforms autopilot:resumed", function()
+      assert.equals("FlemmaAutopilotResumed", hooks._name_to_pattern("autopilot:resumed"))
     end)
   end)
 end)

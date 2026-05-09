@@ -355,7 +355,7 @@ function M.build_request(self, prompt, _context)
     table.insert(function_declarations, {
       name = base.encode_tool_name(definition.name),
       description = tools_module.build_description(definition),
-      parametersJsonSchema = tools_module.to_json_schema(definition),
+      parametersJsonSchema = tools_module.to_json_schema_for_prompt(definition),
     })
   end
 

@@ -19,7 +19,10 @@ local tools_registry = require("flemma.tools.registry")
 
 ---@type table<string, flemma.presets.Preset>
 local BUILTIN = {
-  ["$standard"] = { parameters = {}, auto_approve = { "read", "write", "edit", "find", "grep", "ls" } },
+  ["$standard"] = {
+    parameters = {},
+    auto_approve = { "read", "write", "edit", "find", "grep", "ls", "flemma:*" },
+  },
   ["$readonly"] = { parameters = {}, auto_approve = { "read", "find", "grep", "ls" } },
 }
 
@@ -142,7 +145,7 @@ function M.finalize()
   for name, preset in pairs(normalized_presets) do
     if preset.auto_approve then
       for _, tool_name in ipairs(preset.auto_approve) do
-        if not tools_registry.has(tool_name) then
+        if not tool_name:find("*", 1, true) and not tools_registry.has(tool_name) then
           warn(("Preset '%s' references unknown tool '%s' in auto_approve"):format(name, tool_name))
         end
       end

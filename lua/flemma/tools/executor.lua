@@ -24,6 +24,11 @@ local indicators = require("flemma.ui.indicators")
 local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
+local messages = require("flemma.messages")
+local tools_module = require("flemma.tools")
+
+local JOB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+local JOB_ID_LENGTH = 8
 
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
@@ -35,6 +40,23 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field started_at integer timestamp
 ---@field completed boolean
 ---@field placeholder_modified boolean
+---@field job_id string|nil Background job ID; presence implies this is a background execution
+
+---@class flemma.tools.JobDelivery
+---@field job_id string
+---@field tool_id string
+---@field tool_name string
+---@field result flemma.tools.ExecutionResult
+---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
+
+---Check whether a named tool is available for a buffer's resolved tool set.
+---@param name string Tool name to check
+---@param bufnr integer Buffer number
+---@return boolean
+local function is_tool_available(name, bufnr)
+  local available = tools_module.get_for_prompt(bufnr)
+  return available[name] ~= nil
+end
 
 ---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
@@ -45,6 +67,57 @@ local function get_buffer_pending(bufnr)
     buffer_state.pending_executions = {}
   end
   return buffer_state.pending_executions
+end
+
+---Get or initialize the completion queue for a buffer.
+---@param bufnr integer
+---@return flemma.tools.JobDelivery[]
+local function get_delivery_queue(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.delivery_queue then
+    buffer_state.delivery_queue = {}
+  end
+  return buffer_state.delivery_queue
+end
+
+---Generate a random unique job identifier (e.g. "job_k7x2m").
+---Relies on Neovim seeding math.randomseed(vim.uv.hrtime()) at startup.
+---@return string
+function M.generate_job_id()
+  local parts = { "job_" }
+  for _ = 1, JOB_ID_LENGTH do
+    local idx = math.random(1, #JOB_ID_CHARS)
+    parts[#parts + 1] = JOB_ID_CHARS:sub(idx, idx)
+  end
+  return table.concat(parts)
+end
+
+---Enqueue a completed job result for later delivery.
+---@param bufnr integer
+---@param item flemma.tools.JobDelivery
+function M.enqueue_job_completion(bufnr, item)
+  local queue = get_delivery_queue(bufnr)
+  item.completed_at = item.completed_at or os.time()
+  table.insert(queue, item)
+end
+
+---Check whether any job completions are waiting for delivery.
+---@param bufnr integer
+---@return boolean
+function M.has_job_completions(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local queue = buffer_state.delivery_queue
+  return queue ~= nil and #queue > 0
+end
+
+---Drain and return all queued job completions in FIFO order.
+---@param bufnr integer
+---@return flemma.tools.JobDelivery[]
+function M.drain_job_completions(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local queue = buffer_state.delivery_queue or {}
+  buffer_state.delivery_queue = {}
+  return queue
 end
 
 ---Count tools currently occupying execution slots for a buffer.
@@ -61,8 +134,31 @@ function M.count_running(bufnr)
     return 0
   end
   local n = 0
-  for _ in pairs(pending) do
-    n = n + 1
+  for _, entry in pairs(pending) do
+    if not entry.job_id then
+      n = n + 1
+    end
+  end
+  return n
+end
+
+---Count background jobs still in progress for a buffer.
+---Includes jobs that are executing and jobs whose results are queued but not yet
+---drained into the buffer. This is the user-facing "active" count: a job is
+---active until its result is visible in the conversation.
+---@param bufnr integer
+---@return integer
+function M.count_active_jobs(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
+  if not pending then
+    return 0
+  end
+  local n = 0
+  for _, entry in pairs(pending) do
+    if entry.job_id then
+      n = n + 1
+    end
   end
   return n
 end
@@ -151,6 +247,48 @@ local function do_completion(bufnr, tool_id, result, opts)
   local pending = get_buffer_pending(bufnr)
   local entry = pending[tool_id]
 
+  if entry and entry.job_id then
+    entry.completed = true
+    indicators.update_tool_indicator(bufnr, tool_id, result.success)
+    indicators.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
+    M.enqueue_job_completion(bufnr, {
+      job_id = entry.job_id,
+      tool_id = tool_id,
+      tool_name = entry.tool_name,
+      result = result,
+    })
+    hooks.dispatch("tool:completed", {
+      bufnr = bufnr,
+      tool_name = entry.tool_name,
+      tool_id = tool_id,
+      status = result.success and "success" or "error",
+    })
+    log.debug("executor: job " .. entry.job_id .. " (tool=" .. tool_id .. ") completed, queued for delivery")
+
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local bs = state.get_buffer_state(bufnr)
+      local fg_count = M.count_running(bufnr)
+      if not bs.current_request and fg_count == 0 then
+        log.debug("executor: conversation idle, triggering job drain for buffer " .. bufnr)
+        bridge.drain_job_completions(bufnr)
+      else
+        log.debug(
+          "executor: deferring job drain for buffer "
+            .. bufnr
+            .. " (request_active="
+            .. tostring(bs.current_request ~= nil)
+            .. " foreground_tools="
+            .. fg_count
+            .. ")"
+        )
+      end
+    end)
+    return
+  end
+
   -- For async tools, join with placeholder injection as a single undo step
   -- only when the placeholder actually modified the buffer.
   -- For sync tools, all changes are already in one undo block (same handler),
@@ -166,7 +304,7 @@ local function do_completion(bufnr, tool_id, result, opts)
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
-  hooks.dispatch("tool:finished", {
+  hooks.dispatch("tool:completed", {
     bufnr = bufnr,
     tool_name = entry and entry.tool_name or "unknown",
     tool_id = tool_id,
@@ -204,6 +342,23 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- Auto-write after tool result injection so the buffer is saved between
   -- tool executions, not only after the next send_to_provider() completes.
   editing.auto_write(bufnr)
+
+  if M.has_job_completions(bufnr) then
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local bs = state.get_buffer_state(bufnr)
+      local fg_count = M.count_running(bufnr)
+      if not bs.current_request and fg_count == 0 then
+        log.debug(
+          "executor: foreground tool done, conversation idle with pending job completions, triggering drain for buffer "
+            .. bufnr
+        )
+        bridge.drain_job_completions(bufnr)
+      end
+    end)
+  end
 end
 
 ---Handle completion of a tool execution (success or error)
@@ -262,6 +417,11 @@ function M.build_execution_context(params)
     __dirname = dirname,
     __filename = params.__filename,
   }
+
+  ---@return flemma.ast.DocumentNode
+  function context:get_parsed_document()
+    return parser.get_parsed_document(bufnr)
+  end
 
   ---Get tool-specific config subtree (read-only copy).
   ---Returns config.tools[tool_name] via vim.deepcopy, or nil if no subtree exists.
@@ -326,9 +486,11 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
+---@param opts? { background?: boolean }
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context)
+function M.execute(bufnr, context, opts)
+  opts = opts or {}
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
@@ -370,6 +532,12 @@ function M.execute(bufnr, context)
     completed = false,
     placeholder_modified = false,
   }
+  if opts.background then
+    pending[tool_id].job_id = M.generate_job_id()
+    log.debug(
+      "executor: allocated job_id " .. pending[tool_id].job_id .. " for " .. tool_id .. " (" .. tool_name .. ")"
+    )
+  end
 
   -- Lock buffer to prevent user edits during execution
   state.lock_buffer(bufnr)
@@ -399,6 +567,32 @@ function M.execute(bufnr, context)
   -- clear_header_status is a no-op when the header has no suffix.
   if placeholder_opts and not placeholder_opts.modified then
     injector.clear_header_status(bufnr, tool_id)
+  end
+
+  if opts.background and pending[tool_id] and pending[tool_id].job_id then
+    local job_id = pending[tool_id].job_id --[[@as string]]
+    local h_ok, h_err = injector.set_header_modeline(bufnr, tool_id, "job=" .. job_id)
+    if not h_ok then
+      log.warn("executor: failed to set background header for " .. tool_id .. ": " .. (h_err or "unknown"))
+    end
+    local placeholder_text
+    if is_tool_available("flemma:jobs:status", bufnr) then
+      placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
+    else
+      placeholder_text = messages.render("job-executing--untracked")
+    end
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+    if not f_ok then
+      log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
+    end
+    log.debug("executor: wrote background placeholder for " .. tool_id .. " (job=" .. job_id .. ")")
+    hooks.dispatch("job:submitted", {
+      bufnr = bufnr,
+      job_id = job_id,
+      tool_id = tool_id,
+      tool_name = tool_name,
+      active_count = M.count_active_jobs(bufnr),
+    })
   end
 
   -- Show execution indicator
@@ -499,20 +693,29 @@ function M.cancel(tool_id)
     end
     local entry = pending[tool_id]
     if entry and not entry.completed then
-      -- Call cancel function if available
+      local is_background = entry.job_id ~= nil
+      log.info(
+        "executor: cancelling "
+          .. (is_background and "background" or "foreground")
+          .. " tool "
+          .. tool_id
+          .. (entry.job_id and (" (job=" .. entry.job_id .. ")") or "")
+          .. " in buffer "
+          .. bufnr
+      )
       if entry.cancel_fn then
         pcall(entry.cancel_fn)
       end
 
-      -- Record cancellation as error result (cancel is always called from main thread)
       handle_completion(bufnr, tool_id, {
         success = false,
-        error = "User aborted tool execution.",
+        error = messages.render("tool-aborted"),
       }, { async = false })
       return true
     end
     ::continue::
   end
+  log.debug("executor: cancel(" .. tool_id .. ") — tool not found or already completed")
   return false
 end
 
@@ -525,12 +728,15 @@ function M.cancel_all(bufnr)
     return
   end
 
-  -- Collect tool_ids to cancel (don't modify during iteration)
   local to_cancel = {}
   for tool_id, entry in pairs(pending) do
     if not entry.completed then
       table.insert(to_cancel, tool_id)
     end
+  end
+
+  if #to_cancel > 0 then
+    log.info("executor: cancel_all() — cancelling " .. #to_cancel .. " tool(s) in buffer " .. bufnr)
   end
 
   for _, tool_id in ipairs(to_cancel) do
@@ -553,39 +759,42 @@ function M.get_pending(bufnr)
 
   local result = {}
   for _, entry in pairs(pending) do
-    if not entry.completed then
+    if not entry.completed and not entry.job_id then
       table.insert(result, entry)
     end
   end
   return result
 end
 
----Cancel the active operation for a buffer (API request or first pending tool)
+---Cancel the active operation for a buffer: API request, queued send, or tool under cursor.
+---Does NOT fall back to "oldest pending tool" — if the cursor isn't on a tool, the caller
+---should handle the miss (e.g., double-tap RAGE cancel).
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
+    log.debug("cancel_for_buffer(): cancelling active API request in buffer " .. bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
   if buffer_state.pending_send then
+    log.debug("cancel_for_buffer(): cancelling queued send in buffer " .. bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
-  local pending = M.get_pending(bufnr)
-  if #pending > 0 then
-    table.sort(pending, function(a, b)
-      return a.started_at < b.started_at
-    end)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, _ = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if ctx then
+    log.debug("cancel_for_buffer(): cursor on tool " .. ctx.tool_id .. ", attempting cancel")
     autopilot.disarm(bufnr)
-    M.cancel(pending[1].tool_id)
-    return true
+    return M.cancel(ctx.tool_id)
   end
+  log.debug("cancel_for_buffer(): nothing to cancel in buffer " .. bufnr)
   return false
 end
 
----Cancel the tool at cursor position, or the first pending tool if no cursor match
+---Cancel the tool at cursor position (foreground or background).
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
@@ -595,15 +804,143 @@ function M.cancel_at_cursor(bufnr)
     autopilot.disarm(bufnr)
     return M.cancel(ctx.tool_id)
   end
-  local pending = M.get_pending(bufnr)
-  if #pending > 0 then
-    table.sort(pending, function(a, b)
-      return a.started_at < b.started_at
-    end)
-    autopilot.disarm(bufnr)
-    return M.cancel(pending[1].tool_id)
-  end
   return false
+end
+
+---Background the foreground tool at cursor position.
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
+function M.background_at_cursor(bufnr)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, err = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if not ctx then
+    return false, err or "No tool call found at cursor"
+  end
+
+  local pending = get_buffer_pending(bufnr)
+  local entry = pending[ctx.tool_id]
+  if not entry then
+    return false, "Tool " .. ctx.tool_id .. " is not currently executing"
+  end
+  if entry.completed then
+    return false, "Tool " .. ctx.tool_id .. " has already completed"
+  end
+  if entry.job_id then
+    return false, "Tool " .. ctx.tool_id .. " is already running in background"
+  end
+
+  entry.job_id = M.generate_job_id()
+  local job_id = entry.job_id --[[@as string]]
+
+  local header_ok, header_err = injector.set_header_modeline(bufnr, ctx.tool_id, "job=" .. job_id)
+  if not header_ok then
+    log.warn(
+      "executor: background_at_cursor failed to update header for " .. ctx.tool_id .. ": " .. (header_err or "unknown")
+    )
+    entry.job_id = nil
+    return false, "Failed to update header: " .. (header_err or "unknown")
+  end
+
+  local job_placeholder_text
+  if is_tool_available("flemma:jobs:status", bufnr) then
+    job_placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
+  else
+    job_placeholder_text = messages.render("job-executing--untracked")
+  end
+  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text)
+  if not content_ok then
+    log.warn(
+      "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
+    )
+    injector.clear_header_status(bufnr, ctx.tool_id)
+    entry.job_id = nil
+    return false, content_err
+  end
+
+  indicators.reposition_tool_indicators(bufnr)
+  maybe_unlock_buffer(bufnr)
+  ui.update_ui(bufnr)
+  log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)
+
+  local ap_state = autopilot.get_state(bufnr)
+  if M.count_running(bufnr) == 0 and ap_state ~= "sending" then
+    log.debug(
+      "executor: all foreground tools clear after backgrounding (autopilot="
+        .. ap_state
+        .. "), scheduling send for buffer "
+        .. bufnr
+    )
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        bridge.send_or_execute({ bufnr = bufnr })
+      end
+    end)
+  end
+
+  return true, nil
+end
+
+---Resolve orphaned job results by injecting error blocks.
+---@param bufnr integer
+---@return integer count Number of orphans resolved
+function M.resolve_orphaned_jobs(bufnr)
+  log.debug("executor: scanning for orphaned background jobs in buffer " .. bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+
+  local completed_jobs = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
+        completed_jobs[seg.job_id] = true
+      end
+    end
+  end
+
+  local buffer_state = state.get_buffer_state(bufnr)
+  local active_jobs = {}
+  if buffer_state.pending_executions then
+    for _, entry in pairs(buffer_state.pending_executions) do
+      if entry.job_id then
+        active_jobs[entry.job_id] = true
+      end
+    end
+  end
+
+  ---@type { job_id: string, tool_use_id: string }[]
+  local orphans = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ---@cast seg flemma.ast.ToolResultSegment
+        local job_id = seg.meta.job --[[@as string]]
+        if not completed_jobs[job_id] and not active_jobs[job_id] then
+          table.insert(orphans, {
+            job_id = job_id,
+            tool_use_id = seg.tool_use_id,
+          })
+        end
+      end
+    end
+  end
+
+  if #orphans > 0 then
+    log.info("executor: found " .. #orphans .. " orphaned background job(s) in buffer " .. bufnr)
+  else
+    log.trace("executor: no orphaned background jobs in buffer " .. bufnr)
+  end
+
+  for _, orphan in ipairs(orphans) do
+    log.debug("executor: resolving orphan " .. orphan.job_id .. " with error completion")
+    injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
+    injector.append_job_result(bufnr, orphan.job_id, {
+      success = false,
+      error = messages.render("job-lost"),
+    })
+  end
+
+  return #orphans
 end
 
 ---Locate the tool_result placeholder for the tool at the cursor position. Returns
@@ -745,5 +1082,16 @@ end
 state.register_cleanup("executor", function(bufnr)
   M.cleanup_buffer(bufnr)
 end)
+
+---@private
+---@param bufnr integer
+---@param tool_id string
+---@param result flemma.tools.ExecutionResult
+---@param opts? { async?: boolean }
+function M._test_complete_execution(bufnr, tool_id, result, opts)
+  do_completion(bufnr, tool_id, result, opts)
+end
+
+bridge.register("resolve_orphaned_jobs", M.resolve_orphaned_jobs)
 
 return M

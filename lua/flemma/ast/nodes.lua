@@ -66,7 +66,15 @@ local M = {}
 ---@field message string
 ---@field position flemma.ast.Position
 
----@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment
+---@class flemma.ast.JobResultSegment
+---@field kind "job_result"
+---@field job_id string
+---@field content string
+---@field status? "error"
+---@field meta? table<string, any>
+---@field position flemma.ast.Position
+
+---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment|flemma.ast.JobResultSegment
 
 ---@class flemma.ast.Diagnostic
 ---@field type string Diagnostic category. Internal types are unprefixed (e.g., "frontmatter", "expression", "file"). Custom types from symbols.DIAGNOSTICS must use the "custom:" prefix (e.g., "custom:file_drift").
@@ -86,6 +94,11 @@ local M = {}
 
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"
+---@field text string
+
+---@class flemma.ast.GenericJobResultPart
+---@field kind "job_result"
+---@field job_id string
 ---@field text string
 
 ---@class flemma.ast.GenericBinaryPart
@@ -135,7 +148,7 @@ local M = {}
 ---@field parts flemma.ast.GenericPart[]
 ---@field is_error boolean
 
----@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
+---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericJobResultPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
 
 --- Constructors for AST nodes. Positions are 1-based line/column.
 
@@ -260,6 +273,21 @@ function M.aborted(message, pos)
   return { kind = "aborted", message = message, position = pos }
 end
 
+---@param job_id string
+---@param opts? { content?: string, status?: "error", meta?: table<string, any>, start_line?: integer, end_line?: integer }
+---@return flemma.ast.JobResultSegment
+function M.job_result(job_id, opts)
+  opts = opts or {}
+  return {
+    kind = "job_result",
+    job_id = job_id,
+    content = opts.content or "",
+    status = opts.status,
+    meta = opts.meta,
+    position = { start_line = opts.start_line, end_line = opts.end_line },
+  }
+end
+
 --- Convert a file part to its generic representation based on MIME type.
 --- Handles image/*, application/pdf, text/*, and unsupported types.
 ---@param file_part table The file part with mime_type, data, filename, position fields
@@ -365,6 +393,11 @@ function M.to_generic_parts(evaluated_parts, source_file)
         parts = tool_parts,
         is_error = p.status == "error",
       })
+    elseif p.kind == "job_result" then
+      ---@cast p flemma.ast.JobResultSegment
+      if p.content and #p.content > 0 then
+        table.insert(parts, { kind = "job_result", job_id = p.job_id, text = p.content })
+      end
     end
   end
   return parts, diagnostics

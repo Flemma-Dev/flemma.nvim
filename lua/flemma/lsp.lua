@@ -8,6 +8,7 @@ local dump = require("flemma.ast.dump")
 local log = require("flemma.logging")
 local navigation = require("flemma.navigation")
 local parser = require("flemma.parser")
+local query = require("flemma.ast.query")
 
 ---Build a markdown hover string from an AST node using the dump module.
 ---@param node flemma.ast.DocumentNode|flemma.ast.MessageNode|flemma.ast.Segment|flemma.ast.FrontmatterNode
@@ -35,7 +36,7 @@ local function resolve_params(params, label)
 
   local lnum = params.position.line + 1
   local col = params.position.character + 1
-  log.debug("lsp " .. label .. ": " .. uri .. "#L" .. lnum .. "C" .. col .. " \u{2192} bufnr=" .. bufnr)
+  log.debug("lsp " .. label .. ": " .. uri .. "#L" .. lnum .. "C" .. col .. " → bufnr=" .. bufnr)
   return bufnr, lnum, col
 end
 
@@ -85,6 +86,9 @@ local function handle_hover(params)
     elseif seg.kind == "tool_result" then
       ---@cast seg flemma.ast.ToolResultSegment
       seg_detail = seg_detail .. " tool_use_id=" .. seg.tool_use_id .. " status=" .. tostring(seg.status)
+    elseif seg.kind == "job_result" then
+      ---@cast seg flemma.ast.JobResultSegment
+      seg_detail = seg_detail .. " job_id=" .. seg.job_id .. " status=" .. tostring(seg.status)
     elseif seg.kind == "thinking" then
       ---@cast seg flemma.ast.ThinkingSegment
       seg_detail = seg_detail .. " len=" .. #seg.content .. " redacted=" .. tostring(seg.redacted or false)
@@ -94,6 +98,22 @@ local function handle_hover(params)
     end
 
     log.debug("lsp hover: matched " .. seg_detail .. " in @" .. msg.role .. " message")
+
+    if seg.kind == "tool_result" then
+      ---@cast seg flemma.ast.ToolResultSegment
+      if seg.meta and seg.meta.job then
+        local job_id = seg.meta.job --[[@as string]]
+        local job_seg = query.find_job_result(doc, job_id)
+        if job_seg then
+          local status = job_seg.status == "error" and "error" or "completed"
+          log.debug("lsp hover: tool_result has job=" .. job_id .. " status=" .. status)
+          return hover_response("**Job** `" .. job_id .. "` — " .. status)
+        else
+          log.debug("lsp hover: tool_result has job=" .. job_id .. " (pending)")
+          return hover_response("**Job** `" .. job_id .. "` — pending")
+        end
+      end
+    end
 
     local markdown = node_to_markdown(seg)
     log.trace("lsp hover: response markdown (" .. #markdown .. " bytes):\n" .. markdown)
@@ -135,6 +155,43 @@ local function handle_definition(params)
   -- Try tool sibling navigation first
   local doc = parser.get_parsed_document(bufnr)
   local seg = ast.find_segment_at_position(doc, lnum, col)
+
+  if seg and seg.kind == "tool_result" then
+    ---@cast seg flemma.ast.ToolResultSegment
+    if seg.meta and seg.meta.job then
+      local job_id = seg.meta.job --[[@as string]]
+      local job_seg = query.find_job_result(doc, job_id)
+      if job_seg and job_seg.position then
+        log.debug("lsp definition: tool_result(job=" .. job_id .. ") -> job_result at L" .. job_seg.position.start_line)
+        return {
+          uri = vim.uri_from_bufnr(bufnr),
+          range = {
+            start = { line = job_seg.position.start_line - 1, character = 0 },
+            ["end"] = { line = job_seg.position.start_line - 1, character = 0 },
+          },
+        }
+      end
+      log.debug("lsp definition: tool_result(job=" .. job_id .. ") has no delivered job_result")
+      return nil
+    end
+  end
+
+  if seg and seg.kind == "job_result" then
+    ---@cast seg flemma.ast.JobResultSegment
+    local tool_seg = query.find_tool_result_for_job(doc, seg.job_id)
+    if tool_seg and tool_seg.position then
+      log.debug("lsp definition: job_result(" .. seg.job_id .. ") -> tool_result at L" .. tool_seg.position.start_line)
+      return {
+        uri = vim.uri_from_bufnr(bufnr),
+        range = {
+          start = { line = tool_seg.position.start_line - 1, character = 0 },
+          ["end"] = { line = tool_seg.position.start_line - 1, character = 0 },
+        },
+      }
+    end
+    log.debug("lsp definition: no tool_result found for job " .. seg.job_id)
+    return nil
+  end
 
   if seg and (seg.kind == "tool_use" or seg.kind == "tool_result") then
     ---@cast seg flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment

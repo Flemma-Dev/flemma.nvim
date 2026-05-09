@@ -90,16 +90,18 @@ tools = {
 }
 ```
 
+Entries containing `*` are treated as glob patterns — `"flemma:*"` matches any tool whose name starts with `flemma:`. This is how the built-in `$standard` preset auto-approves all harness tools.
+
 ### Approval presets
 
 Presets are named collections of tool approval rules referenced with a `$` prefix in `auto_approve`. They keep common policies concise and composable.
 
 **Built-in presets:**
 
-| Preset      | Approves                                      | Description                                        |
-| ----------- | --------------------------------------------- | -------------------------------------------------- |
-| `$readonly` | `read`, `find`, `grep`, `ls`                  | Read-only access – safe for exploration buffers    |
-| `$standard` | `read`, `write`, `edit`, `find`, `grep`, `ls` | File operations without shell access (the default) |
+| Preset      | Approves                                                  | Description                                                           |
+| ----------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `$readonly` | `read`, `find`, `grep`, `ls`                              | Read-only access – safe for exploration buffers                       |
+| `$standard` | `read`, `write`, `edit`, `find`, `grep`, `ls`, `flemma:*` | File operations and harness tools, without shell access (the default) |
 
 **User-defined presets** override built-ins by name. Define them in `presets`:
 
@@ -181,6 +183,59 @@ All supported providers handle parallel tool calls. Press <kbd>Ctrl-]</kbd> to e
 `tools.max_concurrent` (default `2`) limits how many tools execute simultaneously per buffer. When the model returns more tool calls than the concurrency limit allows, Flemma queues the excess and starts them as earlier tools complete. This prevents resource exhaustion when the model emits many parallel calls.
 
 Set `tools.max_concurrent = 0` for unlimited concurrency. Override per-buffer via `flemma.opt.tools.max_concurrent` in frontmatter.
+
+---
+
+## Background jobs
+
+Async tools can run in the background without blocking the conversation. The tool continues executing while the model responds to other tool results or the user types a new message. When the job completes, its result is queued and delivered as a `**Job Result:**` block in an `@You` message.
+
+### How tools enter background
+
+**Model-initiated.** Flemma injects a `background` boolean parameter into every async tool's schema. When the model sets `background: true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../lua/flemma/messages/tool-parameter--background.chat) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
+
+**User-initiated.** Press <kbd>Alt-B</kbd> (or `:Flemma tool:background`) while the cursor is on an executing tool to move it to background mid-flight. The tool keeps running, but the buffer unlocks and the conversation advances. If all foreground tools are now clear, autopilot triggers the next send automatically.
+
+### Result delivery
+
+Completed background jobs are queued until one of two delivery points:
+
+- **Conversation idle** – after the model's response contains no tool calls, queued results are injected.
+- **User send** – when the user presses <kbd>Ctrl-]</kbd> to send a new message, queued results are drained first.
+
+Results appear as `` **Job Result:** `job_xxx` `` blocks inside `@You` messages. If the user is typing in the current `@You` block, the job result is inserted above in a separate `@You` block to avoid disrupting their work. Multiple results from different jobs merge into the same `@You` block when possible. Background `tool_result` placeholders are kept open (not auto-folded) while their job is still running, so the placeholder text and spinner remain visible.
+
+### Autopilot integration
+
+When autopilot is enabled and background jobs complete at idle, Flemma schedules a debounced auto-continue after `tools.autopilot.resume_delay` milliseconds (default `2000`). This gives you time to review the result before the model sees it. Press <kbd>Ctrl-C</kbd> during the delay to cancel. Entering insert mode during the delay also cancels auto-continue. When completions arrive during an active autopilot loop (not at idle), the delay is skipped and the conversation continues immediately.
+
+### `flemma:jobs:status` tool
+
+A built-in harness tool that lets the model query the status of a background job by its `job_id`. Returns one of:
+
+| Status                                  | Meaning                                      |
+| --------------------------------------- | -------------------------------------------- |
+| `running`                               | The tool is still executing                  |
+| `queued`                                | Execution finished; result awaiting delivery |
+| `completed`                             | Result already delivered into the buffer     |
+| `completed (removed from conversation)` | Job existed but its result block was deleted |
+
+The tool cross-checks in-memory state against the buffer AST, so even if the process state is cleared (e.g., after a restart), it falls back to scanning for `**Job Result:**` blocks.
+
+### Orphan recovery
+
+When reopening a `.chat` file that contains `tool_result` placeholders with a `job=job_xxx` modeline but no matching `**Job Result:**` block (e.g., after a crash or forced quit), Flemma detects these orphans on `BufReadPost` and injects error results so the model knows the job was lost. A notification reports how many orphans were resolved.
+
+### LSP integration
+
+When `experimental.lsp` is enabled, job-related blocks gain hover and go-to-definition support:
+
+- **Hover** on a `tool_result` with a `job=` modeline shows the job's current status (`pending`, `completed`, or `error`) instead of the raw AST dump.
+- **Go-to-definition** (`gd`) on a `tool_result` with a `job=` modeline jumps to the corresponding `**Job Result:**` block. On a `**Job Result:**` block, `gd` jumps back to the originating `tool_result`.
+
+### Opting out
+
+Set `backgroundable = false` on a tool definition to prevent the `background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma:jobs:status` harness tool is also not backgroundable.
 
 ---
 
@@ -410,6 +465,9 @@ tools.register("my_tool", {
 ```lua
 tools.register("my_plugin.tools.search")
 ```
+
+> [!NOTE]
+> Built-in tool modules moved from `flemma.tools.definitions.*` to `flemma.tools.definitions.builtin.*` in v0.11. If you `require()` a built-in tool module by path, update the import.
 
 **Batch** – pass an array of definition tables:
 
