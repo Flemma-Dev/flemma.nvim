@@ -37,7 +37,7 @@ describe("UI Fence Brackets", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  local fence_ns = vim.api.nvim_create_namespace("flemma_fence_brackets")
+  local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
   ---@param bufnr integer
   ---@return table[]
@@ -113,7 +113,7 @@ describe("UI Fence Brackets", function()
     end)
   end)
 
-  describe("add_fence_brackets", function()
+  describe("add_fence_overlays", function()
     it("places extmarks on fence delimiter lines", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_set_current_buf(bufnr)
@@ -127,7 +127,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
       assert.are.equal(2, #marks, "should place extmarks on both fence lines")
@@ -156,7 +156,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
       assert.are.equal(2, #marks)
@@ -176,7 +176,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
       assert.are.equal(2, #marks)
@@ -209,7 +209,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
       assert.are.equal(4, #marks, "should place extmarks on all 4 fence lines")
@@ -235,7 +235,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
       assert.are.equal(2, #get_fence_extmarks(bufnr))
 
       -- Remove the fenced block
@@ -244,7 +244,7 @@ describe("UI Fence Brackets", function()
         "no code blocks here",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
       assert.are.equal(0, #get_fence_extmarks(bufnr), "should clear stale extmarks")
     end)
 
@@ -258,7 +258,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
-      ui.add_fence_brackets(bufnr)
+      ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
       for _, mark in ipairs(marks) do

@@ -32,7 +32,7 @@ local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
 local cursorline_ns = vim.api.nvim_create_namespace("flemma_cursorline")
 local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
-local fence_ns = vim.api.nvim_create_namespace("flemma_fence_brackets")
+local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
 ---@type string
 local FENCE_OPEN_CHAR = "╌"
@@ -45,7 +45,7 @@ local FENCE_DEFAULT_LABEL = "text"
 ---Opening fences (` ```lang `) become `╌╌╌lang`, closing fences become `╌╌╌`.
 ---Opening fences without a language show `╌╌╌text` as fallback.
 ---@param bufnr integer
-function M.add_fence_brackets(bufnr)
+function M.add_fence_overlays(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, fence_ns, 0, -1)
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
@@ -791,7 +791,7 @@ function M.update_ui(bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
   M.add_rulers(bufnr, doc)
-  M.add_fence_brackets(bufnr)
+  M.add_fence_overlays(bufnr)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)
