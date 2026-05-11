@@ -670,7 +670,11 @@ function M.invalidate_folds(bufnr)
   local conceal = vim.wo.conceallevel
   local foldmethod_ok = vim.wo[winid].foldmethod == "expr"
   -- Path 1: fold map already current — only fix foldmethod if overridden.
-  if fold_map_cache.bufnr == bufnr and fold_map_cache.changedtick == tick and fold_map_cache.conceallevel == conceal then
+  if
+    fold_map_cache.bufnr == bufnr
+    and fold_map_cache.changedtick == tick
+    and fold_map_cache.conceallevel == conceal
+  then
     if not foldmethod_ok then
       vim.fn.win_execute(winid, "set foldmethod=expr")
     end
@@ -680,7 +684,10 @@ function M.invalidate_folds(bufnr)
   local doc = parser.get_parsed_document(bufnr)
   fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
   local mode = vim.api.nvim_get_mode().mode
-  if not foldmethod_ok or (mode ~= "i" and mode ~= "ic" and mode ~= "ix" and mode ~= "R" and mode ~= "Rc" and mode ~= "Rx") then
+  if
+    not foldmethod_ok
+    or (mode ~= "i" and mode ~= "ic" and mode ~= "ix" and mode ~= "R" and mode ~= "Rc" and mode ~= "Rx")
+  then
     vim.fn.win_execute(winid, "set foldmethod=expr")
   end
 end

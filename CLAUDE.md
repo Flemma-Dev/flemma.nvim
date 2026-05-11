@@ -20,7 +20,7 @@ These are counter-default behaviors — violating them breaks the build or intro
 
 - **Flemma is stateless; the buffer is the state.** All conversation data, tool calls, and results must be fully represented in the buffer text. Never rely on in-memory state that would be lost when Neovim restarts or when a `.chat` file is shared. If you need to persist information (e.g., synthetic IDs for providers that don't supply them), embed it in the buffer format itself so it can be parsed back later. In-memory structures (`state.lua`) are ephemeral caches rebuilt from the buffer on demand — they are never the source of truth.
 
-- **The outgoing request is a product of *(conversation, environment)*.** The buffer determines what was said; the environment determines how it's delivered. "Environment" means the config layer stack (SETUP/RUNTIME layers below FRONTMATTER), the tool registry, the personality builder's ambient state (`cwd`, `git_branch`, `date`, `time`, project context files on disk), template expression evaluation (`os.date`, `os.time`, `include()`, `math.random`), and model metadata from the registry. Given the same `.chat` buffer and the same environment, the request is deterministic. When adding new inputs to the request pipeline, decide which half they belong to — conversation state goes in the buffer, ambient context goes through the environment — and never mix the two.
+- **The outgoing request is a product of _(conversation, environment)_.** The buffer determines what was said; the environment determines how it's delivered. "Environment" means the config layer stack (SETUP/RUNTIME layers below FRONTMATTER), the tool registry, the personality builder's ambient state (`cwd`, `git_branch`, `date`, `time`, project context files on disk), template expression evaluation (`os.date`, `os.time`, `include()`, `math.random`), and model metadata from the registry. Given the same `.chat` buffer and the same environment, the request is deterministic. When adding new inputs to the request pipeline, decide which half they belong to — conversation state goes in the buffer, ambient context goes through the environment — and never mix the two.
 
 - **All structural operations go through the AST.** The parsed AST (cached per buffer via `state.ast_cache`) is the only way to inspect conversation structure — roles, tool use/result blocks, thinking blocks, positions. If the AST lacks information you need, extend the AST rather than bypassing it. Direct buffer manipulation is only appropriate for content injection (tool results, streaming text) and UI concerns (spinners, extmarks).
 
@@ -101,7 +101,7 @@ Avoid self-referential sub-folders (e.g., `provider/providers/`) and avoid a `.l
 `.chat` files use role markers, structured headers, and fenced blocks:
 
 - **Role markers**: `@System:`, `@You:`, `@Assistant:` at the start of a line; content extends until the next marker
-- **Tool Use** (`@Assistant` messages): `` **Tool Use:** `tool_name` (`tool_id`) `` followed by a fenced JSON code block with the tool input
+- **Tool Use** (`@Assistant` messages): ``**Tool Use:** `tool_name` (`tool_id`)`` followed by a fenced JSON code block with the tool input
 - **Tool Result** (`@You` messages): `` **Tool Result:** `tool_id` `` optionally followed by a modeline-parseable `(...)` suffix, then a fenced code block with the result
 - **Job Result** (`@You` messages): `` **Job Result:** `job_id` `` — linked to a tool_result via the job ID; follows the same status suffix convention
 - **Tool/job status suffix**: `(pending)` / `(approved)` / `(denied)` / `(rejected)` / `(aborted)` / `(error)` on tool_result/job_result headers, or explicit `(status=pending sandbox=false)` for mixed metadata — unrecognized tokens round-trip via the `meta` field on the AST node
@@ -243,7 +243,7 @@ Fixed parser edge case with nested thinking blocks
 
 - **Provider `new()` metatable chain.** Each provider owns its constructor with the full chain set atomically in the `setmetatable` literal before `self:_new_response_buffer()`. The chain is typically `self → M → base`, but intermediate bases exist (e.g., `moonshot → openai_chat → base`). This makes metatable ordering bugs structurally impossible.
 
-- **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in `` **Tool Use:** `name` (`id`) `` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
+- **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
 
 ## Session Closure Checklist
 
