@@ -299,6 +299,36 @@ describe("flemma.ui.jobs", function()
       assert.truthy(text:match("Resuming…"), "expected 'Resuming…' in: " .. text)
     end)
 
+    it("renders resume countdown before job count", function()
+      hooks.dispatch("job:submitted", {
+        bufnr = bufnr,
+        job_id = "job_a",
+        tool_id = "t1",
+        tool_name = "bash",
+        active_count = 1,
+      })
+      hooks.dispatch("autopilot:resume-scheduled", { bufnr = bufnr, delay_ms = 2000 })
+
+      local text = read_float_text()
+      assert.truthy(text)
+      local resume_pos = text:find("Resuming…")
+      local job_pos = text:find("1 job")
+      assert.truthy(resume_pos, "expected 'Resuming…' in: " .. text)
+      assert.truthy(job_pos, "expected '1 job' in: " .. text)
+      assert.truthy(resume_pos < job_pos, "expected resume before jobs in: " .. text)
+
+      local trimmed = text:gsub("^%s+", "")
+      local first_char = vim.fn.strcharpart(trimmed, 0, 1)
+      local is_countdown = false
+      for _, frame in ipairs(spinners.FRAMES.countdown) do
+        if first_char == frame then
+          is_countdown = true
+          break
+        end
+      end
+      assert.is_true(is_countdown, "expected countdown frame as leading character, got: " .. first_char)
+    end)
+
     it("does not schedule hide while resume countdown is active", function()
       hooks.dispatch("autopilot:resume-scheduled", { bufnr = bufnr, delay_ms = 2000 })
 

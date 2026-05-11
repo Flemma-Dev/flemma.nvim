@@ -76,18 +76,20 @@ end
 local function build_segments(s)
   ---@type flemma.ui.bar.layout.Segment[]
   local segments = {}
-  if s.count > 0 then
-    local text = s.count == 1 and "1 job" or (s.count .. " jobs")
-    segments[#segments + 1] = {
-      key = "jobs",
-      items = { { key = "count", text = text, priority = PRIORITY_COUNT } },
-    }
-  end
   if s.resume_frame > 0 then
     local frame = COUNTDOWN_FRAMES[s.resume_frame] or COUNTDOWN_FRAMES[#COUNTDOWN_FRAMES]
     segments[#segments + 1] = {
       key = "resume",
       items = { { key = "countdown", text = frame .. " Resuming…", priority = PRIORITY_RESUME } },
+    }
+  end
+  if s.count > 0 then
+    local label = s.count == 1 and "1 job" or (s.count .. " jobs")
+    local spinner = get_spinner_icon(s)
+    local text = spinner and (spinner .. " " .. label) or label
+    segments[#segments + 1] = {
+      key = "jobs",
+      items = { { key = "count", text = text, priority = PRIORITY_COUNT } },
     }
   end
   return segments
@@ -103,15 +105,12 @@ end
 local function ensure_bar(bufnr)
   local s = get_state(bufnr)
   local segments = build_segments(s)
-  local icon = get_spinner_icon(s)
   if s.bar and not s.bar:is_dismissed() then
-    s.bar:set_icon(icon)
     s.bar:set_segments(segments)
   else
     s.bar = Bar.new({
       bufnr = bufnr,
       position = get_position(bufnr),
-      icon = icon,
       segments = segments,
       on_dismiss = function()
         local inner = buffer_states[bufnr]
@@ -138,7 +137,7 @@ local function start_spinner(bufnr)
     end
     inner.spinner_tick = inner.spinner_tick + 1
     if inner.bar and not inner.bar:is_dismissed() then
-      inner.bar:set_icon(get_spinner_icon(inner))
+      inner.bar:set_segments(build_segments(inner))
     end
   end, { ["repeat"] = -1 })
 end
