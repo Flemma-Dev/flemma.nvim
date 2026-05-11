@@ -174,7 +174,7 @@ Production file names prefer single words; multi-word descriptive names use snak
 - **`make qa`** — run all quality gates (luacheck, type-check, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
 - **`make types`** — regenerate `lua/flemma/config/types.lua` after any schema change. `make qa` type-checks but does not regenerate.
 - **`make develop`** — launch Flemma from the working directory for manual testing.
-- **`make format`** — reformat the entire codebase via `treefmt` (stylua, shfmt, nixfmt, prettier, yamlfmt, taplo). Cached — only reformats changed files.
+- **`make format`** — reformat the entire codebase via `treefmt` (stylua, shfmt, nixfmt, prettier, yamlfmt, taplo). Cached — only reformats changed files. **Run before every commit, not just at session end.**
 
 ### `make qa` Only
 
@@ -187,7 +187,7 @@ Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-expl
 ## Testing Guidelines
 
 - Follow the existing Plenary+Busted style: files end with `_spec.lua` and use `describe`/`it` blocks.
-- Add fresh specs for every new feature and place supporting data in `tests/fixtures/` with scenario-driven names.
+- Add fresh specs for every new feature **and every bug fix**. Write the failing test first (TDD) when the reproduction is automatable. Place supporting data in `tests/fixtures/` with scenario-driven names.
 - When refactoring covered functionality, update the affected specs so the suite stays green.
 - Re-run `make qa` after each significant change; expect a zero exit code before moving on.
 - **`"Failed to parse API call data"` in test output is expected.** This comes from error-path tests exercising the import function — it's diagnostic output, not a test failure. Always check the exit code to determine pass/fail.
