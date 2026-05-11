@@ -37,53 +37,6 @@ describe("UI Fence Brackets", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
-
-  ---Set up a buffer with fence overlay preconditions: strip conceal, set
-  ---conceallevel >= 2, and set filetype to chat so add_fence_overlays proceeds.
-  ---@param bufnr integer
-  local function setup_fence_preconditions(bufnr)
-    highlight.strip_fence_conceal()
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      vim.api.nvim_set_option_value("conceallevel", 2, { win = winid, scope = "local" })
-    end
-  end
-
-  ---@param bufnr integer
-  ---@return table[]
-  local function get_fence_extmarks(bufnr)
-    return vim.api.nvim_buf_get_extmarks(bufnr, fence_ns, 0, -1, { details = true })
-  end
-
-  ---@param mark table Extmark from nvim_buf_get_extmarks with details
-  ---@return string[] texts Virtual text strings concatenated
-  local function extmark_virt_texts(mark)
-    local details = mark[4]
-    if not details or not details.virt_text then
-      return {}
-    end
-    local texts = {}
-    for _, chunk in ipairs(details.virt_text) do
-      table.insert(texts, chunk[1])
-    end
-    return texts
-  end
-
-  ---@param mark table
-  ---@return string[] hls Highlight group names from virt_text chunks
-  local function extmark_virt_hls(mark)
-    local details = mark[4]
-    if not details or not details.virt_text then
-      return {}
-    end
-    local hls = {}
-    for _, chunk in ipairs(details.virt_text) do
-      table.insert(hls, chunk[2])
-    end
-    return hls
-  end
-
   describe("strip_fence_conceal", function()
     it("removes conceal_lines from the markdown highlights query", function()
       highlight.strip_fence_conceal()
@@ -124,211 +77,34 @@ describe("UI Fence Brackets", function()
     end)
   end)
 
-  describe("add_fence_overlays", function()
-    it("places extmarks on fence delimiter lines", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant:",
-        "Here is code:",
-        "",
-        "```lua",
-        "print('hello')",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-
-      local marks = get_fence_extmarks(bufnr)
-      assert.are.equal(2, #marks, "should place extmarks on both fence lines")
-
-      -- Opening fence at line 4 (0-indexed: 3)
-      assert.are.equal(3, marks[1][2], "opening fence extmark row")
-      local open_texts = extmark_virt_texts(marks[1])
-      assert.are.equal(2, #open_texts, "opening fence should have bar + label chunks")
-      assert.is_truthy(open_texts[2]:find("lua"), "opening fence label should contain language name")
-
-      -- Closing fence at line 6 (0-indexed: 5)
-      assert.are.equal(5, marks[2][2], "closing fence extmark row")
-      local close_texts = extmark_virt_texts(marks[2])
-      assert.are.equal(1, #close_texts, "closing fence should have bar chunk only")
+  describe("build_fence_virt_text", function()
+    it("returns bar + label for fence with language", function()
+      local chunks = ui.build_fence_virt_text("```lua", "FlemmaFenceBar", "FlemmaFenceLabel")
+      assert.is_truthy(chunks)
+      assert.are.equal(2, #chunks)
+      assert.is_truthy(chunks[1][1]:find("╌"), "bar chunk should contain fence character")
+      assert.are.equal("FlemmaFenceBar", chunks[1][2])
+      assert.are.equal("lua", chunks[2][1])
+      assert.are.equal("FlemmaFenceLabel", chunks[2][2])
     end)
 
-    it("uses fallback label when fence has no language", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@You:",
-        "**Tool Result:** `tool_1`",
-        "",
-        "```",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-
-      local marks = get_fence_extmarks(bufnr)
-      assert.are.equal(2, #marks)
-
-      local open_texts = extmark_virt_texts(marks[1])
-      assert.are.equal(2, #open_texts, "opening fence without language should still have 2 chunks")
-      assert.are.equal("text", open_texts[2], "should use default fallback label")
+    it("returns bar only for bare fence delimiter", function()
+      local chunks = ui.build_fence_virt_text("```", "FlemmaFenceBar", "FlemmaFenceLabel")
+      assert.is_truthy(chunks)
+      assert.are.equal(1, #chunks)
+      assert.are.equal("FlemmaFenceBar", chunks[1][2])
     end)
 
-    it("uses correct highlight groups", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "```json",
-        "{}",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-
-      local marks = get_fence_extmarks(bufnr)
-      assert.are.equal(2, #marks)
-
-      local open_hls = extmark_virt_hls(marks[1])
-      assert.are.equal("FlemmaFenceBar", open_hls[1])
-      assert.are.equal("FlemmaFenceLabel", open_hls[2])
-
-      local close_hls = extmark_virt_hls(marks[2])
-      assert.are.equal("FlemmaFenceBar", close_hls[1])
+    it("returns nil for non-fence lines", function()
+      assert.is_nil(ui.build_fence_virt_text("print('hello')", "FlemmaFenceBar", "FlemmaFenceLabel"))
+      assert.is_nil(ui.build_fence_virt_text("``lua", "FlemmaFenceBar", "FlemmaFenceLabel"))
+      assert.is_nil(ui.build_fence_virt_text("", "FlemmaFenceBar", "FlemmaFenceLabel"))
     end)
 
-    it("handles multiple fenced blocks", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant:",
-        "**Tool Use:** `bash` (`tool_1`)",
-        "",
-        "```json",
-        '{"command":"ls"}',
-        "```",
-        "",
-        "@You:",
-        "**Tool Result:** `tool_1`",
-        "",
-        "```",
-        "file1.txt",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-
-      local marks = get_fence_extmarks(bufnr)
-      assert.are.equal(4, #marks, "should place extmarks on all 4 fence lines")
-
-      -- First block: opening has "json", closing has bar only
-      local first_open = extmark_virt_texts(marks[1])
-      assert.are.equal("json", first_open[2])
-      local first_close = extmark_virt_texts(marks[2])
-      assert.are.equal(1, #first_close)
-
-      -- Second block: opening has fallback "text"
-      local second_open = extmark_virt_texts(marks[3])
-      assert.are.equal("text", second_open[2])
-    end)
-
-    it("clears previous extmarks on each call", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "```lua",
-        "x = 1",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(2, #get_fence_extmarks(bufnr))
-
-      -- Remove the fenced block
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@You:",
-        "no code blocks here",
-      })
-
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(0, #get_fence_extmarks(bufnr), "should clear stale extmarks")
-    end)
-
-    it("skips overlays when conceallevel < 2", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "```lua",
-        "x = 1",
-        "```",
-      })
-
-      highlight.strip_fence_conceal()
-      -- conceallevel=0: overlays should be suppressed
-      vim.api.nvim_set_option_value("conceallevel", 0, { win = 0, scope = "local" })
-
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(0, #get_fence_extmarks(bufnr), "no overlays at conceallevel=0")
-
-      -- conceallevel=1: still suppressed
-      vim.api.nvim_set_option_value("conceallevel", 1, { win = 0, scope = "local" })
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(0, #get_fence_extmarks(bufnr), "no overlays at conceallevel=1")
-
-      -- conceallevel=2: overlays appear
-      vim.api.nvim_set_option_value("conceallevel", 2, { win = 0, scope = "local" })
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(2, #get_fence_extmarks(bufnr), "overlays present at conceallevel=2")
-    end)
-
-    it("clears existing overlays when conceallevel drops below 2", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "```lua",
-        "x = 1",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(2, #get_fence_extmarks(bufnr))
-
-      -- Drop conceallevel — overlays should be cleared
-      vim.api.nvim_set_option_value("conceallevel", 0, { win = 0, scope = "local" })
-      ui.add_fence_overlays(bufnr)
-      assert.are.equal(0, #get_fence_extmarks(bufnr), "overlays cleared when conceallevel drops to 0")
-    end)
-
-    it("uses overlay positioning", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "```json",
-        "{}",
-        "```",
-      })
-
-      setup_fence_preconditions(bufnr)
-      ui.add_fence_overlays(bufnr)
-
-      local marks = get_fence_extmarks(bufnr)
-      for _, mark in ipairs(marks) do
-        assert.are.equal("overlay", mark[4].virt_text_pos, "fence extmarks should use overlay positioning")
-      end
+    it("uses provided highlight groups", function()
+      local chunks = ui.build_fence_virt_text("```json", "CustomBar", "CustomLabel")
+      assert.are.equal("CustomBar", chunks[1][2])
+      assert.are.equal("CustomLabel", chunks[2][2])
     end)
   end)
 

@@ -47,7 +47,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field delivery_queue? flemma.tools.JobDelivery[] Completed job results awaiting delivery
 ---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
 ---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
----@field cursorline_fence_originals? table[] Saved virt_text of fence extmarks swapped for CursorLine contrast
+---@field cursorline_hl_group? string CursorLine variant highlight group for the current cursor row (read by fence decoration provider)
 ---@field diagnostics_baseline_provider? string Provider that produced the current diagnostics baseline
 ---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
 ---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer

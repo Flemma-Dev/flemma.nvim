@@ -35,66 +35,71 @@ local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
 ---@type string
-local FENCE_OPEN_CHAR = "╌"
----@type string
-local FENCE_CLOSE_CHAR = "╌"
----@type string
-local FENCE_DEFAULT_LABEL = "text"
+local FENCE_BAR_CHAR = "╌"
 
----Replace fenced code block delimiters with styled overlay extmarks.
----Opening fences (` ```lang `) become `╌╌╌lang`, closing fences become `╌╌╌`.
----Opening fences without a language show `╌╌╌text` as fallback.
----
----Only places overlays when the conceal patch is active and the window's
----conceallevel >= 2 — the overlays exist to replace fence lines that would
----have been hidden by treesitter `conceal_lines`. At conceallevel < 2 the
----raw ``` delimiters are visible and overlays would obscure them.
----@param bufnr integer
-function M.add_fence_overlays(bufnr)
-  vim.api.nvim_buf_clear_namespace(bufnr, fence_ns, 0, -1)
-
-  if not highlight.is_fence_conceal_patched() then
-    return
+---Build the virt_text chunks for a fence overlay on the given line.
+---Returns nil when the line is not a fence delimiter.
+---@param line string
+---@param bar_hl string Highlight group for the bar portion
+---@param label_hl string Highlight group for the language label
+---@return {[1]:string, [2]:string}[]|nil
+function M.build_fence_virt_text(line, bar_hl, label_hl)
+  if not line:match("^```") then
+    return nil
   end
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then
-    return
+  local bar = string.rep(FENCE_BAR_CHAR, 3)
+  local lang = line:match("^```(.+)$")
+  if lang then
+    return { { bar, bar_hl }, { lang, label_hl } }
   end
-  local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
-  if win_cl < 2 then
-    return
-  end
+  return { { bar, bar_hl } }
+end
 
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line_count, false)
-  local open_bar = string.rep(FENCE_OPEN_CHAR, 3)
-  local close_bar = string.rep(FENCE_CLOSE_CHAR, 3)
-
-  local inside_fence = false
-  for i, line in ipairs(lines) do
-    if line:match("^```") then
-      local line_idx = i - 1
-      if not inside_fence then
-        local lang = line:match("^```(.+)$")
-        vim.api.nvim_buf_set_extmark(bufnr, fence_ns, line_idx, 0, {
-          virt_text = {
-            { open_bar, "FlemmaFenceBar" },
-            { lang or FENCE_DEFAULT_LABEL, "FlemmaFenceLabel" },
-          },
-          virt_text_pos = "overlay",
-          hl_mode = "combine",
-        })
-        inside_fence = true
-      else
-        vim.api.nvim_buf_set_extmark(bufnr, fence_ns, line_idx, 0, {
-          virt_text = { { close_bar, "FlemmaFenceBar" } },
-          virt_text_pos = "overlay",
-          hl_mode = "combine",
-        })
-        inside_fence = false
+---Register (or re-register) the decoration provider that places ephemeral
+---fence overlay extmarks at draw time. Because marks are ephemeral they are
+---re-evaluated on every redraw — no persistent state to invalidate when the
+---user edits a fence delimiter.
+function M.setup_fence_decoration_provider()
+  vim.api.nvim_set_decoration_provider(fence_ns, {
+    on_win = function(_, _, bufnr, _, _)
+      if vim.bo[bufnr].filetype ~= "chat" then
+        return false
       end
-    end
-  end
+      if not highlight.is_fence_conceal_patched() then
+        return false
+      end
+    end,
+    on_line = function(_, winid, bufnr, row)
+      local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
+      if win_cl < 2 then
+        return
+      end
+      local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+      if not line then
+        return
+      end
+      local bar_hl = "FlemmaFenceBar"
+      local label_hl = "FlemmaFenceLabel"
+      -- Apply WCAG contrast-adjusted highlights when cursor is on this line
+      local buffer_state = state.get_buffer_state(bufnr)
+      if buffer_state.cursorline_prev_row == row and buffer_state.cursorline_hl_group then
+        local variants = highlight.get_fence_cursorline_map()[buffer_state.cursorline_hl_group]
+        if variants then
+          bar_hl = variants[bar_hl] or bar_hl
+          label_hl = variants[label_hl] or label_hl
+        end
+      end
+      local chunks = M.build_fence_virt_text(line, bar_hl, label_hl)
+      if chunks then
+        vim.api.nvim_buf_set_extmark(bufnr, fence_ns, row, 0, {
+          virt_text = chunks,
+          virt_text_pos = "overlay",
+          hl_mode = "combine",
+          ephemeral = true,
+        })
+      end
+    end,
+  })
 end
 
 ---Add rulers merged with role marker lines
@@ -266,30 +271,11 @@ function M.apply_line_highlights(bufnr, doc)
   state.get_buffer_state(bufnr).cursorline_prev_row = nil
 end
 
----Restore fence extmarks that were swapped for CursorLine contrast.
----@param bufnr integer
----@param buffer_state flemma.state.BufferState
-local function restore_fence_cursorline(bufnr, buffer_state)
-  local originals = buffer_state.cursorline_fence_originals
-  if not originals then
-    return
-  end
-  buffer_state.cursorline_fence_originals = nil
-  for _, orig in ipairs(originals) do
-    pcall(vim.api.nvim_buf_set_extmark, bufnr, fence_ns, orig.row, 0, {
-      id = orig.id,
-      virt_text = orig.virt_text,
-      virt_text_pos = "overlay",
-      hl_mode = "combine",
-    })
-  end
-end
-
 ---Remove the CursorLine overlay extmark for a buffer.
 ---@param bufnr integer
 local function remove_cursorline(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
-  restore_fence_cursorline(bufnr, buffer_state)
+  buffer_state.cursorline_hl_group = nil
   local eid = buffer_state.cursorline_extmark_id
   if eid then
     pcall(vim.api.nvim_buf_del_extmark, bufnr, cursorline_ns, eid)
@@ -347,9 +333,6 @@ local function update_cursorline(bufnr)
   end
   buffer_state.cursorline_prev_row = row
 
-  -- Restore fence extmarks on the previous cursor row before evaluating the new one
-  restore_fence_cursorline(bufnr, buffer_state)
-
   -- Find the line highlight group at the cursor row
   ---@type string|nil
   local target_hl_group
@@ -399,43 +382,7 @@ local function update_cursorline(bufnr)
       opts.id = eid
     end
     buffer_state.cursorline_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, cursorline_ns, row, 0, opts)
-
-    -- Swap fence extmark highlights for WCAG contrast on CursorLine
-    if highlight.is_fence_conceal_patched() then
-      local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
-      if win_cl >= 2 then
-        local variants = highlight.get_fence_cursorline_map()[target_hl_group]
-        if variants then
-          local fence_marks = vim.api.nvim_buf_get_extmarks(
-            bufnr,
-            fence_ns,
-            { row, 0 },
-            { row, -1 },
-            { details = true }
-          )
-          local originals = {}
-          for _, mark in ipairs(fence_marks) do
-            local details = mark[4]
-            if details and details.virt_text then
-              table.insert(originals, { id = mark[1], row = mark[2], virt_text = details.virt_text })
-              local swapped = {}
-              for _, chunk in ipairs(details.virt_text) do
-                table.insert(swapped, { chunk[1], variants[chunk[2]] or chunk[2] })
-              end
-              vim.api.nvim_buf_set_extmark(bufnr, fence_ns, mark[2], mark[3], {
-                id = mark[1],
-                virt_text = swapped,
-                virt_text_pos = "overlay",
-                hl_mode = "combine",
-              })
-            end
-          end
-          if #originals > 0 then
-            buffer_state.cursorline_fence_originals = originals
-          end
-        end
-      end
-    end
+    buffer_state.cursorline_hl_group = target_hl_group
   else
     remove_cursorline(bufnr)
   end
@@ -868,7 +815,6 @@ function M.update_ui(bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
   M.add_rulers(bufnr, doc)
-  M.add_fence_overlays(bufnr)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)
@@ -904,22 +850,7 @@ function M.setup()
     end,
   })
 
-  -- Refresh fence overlays when conceallevel changes (via :set or Flemma toggle).
-  -- At conceallevel < 2 overlays are cleared; at >= 2 they are placed.
-  vim.api.nvim_create_autocmd("OptionSet", {
-    group = augroup,
-    pattern = "conceallevel",
-    desc = "Flemma: refresh fence overlays when conceallevel changes on a chat buffer",
-    callback = function()
-      if is_floating_window(vim.api.nvim_get_current_win()) then
-        return
-      end
-      local bufnr = vim.api.nvim_get_current_buf()
-      if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "chat" then
-        M.add_fence_overlays(bufnr)
-      end
-    end,
-  })
+  M.setup_fence_decoration_provider()
 
   -- Restore the original conceal_lines behaviour for markdown buffers that
   -- were opened after the conceal patch stripped the query. Their highlighter
