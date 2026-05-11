@@ -121,6 +121,12 @@ local function close()
   if vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_win_close(winid, true)
   end
+  local remaining = vim.tbl_filter(function(b)
+    return vim.api.nvim_buf_is_valid(b) and vim.bo[b].buflisted
+  end, vim.api.nvim_list_bufs())
+  if #remaining <= 1 and (remaining[1] == nil or vim.api.nvim_buf_get_name(remaining[1]) == "") then
+    vim.cmd("qa!")
+  end
 end
 
 vim.keymap.set("n", "q", close, { buffer = bufnr })

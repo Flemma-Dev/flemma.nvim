@@ -242,12 +242,14 @@ describe("flemma.ui.jobs", function()
       assert.truthy(text:match("Resuming…"), "expected 'Resuming…' in: " .. text)
     end)
 
-    it("includes countdown frame in text", function()
+    it("includes countdown frame and remaining seconds with middle dot", function()
       hooks.dispatch("autopilot:resume-scheduled", { bufnr = bufnr, delay_ms = 2000 })
       local text = read_float_text()
       assert.truthy(text)
       local first_countdown = spinners.FRAMES.countdown[1]
       assert.truthy(text:match(first_countdown), "expected countdown frame '" .. first_countdown .. "' in: " .. text)
+      assert.truthy(text:match("·"), "expected middle dot in: " .. text)
+      assert.truthy(text:match("%d%.%ds"), "expected X.Xs remaining seconds in: " .. text)
     end)
   end)
 

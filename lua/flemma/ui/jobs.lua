@@ -13,6 +13,7 @@ local SPINNER_INTERVAL_MS = 100
 local PRIORITY_COUNT = 100
 local PRIORITY_RESUME = 200
 
+local MIDDLE_DOT = " · "
 local COUNTDOWN_FRAMES = spinners.FRAMES.countdown
 local EXECUTING_FRAMES = spinners.FRAMES.tool
 local EXECUTING_SPEED = spinners.SPEED.tool
@@ -24,6 +25,8 @@ local EXECUTING_SPEED = spinners.SPEED.tool
 ---@field spinner_tick integer Current spinner tick counter
 ---@field resume_timer? integer vim.fn timer id for countdown animation
 ---@field resume_frame integer Current countdown frame index
+---@field resume_delay_ms? integer Total resume delay in milliseconds
+---@field resume_started_at? integer High-resolution start timestamp (vim.uv.hrtime)
 
 ---@type table<integer, flemma.ui.jobs.BufferState>
 local buffer_states = {}
@@ -57,6 +60,21 @@ local function cancel_resume_timer(bufnr)
     s.resume_timer = nil
     s.resume_frame = 0
   end
+  if s then
+    s.resume_delay_ms = nil
+    s.resume_started_at = nil
+  end
+end
+
+---Compute seconds remaining until resume fires.
+---@param s flemma.ui.jobs.BufferState
+---@return number
+local function get_resume_remaining(s)
+  if not s.resume_started_at or not s.resume_delay_ms then
+    return 0
+  end
+  local elapsed_ms = (vim.uv.hrtime() - s.resume_started_at) / 1e6
+  return math.max(0, (s.resume_delay_ms - elapsed_ms) / 1000)
 end
 
 ---Get the current spinner icon for the executing animation.
@@ -78,9 +96,10 @@ local function build_segments(s)
   local segments = {}
   if s.resume_frame > 0 then
     local frame = COUNTDOWN_FRAMES[s.resume_frame] or COUNTDOWN_FRAMES[#COUNTDOWN_FRAMES]
+    local remaining = string.format("%.1fs", get_resume_remaining(s))
     segments[#segments + 1] = {
       key = "resume",
-      items = { { key = "countdown", text = frame .. " Resuming…", priority = PRIORITY_RESUME } },
+      items = { { key = "countdown", text = frame .. " Resuming…" .. MIDDLE_DOT .. remaining, priority = PRIORITY_RESUME } },
     }
   end
   if s.count > 0 then
@@ -177,6 +196,8 @@ hooks.on("autopilot:resume-scheduled", function(data)
   cancel_resume_timer(bufnr)
   local s = get_state(bufnr)
   s.resume_frame = 1
+  s.resume_delay_ms = data.delay_ms
+  s.resume_started_at = vim.uv.hrtime()
   ensure_bar(bufnr)
   local frame_interval = math.max(1, math.floor(data.delay_ms / #COUNTDOWN_FRAMES))
   s.resume_timer = vim.fn.timer_start(frame_interval, function()
