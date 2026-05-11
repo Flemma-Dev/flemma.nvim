@@ -245,7 +245,21 @@ end
 ---@return {[1]:string, [2]:string}[]
 function M.get_fold_text()
   local foldstart_lnum = vim.v.foldstart
-  local foldend_lnum = vim.v.foldend
+  local ok, result = pcall(M._build_fold_text, foldstart_lnum, vim.v.foldend)
+  if ok then
+    return result
+  end
+  log.warn(string.format("fold text error at line %d: %s", foldstart_lnum, tostring(result)))
+  return { { vim.fn.getline(foldstart_lnum), "Folded" } }
+end
+
+---Build the fold text chunk list. Separated from get_fold_text so that
+---errors in tool preview formatters are caught by the pcall wrapper
+---above rather than breaking the entire fold display.
+---@param foldstart_lnum integer
+---@param foldend_lnum integer
+---@return {[1]:string, [2]:string}[]
+function M._build_fold_text(foldstart_lnum, foldend_lnum)
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
   local doc = get_document()
   local text_width = preview.get_text_area_width(vim.api.nvim_get_current_win())
