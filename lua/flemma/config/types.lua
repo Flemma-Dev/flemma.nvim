@@ -43,11 +43,14 @@
 ---@field manage_updatetime boolean
 
 ---@class flemma.config.Experimental
+---@field patch_markdown_conceal boolean
 
 ---@class flemma.config.Highlights
 ---@field assistant flemma.config.HighlightValue
 ---@field busy flemma.config.HighlightValue
 ---@field defaults flemma.config.HighlightsDefaults
+---@field fence_bar flemma.config.HighlightValue
+---@field fence_label flemma.config.HighlightValue
 ---@field fold_meta flemma.config.HighlightValue
 ---@field fold_preview flemma.config.HighlightValue
 ---@field lua_code_block flemma.config.HighlightValue

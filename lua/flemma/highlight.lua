@@ -412,6 +412,8 @@ M.apply_syntax = function()
 
   -- Set ruler highlight group
   set_highlight("FlemmaRuler", syntax_config.ruler.hl)
+  set_highlight("FlemmaFenceLabel", syntax_config.highlights.fence_label)
+  set_highlight("FlemmaFenceBar", syntax_config.highlights.fence_bar)
 
   -- Set highlight for thinking tags and blocks
   set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
@@ -585,6 +587,80 @@ local function setup_line_highlights()
     if role_config then
       local group_name = "FlemmaLine" .. roles.capitalize(key)
       set_highlight(group_name, role_config, "bg")
+    end
+  end
+end
+
+---Strip fenced code block conceal directives from the markdown highlights query.
+---
+---Neovim's treesitter highlighter registers a `_on_conceal_line` callback
+---when a query contains `(#set! conceal_lines "")`. On every buffer change,
+---all conceal_lines marks are cleared and the `_conceal_checked` cache is
+---wiped. The next redraw then calls `_on_conceal_line` for every visible
+---line, each of which re-parses the tree and evaluates the query — O(visible
+---lines) per keystroke. On a 5000-line .chat buffer with ~128 fenced code
+---blocks, this costs ~30ms per keystroke at conceallevel>=2.
+---
+---Strips both `conceal_lines` (line hiding) and `conceal ""` (character
+---hiding) from the fenced_code_block_delimiter and info_string captures.
+---Flemma's UI replaces fence lines with corner bracket extmarks instead.
+---
+---Must be called BEFORE the treesitter highlighter is constructed for the
+---buffer (i.e., before any .chat file is opened), so that the highlighter
+---never sets `_conceal_line = true`.
+---@param lang string Treesitter language name
+---@param query_name string Query name (e.g., "highlights")
+local function strip_fence_conceal_directives(lang, query_name)
+  local files = vim.treesitter.query.get_files(lang, query_name)
+  if #files == 0 then
+    return
+  end
+  local f = io.open(files[1], "r")
+  if not f then
+    return
+  end
+  local text = f:read("*a")
+  f:close()
+  if not text:find("conceal_lines") then
+    return
+  end
+  local stripped = text:gsub('%s*%(#set! conceal_lines ""%)', "")
+  stripped = stripped:gsub('%s*%(#set! conceal ""%)', "")
+  vim.treesitter.query.set(lang, query_name, stripped)
+end
+
+local fence_conceal_patched = false
+
+---Strip fenced code block conceal from the markdown treesitter highlights query.
+---Idempotent — safe to call on every .chat BufRead; only patches once.
+---Gated by `experimental.patch_markdown_conceal` config flag.
+---
+---**Side effect**: patches the global `markdown` highlights query, which also
+---affects `.md` files opened in the same session. At `conceallevel=0` (the
+---default for `.md`) this has no visual impact. Users who set `conceallevel>=1`
+---on `.md` files will see fence delimiters rendered visibly instead of hidden.
+---The patch is deferred to the first `.chat` file open so sessions that never
+---use `.chat` files are unaffected.
+---
+---Fence delimiter lines with an odd count (malformed/unclosed fences) may
+---cause the open/close bracket overlay to swap for subsequent blocks. This is
+---a visual-only effect that self-corrects on the next `update_ui` cycle.
+function M.strip_fence_conceal()
+  if fence_conceal_patched then
+    return
+  end
+  local cfg = config_facade.get()
+  if cfg.experimental and cfg.experimental.patch_markdown_conceal == false then
+    return
+  end
+  fence_conceal_patched = true
+  strip_fence_conceal_directives("markdown", "highlights")
+  -- If any highlighter was constructed before we stripped the query, clear its
+  -- cached _conceal_line flag so the _on_conceal_line callback stops firing.
+  for _, hl in pairs(vim.treesitter.highlighter.active) do
+    if hl._conceal_line then
+      hl._conceal_line = false
+      hl._conceal_checked = {}
     end
   end
 end

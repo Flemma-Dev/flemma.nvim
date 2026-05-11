@@ -259,7 +259,7 @@ describe("UI Folding", function()
       assert.are.equal("<2", folding.get_fold_level(3))
     end)
 
-    it("should skip frontmatter fold when conceallevel >= 1", function()
+    it("should fold frontmatter at any conceallevel", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
@@ -274,30 +274,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("=", folding.get_fold_level(1), "opening fence should not start a fold when conceallevel>=1")
-      assert.are.equal("=", folding.get_fold_level(3), "closing fence should not end a fold when conceallevel>=1")
-    end)
-
-    it("should invalidate fold cache when conceallevel toggles", function()
-      local bufnr = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.wo.conceallevel = 0
-
-      local lines = {
-        "```lua",
-        "x = 5",
-        "```",
-        "@You:",
-        "question",
-      }
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-
-      assert.are.equal(">2", folding.get_fold_level(1), "sanity: fold present at conceallevel=0")
-
-      vim.wo.conceallevel = 2
-
-      assert.are.equal("=", folding.get_fold_level(1), "fold should disappear once conceallevel flips to 2")
+      assert.are.equal(">2", folding.get_fold_level(1), "opening fence should start a fold at conceallevel=2")
+      assert.are.equal("<2", folding.get_fold_level(3), "closing fence should end a fold at conceallevel=2")
     end)
 
     it("should return >2 for completed tool_use block start", function()
@@ -3070,14 +3048,7 @@ describe("UI Folding", function()
       folding.toggle_message_fold()
     end)
 
-    it("should notify (not error) when toggling frontmatter at conceallevel>=1", function()
-      local notify = require("flemma.notify")
-      local captured = {}
-      notify._set_impl(function(notification)
-        table.insert(captured, notification)
-        return notification
-      end)
-
+    it("should toggle frontmatter fold at conceallevel>=1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -3099,28 +3070,9 @@ describe("UI Folding", function()
 
       vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-      -- Must not throw Vim(foldclose):E490
       assert.has_no.errors(function()
         folding.toggle_message_fold()
       end)
-
-      -- Give the scheduled dispatch time to run
-      vim.wait(10, function()
-        return false
-      end)
-
-      assert.are.equal(1, #captured, "expected one notify dispatch")
-      assert.are.equal(vim.log.levels.INFO, captured[1].level)
-      assert.is_truthy(
-        captured[1].message:find("conceallevel=2"),
-        "notify message should cite the active conceallevel: " .. captured[1].message
-      )
-      assert.is_truthy(
-        captured[1].message:find("Neovim limitation"),
-        "notify message should attribute to Neovim: " .. captured[1].message
-      )
-
-      notify._reset_impl()
     end)
   end)
 end)

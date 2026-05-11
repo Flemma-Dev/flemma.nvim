@@ -103,6 +103,11 @@ type_string() {
   done
 }
 
+# ── Variant tracking ─────────────────────────────────────────────
+# run_profile auto-appends each variant name here; the comparison
+# and report sections iterate this array automatically.
+VARIANTS=()
+
 # ── Single profile run ───────────────────────────────────────────
 # Launches Neovim in a background tmux window, drives edits through
 # three buffer regions (frontmatter, mid-file, end-of-file), then
@@ -111,6 +116,7 @@ type_string() {
 # Args: variant_name extension load_flemma [post_setup_cmd]
 run_profile() {
   local name="$1" ext="$2" load_flemma="$3" post_cmd="${4:-}"
+  VARIANTS+=("$name")
   local profile_dir="$RUN_DIR/$name"
   mkdir -p "$profile_dir"
 
@@ -249,7 +255,10 @@ run_profile() {
   echo ""
 }
 
-# ── Run both passes ──────────────────────────────────────────────
+# ── Run all passes ───────────────────────────────────────────────
+# The two core variants — .md baseline (treesitter only) vs .chat
+# with Flemma loaded. To isolate a specific factor, add a variant
+# with a post_setup_cmd that disables it (see SKILL.md Step 3).
 run_profile "baseline-md" "md" "no"
 run_profile "chat-flemma" "chat" "yes"
 
@@ -261,7 +270,7 @@ echo ""
 
 printf "%-25s %12s %12s %12s\n" "Variant" "Avg ms/key" "Max ms" "Calls"
 printf "%-25s %12s %12s %12s\n" "-------" "----------" "------" "-----"
-for v in baseline-md chat-flemma; do
+for v in "${VARIANTS[@]}"; do
   icp=$(grep 'InsertCharPre' "$RUN_DIR/$v/report.txt" 2>/dev/null || echo "")
   if [ -n "$icp" ]; then
     printf "%-25s %10s ms %10s ms %10s\n" "$v" \
@@ -275,7 +284,7 @@ done
 
 echo ""
 echo "Full reports in: $RUN_DIR/"
-for v in baseline-md chat-flemma; do
+for v in "${VARIANTS[@]}"; do
   echo ""
   echo "━━━ $v ━━━"
   cat "$RUN_DIR/$v/report.txt" 2>/dev/null || echo "(missing)"

@@ -17,6 +17,7 @@ local ast = require("flemma.ast")
 local turns = require("flemma.ui.turns")
 local activity = require("flemma.ui.activity")
 local indicators = require("flemma.ui.indicators")
+local highlight = require("flemma.highlight")
 local str = require("flemma.utilities.string")
 
 local PRIORITY = {
@@ -31,6 +32,53 @@ local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
 local cursorline_ns = vim.api.nvim_create_namespace("flemma_cursorline")
 local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
+local fence_ns = vim.api.nvim_create_namespace("flemma_fence_brackets")
+
+---@type string
+local FENCE_OPEN_CHAR = "╌"
+---@type string
+local FENCE_CLOSE_CHAR = "╌"
+---@type string
+local FENCE_DEFAULT_LABEL = "text"
+
+---Replace fenced code block delimiters with styled overlay extmarks.
+---Opening fences (` ```lang `) become `╌╌╌lang`, closing fences become `╌╌╌`.
+---Opening fences without a language show `╌╌╌text` as fallback.
+---@param bufnr integer
+function M.add_fence_brackets(bufnr)
+  vim.api.nvim_buf_clear_namespace(bufnr, fence_ns, 0, -1)
+
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line_count, false)
+  local open_bar = string.rep(FENCE_OPEN_CHAR, 3)
+  local close_bar = string.rep(FENCE_CLOSE_CHAR, 3)
+
+  local inside_fence = false
+  for i, line in ipairs(lines) do
+    if line:match("^```") then
+      local line_idx = i - 1
+      if not inside_fence then
+        local lang = line:match("^```(.+)$")
+        vim.api.nvim_buf_set_extmark(bufnr, fence_ns, line_idx, 0, {
+          virt_text = {
+            { open_bar, "FlemmaFenceBar" },
+            { lang or FENCE_DEFAULT_LABEL, "FlemmaFenceLabel" },
+          },
+          virt_text_pos = "overlay",
+          hl_mode = "combine",
+        })
+        inside_fence = true
+      else
+        vim.api.nvim_buf_set_extmark(bufnr, fence_ns, line_idx, 0, {
+          virt_text = { { close_bar, "FlemmaFenceBar" } },
+          virt_text_pos = "overlay",
+          hl_mode = "combine",
+        })
+        inside_fence = false
+      end
+    end
+  end
+end
 
 ---Add rulers merged with role marker lines
 ---@param bufnr integer
@@ -352,27 +400,6 @@ local function parse_conceal_override(value)
   return { level = tonumber(level_str), cursor = cursor_chars or "" }
 end
 
----Re-open frontmatter fold if auto-closed after a conceallevel change.
----When conceallevel drops to 0, the frontmatter fold rule starts emitting
----fold entries (it suppresses them at conceallevel >= 1 because Neovim's
----`conceal_lines` hides the fold placeholder). The OptionSet autocmd
----invalidates the fold map, and the newly created level-2 frontmatter fold
----auto-closes. Re-opening it keeps the transition transparent.
----@param bufnr integer
----@param winid integer
-local function reopen_frontmatter_fold(bufnr, winid)
-  local doc = parser.get_parsed_document(bufnr)
-  if doc.frontmatter then
-    local fm_start = doc.frontmatter.position.start_line
-    local closed = vim.fn.foldclosed(fm_start)
-    if closed ~= -1 then
-      vim.api.nvim_win_call(winid, function()
-        vim.cmd(fm_start .. "foldopen")
-      end)
-    end
-  end
-end
-
 ---Set conceallevel for the current window. Returns false if `editing.conceal`
 ---is unset/false (no-op).
 ---@param level integer
@@ -386,9 +413,6 @@ local function set_conceal_level(level)
     return false
   end
   vim.api.nvim_set_option_value("conceallevel", level, { win = winid, scope = "local" })
-  if level == 0 then
-    reopen_frontmatter_fold(bufnr, winid)
-  end
   return true
 end
 
@@ -498,6 +522,9 @@ function M.setup_chat_filetype_autocmds()
     pattern = "*.chat",
     desc = "Flemma: run load-time migrations, set filetype, apply buffer+window settings",
     callback = function(ev)
+      -- Patch the markdown treesitter highlights query on first .chat open,
+      -- before setting filetype triggers the highlighter constructor.
+      highlight.strip_fence_conceal()
       -- Clear any orphaned cursorline extmark from a prior session.
       -- :e reload fires BufUnload first, which calls cleanup_buffer_state() and
       -- sets buffer_states[bufnr] = nil — losing cursorline_extmark_id. The
@@ -555,22 +582,6 @@ function M.setup_chat_filetype_autocmds()
       end
       vim.api.nvim_set_option_value("conceallevel", vim.go.conceallevel, { win = winid, scope = "local" })
       vim.api.nvim_set_option_value("concealcursor", vim.go.concealcursor, { win = winid, scope = "local" })
-    end,
-  })
-
-  -- The frontmatter fold rule reads `vim.wo.conceallevel` to decide whether
-  -- to fold (see lua/flemma/ui/folding/rules/frontmatter.lua). The fold map
-  -- cache is keyed on changedtick + bufnr, so a bare conceallevel flip
-  -- wouldn't invalidate it. Rebuild on conceallevel changes in chat windows.
-  vim.api.nvim_create_autocmd("OptionSet", {
-    group = augroup,
-    pattern = "conceallevel",
-    desc = "Flemma: rebuild fold map when conceallevel changes in a chat buffer",
-    callback = function()
-      local bufnr = vim.api.nvim_get_current_buf()
-      if vim.bo[bufnr].filetype == "chat" then
-        folding.invalidate_folds(bufnr)
-      end
     end,
   })
 
@@ -715,18 +726,6 @@ function M.add_tool_previews(bufnr, doc)
   local winid = vim.fn.bufwinid(bufnr)
   local max_length = preview.get_text_area_width(winid)
 
-  -- At conceallevel>=1, tree-sitter's markdown highlights query hides the
-  -- fenced_code_block_delimiter lines entirely via `#set! conceal_lines ""`,
-  -- taking any extmarks anchored to those lines (including our virt_lines)
-  -- with them. Anchor one line higher — on the blank line between the
-  -- `**Tool Result:**` header and the opening fence, which carries no conceal
-  -- metadata — so the preview survives. At conceallevel=0 the fences render
-  -- normally and we keep the original inside-the-fence position.
-  local conceal_level = 0
-  if winid ~= -1 then
-    conceal_level = vim.api.nvim_get_option_value("conceallevel", { win = winid })
-  end
-
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
   -- Show previews for tool_result blocks with empty content that are either
@@ -744,14 +743,8 @@ function M.add_tool_previews(bufnr, doc)
           local sibling = siblings[seg.tool_use_id]
           local tool_use = sibling and sibling.use or nil
           if tool_use then
-            -- Opening fence is one line before closing fence (empty content)
             local opening_fence_line = seg.position.end_line - 1
-            local line_idx
-            if conceal_level >= 1 then
-              line_idx = opening_fence_line - 2 -- 0-indexed: blank line before fence
-            else
-              line_idx = opening_fence_line - 1 -- 0-indexed: opening fence line
-            end
+            local line_idx = opening_fence_line - 1 -- 0-indexed: opening fence line
 
             if line_idx >= 0 and line_idx < line_count then
               local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input, max_length)
@@ -798,6 +791,7 @@ function M.update_ui(bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
   M.add_rulers(bufnr, doc)
+  M.add_fence_brackets(bufnr)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)

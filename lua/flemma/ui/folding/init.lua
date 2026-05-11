@@ -8,7 +8,6 @@ local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
-local notify = require("flemma.notify")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
 local str = require("flemma.utilities.string")
@@ -43,18 +42,12 @@ local BUILTIN_RULES = {
 -- Fold Map Cache
 -- ============================================================================
 
----The frontmatter rule reads `vim.wo.conceallevel` in its populate() to decide
----whether to emit fold entries (see lua/flemma/ui/folding/rules/frontmatter.lua
----and docs/conceal.md "Folds and `conceal_lines`"). Include it in the cache
----key so a conceallevel toggle self-invalidates — the OptionSet autocmd in
----ui/init.lua handles the on-screen refold, but the cache key is what keeps
----get_fold_level() correct between eager triggers.
----@type { changedtick: integer, bufnr: integer, conceallevel: integer, map: table<integer, string> }
-local fold_map_cache = { changedtick = -1, bufnr = -1, conceallevel = -1, map = {} }
+---@type { changedtick: integer, bufnr: integer, map: table<integer, string> }
+local fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
 
 ---Invalidate the fold map cache so the next get_fold_level rebuilds it.
 local function invalidate_cache()
-  fold_map_cache = { changedtick = -1, bufnr = -1, conceallevel = -1, map = {} }
+  fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
 end
 
 -- ============================================================================
@@ -202,10 +195,9 @@ end
 function M.get_fold_level(lnum)
   local bufnr = vim.api.nvim_get_current_buf()
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  local conceal = vim.wo.conceallevel
-  if fold_map_cache.bufnr ~= bufnr or fold_map_cache.conceallevel ~= conceal then
+  if fold_map_cache.bufnr ~= bufnr then
     local doc = parser.get_parsed_document(bufnr)
-    fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
+    fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
   elseif fold_map_cache.changedtick ~= tick then
     local mode = vim.api.nvim_get_mode().mode
     -- "=" tells Neovim "fold level unchanged from previous line evaluation",
@@ -215,7 +207,7 @@ function M.get_fold_level(lnum)
       return "="
     end
     local doc = parser.get_parsed_document(bufnr)
-    fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
+    fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
   end
   return fold_map_cache.map[lnum] or "="
 end
@@ -607,22 +599,9 @@ function M.toggle_message_fold()
     return
   end
 
-  -- No message at cursor — check frontmatter. The AST-provided range is what
-  -- proves the cursor is inside frontmatter; the conceallevel check below is
-  -- then the specific reason we know there is no fold to toggle (rather than,
-  -- say, a stale fold map).
   local fm = doc.frontmatter
   if fm and lnum >= fm.position.start_line and lnum <= fm.position.end_line then
     local fm_start = fm.position.start_line
-    if vim.wo.conceallevel >= 1 then
-      notify.info(
-        string.format(
-          "frontmatter isn't foldable with conceallevel=%d. This is a Neovim limitation.",
-          vim.wo.conceallevel
-        )
-      )
-      return
-    end
     if vim.fn.foldclosed(fm_start) ~= -1 then
       vim.cmd(fm_start .. " foldopen")
     else
@@ -667,14 +646,9 @@ function M.invalidate_folds(bufnr)
     return
   end
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  local conceal = vim.wo.conceallevel
   local foldmethod_ok = vim.wo[winid].foldmethod == "expr"
   -- Path 1: fold map already current — only fix foldmethod if overridden.
-  if
-    fold_map_cache.bufnr == bufnr
-    and fold_map_cache.changedtick == tick
-    and fold_map_cache.conceallevel == conceal
-  then
+  if fold_map_cache.bufnr == bufnr and fold_map_cache.changedtick == tick then
     if not foldmethod_ok then
       vim.fn.win_execute(winid, "set foldmethod=expr")
     end
@@ -682,7 +656,7 @@ function M.invalidate_folds(bufnr)
   end
   -- Paths 2 & 3: rebuild fold map, conditionally re-assert foldmethod.
   local doc = parser.get_parsed_document(bufnr)
-  fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
+  fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
   local mode = vim.api.nvim_get_mode().mode
   if
     not foldmethod_ok

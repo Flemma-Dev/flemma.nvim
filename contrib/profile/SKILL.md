@@ -176,7 +176,9 @@ Look at the function timings. Rank by total time:
 
 ### Step 3: Isolate Individual Factors
 
-To test a hypothesis, add a variant to `run.sh`. The `run_profile` function accepts a 4th argument for a post-setup vim command:
+To test a hypothesis, add a `run_profile` call to `run.sh`. Each call auto-registers itself in the `VARIANTS` array — the comparison table and full reports at the end pick it up automatically. No need to edit the reporting section.
+
+The 4th argument is an optional ex command that runs after Neovim loads but before instrumentation starts. Use it to disable a specific Flemma feature or Neovim setting:
 
 ```bash
 # Example: test with conceallevel=0
@@ -189,9 +191,16 @@ run_profile "chat-trivial-folds" "chat" "yes" \
 # Example: test with update_ui disabled
 run_profile "chat-no-ui" "chat" "yes" \
   "lua require('flemma.bridge').update_ui = function() end"
+
+# Example: test with treesitter disabled
+run_profile "chat-no-ts" "chat" "yes" "lua vim.treesitter.stop(0)"
+
+# Example: source a Lua script for complex setup
+run_profile "chat-patched" "chat" "yes" \
+  "luafile contrib/profile/some-patch.lua"
 ```
 
-Run multiple variants sequentially and compare the `InsertCharPre` averages. The delta between variants tells you the cost of each factor.
+Compare the `InsertCharPre` averages between variants. The delta tells you the cost of each factor. Keep the two core variants (`baseline-md`, `chat-flemma`) as the first entries — they're the control and treatment. Add experimental variants below them.
 
 ### Step 4: Verify the Fix
 
@@ -276,6 +285,18 @@ This is by design — it measures what the user perceives as input latency. But 
 `parser.get_parsed_document` caches by `changedtick`. When called multiple times within the same event loop tick (same changedtick), only the first call parses; the rest are cache hits. The ratio `parse_lines calls / get_parsed_document calls` shows the cache effectiveness.
 
 If `parse_lines` count equals `get_parsed_document` count, caching is broken. If `parse_lines` is ~1x per keystroke and `get_parsed_document` is ~4x, the cache is working (3 out of 4 calls are hits from different callers within the same tick).
+
+### When Function Timings Don't Explain the Delta, Check the Buffer/Window Options
+
+The report prints `Buffer/Window Options` (foldmethod, conceallevel, syntax, filetype, etc.) for every variant. These are the settings that differ between `.md` and `.chat`. If the profiled Flemma functions account for far less time than the `InsertCharPre` delta, the cost is in Neovim's C-level rendering triggered by one of those settings — jit.p can't see C code, so the time appears "missing."
+
+Compare the options block between baseline and chat variants. The setting that's different is your suspect. Add ONE isolation variant that resets that setting and re-run.
+
+For deeper investigation into Neovim's C rendering (`src/nvim/drawline.c`, `src/nvim/decoration.c`, `src/nvim/drawscreen.c`), clone the source if not already present:
+
+```bash
+[ -d contrib/neovim.git ] || git clone --depth 1 https://github.com/neovim/neovim.git contrib/neovim.git
+```
 
 ## Modifying the Harness
 

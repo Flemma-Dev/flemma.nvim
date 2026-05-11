@@ -241,6 +241,8 @@ return s.object({
     tool_result_denied = highlight("DiagnosticError"),
     tool_result_aborted = highlight("DiagnosticError"),
     tool_preview = highlight("Comment"),
+    fence_label = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
+    fence_bar = highlight("FlemmaFenceLabel"),
     fold_preview = highlight("Comment"),
     fold_meta = highlight("Comment"),
     tool_detail = highlight("Comment"),
@@ -415,7 +417,15 @@ return s.object({
     enabled = s.boolean(vim.lsp ~= nil),
   }),
 
-  experimental = s.object({}),
+  experimental = s.object({
+    -- Patch the global markdown treesitter highlights query to strip
+    -- conceal_lines directives from fenced code block delimiters. Without this,
+    -- conceallevel>=2 triggers an expensive _on_conceal_line callback on every
+    -- keystroke (~30ms overhead on large buffers). The patch is deferred to the
+    -- first .chat file open so markdown-only sessions are unaffected. Set to
+    -- false if the patch interferes with other markdown plugins.
+    patch_markdown_conceal = s.boolean(true),
+  }),
 
   [symbols.ALIASES] = {
     timeout = "parameters.timeout",
