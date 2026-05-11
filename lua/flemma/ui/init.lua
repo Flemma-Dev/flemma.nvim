@@ -44,9 +44,26 @@ local FENCE_DEFAULT_LABEL = "text"
 ---Replace fenced code block delimiters with styled overlay extmarks.
 ---Opening fences (` ```lang `) become `╌╌╌lang`, closing fences become `╌╌╌`.
 ---Opening fences without a language show `╌╌╌text` as fallback.
+---
+---Only places overlays when the conceal patch is active and the window's
+---conceallevel >= 2 — the overlays exist to replace fence lines that would
+---have been hidden by treesitter `conceal_lines`. At conceallevel < 2 the
+---raw ``` delimiters are visible and overlays would obscure them.
 ---@param bufnr integer
 function M.add_fence_overlays(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, fence_ns, 0, -1)
+
+  if not highlight.is_fence_conceal_patched() then
+    return
+  end
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+  local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
+  if win_cl < 2 then
+    return
+  end
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line_count, false)
@@ -884,6 +901,45 @@ function M.setup()
       end
       bridge.update_ui(ev.buf)
       buffer_state.ui_update_tick = tick
+    end,
+  })
+
+  -- Refresh fence overlays when conceallevel changes (via :set or Flemma toggle).
+  -- At conceallevel < 2 overlays are cleared; at >= 2 they are placed.
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup,
+    pattern = "conceallevel",
+    desc = "Flemma: refresh fence overlays when conceallevel changes on a chat buffer",
+    callback = function()
+      if is_floating_window(vim.api.nvim_get_current_win()) then
+        return
+      end
+      local bufnr = vim.api.nvim_get_current_buf()
+      if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "chat" then
+        M.add_fence_overlays(bufnr)
+      end
+    end,
+  })
+
+  -- Restore the original conceal_lines behaviour for markdown buffers that
+  -- were opened after the conceal patch stripped the query. Their highlighter
+  -- was constructed without _conceal_line, so fence delimiters stay visible
+  -- at conceallevel >= 2. A "sandwich restart" (set original query → stop/start
+  -- → set stripped query) gives each markdown buffer its own cached copy of the
+  -- original query with conceal_lines metadata intact. Idempotent — only
+  -- restarts once per buffer (subsequent entries see _conceal_line = true).
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = augroup,
+    desc = "Flemma: restore conceal_lines in treesitter highlighter for markdown buffers",
+    callback = function(ev)
+      if not highlight.is_fence_conceal_patched() then
+        return
+      end
+      local bufnr = ev.buf
+      if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "markdown" then
+        return
+      end
+      highlight.restore_highlighter_conceal(bufnr)
     end,
   })
 

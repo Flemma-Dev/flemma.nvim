@@ -39,6 +39,17 @@ describe("UI Fence Brackets", function()
 
   local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
+  ---Set up a buffer with fence overlay preconditions: strip conceal, set
+  ---conceallevel >= 2, and set filetype to chat so add_fence_overlays proceeds.
+  ---@param bufnr integer
+  local function setup_fence_preconditions(bufnr)
+    highlight.strip_fence_conceal()
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = winid, scope = "local" })
+    end
+  end
+
   ---@param bufnr integer
   ---@return table[]
   local function get_fence_extmarks(bufnr)
@@ -127,6 +138,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
+      setup_fence_preconditions(bufnr)
       ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
@@ -156,6 +168,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
+      setup_fence_preconditions(bufnr)
       ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
@@ -176,6 +189,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
+      setup_fence_preconditions(bufnr)
       ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
@@ -209,6 +223,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
+      setup_fence_preconditions(bufnr)
       ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
@@ -235,6 +250,7 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
+      setup_fence_preconditions(bufnr)
       ui.add_fence_overlays(bufnr)
       assert.are.equal(2, #get_fence_extmarks(bufnr))
 
@@ -248,6 +264,54 @@ describe("UI Fence Brackets", function()
       assert.are.equal(0, #get_fence_extmarks(bufnr), "should clear stale extmarks")
     end)
 
+    it("skips overlays when conceallevel < 2", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "```lua",
+        "x = 1",
+        "```",
+      })
+
+      highlight.strip_fence_conceal()
+      -- conceallevel=0: overlays should be suppressed
+      vim.api.nvim_set_option_value("conceallevel", 0, { win = 0, scope = "local" })
+
+      ui.add_fence_overlays(bufnr)
+      assert.are.equal(0, #get_fence_extmarks(bufnr), "no overlays at conceallevel=0")
+
+      -- conceallevel=1: still suppressed
+      vim.api.nvim_set_option_value("conceallevel", 1, { win = 0, scope = "local" })
+      ui.add_fence_overlays(bufnr)
+      assert.are.equal(0, #get_fence_extmarks(bufnr), "no overlays at conceallevel=1")
+
+      -- conceallevel=2: overlays appear
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = 0, scope = "local" })
+      ui.add_fence_overlays(bufnr)
+      assert.are.equal(2, #get_fence_extmarks(bufnr), "overlays present at conceallevel=2")
+    end)
+
+    it("clears existing overlays when conceallevel drops below 2", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "```lua",
+        "x = 1",
+        "```",
+      })
+
+      setup_fence_preconditions(bufnr)
+      ui.add_fence_overlays(bufnr)
+      assert.are.equal(2, #get_fence_extmarks(bufnr))
+
+      -- Drop conceallevel — overlays should be cleared
+      vim.api.nvim_set_option_value("conceallevel", 0, { win = 0, scope = "local" })
+      ui.add_fence_overlays(bufnr)
+      assert.are.equal(0, #get_fence_extmarks(bufnr), "overlays cleared when conceallevel drops to 0")
+    end)
+
     it("uses overlay positioning", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_set_current_buf(bufnr)
@@ -258,12 +322,107 @@ describe("UI Fence Brackets", function()
         "```",
       })
 
+      setup_fence_preconditions(bufnr)
       ui.add_fence_overlays(bufnr)
 
       local marks = get_fence_extmarks(bufnr)
       for _, mark in ipairs(marks) do
         assert.are.equal("overlay", mark[4].virt_text_pos, "fence extmarks should use overlay positioning")
       end
+    end)
+  end)
+
+  describe("restore_highlighter_conceal", function()
+    it("is a no-op when fence_conceal_patched is false", function()
+      assert.is_false(highlight.is_fence_conceal_patched())
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "markdown"
+
+      -- Should not error even when no patch has been applied
+      highlight.restore_highlighter_conceal(bufnr)
+    end)
+
+    it("is a no-op when the buffer has no treesitter highlighter", function()
+      highlight.strip_fence_conceal()
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      -- Don't set filetype — no highlighter constructed
+      highlight.restore_highlighter_conceal(bufnr)
+
+      -- Verify global query is still stripped (not accidentally restored)
+      local query = vim.treesitter.query.get("markdown", "highlights")
+      assert.is_falsy(query.has_conceal_line, "global query should remain stripped")
+    end)
+
+    it("restores _conceal_line on a markdown buffer's highlighter", function()
+      highlight.strip_fence_conceal()
+
+      -- Create a markdown buffer — its highlighter gets _conceal_line = false
+      -- because the global query was stripped before construction.
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "markdown"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "```", "hello", "```" })
+
+      local hl_before = vim.treesitter.highlighter.active[bufnr]
+      if not hl_before then
+        -- Treesitter may not start automatically in headless tests; skip
+        return
+      end
+      assert.is_falsy(hl_before._conceal_line, "highlighter should lack _conceal_line before restore")
+
+      highlight.restore_highlighter_conceal(bufnr)
+
+      local hl_after = vim.treesitter.highlighter.active[bufnr]
+      assert.is_truthy(hl_after, "highlighter should exist after restore")
+      assert.is_truthy(hl_after._conceal_line, "_conceal_line should be true after restore")
+    end)
+
+    it("is idempotent — second call is a no-op", function()
+      highlight.strip_fence_conceal()
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "markdown"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "```", "hello", "```" })
+
+      local hl = vim.treesitter.highlighter.active[bufnr]
+      if not hl then
+        return
+      end
+
+      highlight.restore_highlighter_conceal(bufnr)
+      local hl_after_first = vim.treesitter.highlighter.active[bufnr]
+
+      -- Second call should return early (hl._conceal_line is now true)
+      highlight.restore_highlighter_conceal(bufnr)
+      local hl_after_second = vim.treesitter.highlighter.active[bufnr]
+
+      -- Same highlighter instance — no unnecessary restart
+      assert.are.equal(hl_after_first, hl_after_second, "second call should not reconstruct the highlighter")
+    end)
+
+    it("leaves the global query in the stripped state", function()
+      highlight.strip_fence_conceal()
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "markdown"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "```", "hello", "```" })
+
+      local hl = vim.treesitter.highlighter.active[bufnr]
+      if not hl then
+        return
+      end
+
+      highlight.restore_highlighter_conceal(bufnr)
+
+      -- Global query must be stripped for future .chat highlighter construction
+      local query = vim.treesitter.query.get("markdown", "highlights")
+      assert.is_falsy(query.has_conceal_line, "global query should be stripped after restore")
     end)
   end)
 
