@@ -389,7 +389,13 @@ local function update_cursorline(bufnr)
       if win_cl >= 2 then
         local variants = highlight.get_fence_cursorline_map()[target_hl_group]
         if variants then
-          local fence_marks = vim.api.nvim_buf_get_extmarks(bufnr, fence_ns, { row, 0 }, { row, -1 }, { details = true })
+          local fence_marks = vim.api.nvim_buf_get_extmarks(
+            bufnr,
+            fence_ns,
+            { row, 0 },
+            { row, -1 },
+            { details = true }
+          )
           local originals = {}
           for _, mark in ipairs(fence_marks) do
             local details = mark[4]

@@ -99,7 +99,9 @@ local function build_segments(s)
     local remaining = string.format("%.1fs", get_resume_remaining(s))
     segments[#segments + 1] = {
       key = "resume",
-      items = { { key = "countdown", text = frame .. " Resuming…" .. MIDDLE_DOT .. remaining, priority = PRIORITY_RESUME } },
+      items = {
+        { key = "countdown", text = frame .. " Resuming…" .. MIDDLE_DOT .. remaining, priority = PRIORITY_RESUME },
+      },
     }
   end
   if s.count > 0 then
