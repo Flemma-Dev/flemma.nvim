@@ -170,14 +170,50 @@ end
 -- Fold Level
 -- ============================================================================
 
----Get fold level for a line number. O(1) lookup into cached fold map.
+---Get fold level for a line number. O(1) lookup into the cached fold map.
+---
+---## Performance background
+---
+---Neovim calls this function for every visible line (~300 on a typical
+---screen) each time foldexpr is re-evaluated. A naive implementation that
+---re-parses on every changedtick change causes a full AST parse + fold map
+---rebuild PER KEYSTROKE — ~3ms of Lua work that then triggers Neovim's
+---C-level fold state recalculation across all visible lines. On a 5000-line
+---buffer this compounds to 120ms+ per keystroke (profiled May 2025).
+---
+---## Strategy: defer during insert mode
+---
+---Buffer/conceallevel changes always rebuild (rare, needed for correctness).
+---Changedtick changes (every keystroke) are handled in two paths:
+---
+--- - **Normal mode**: rebuild immediately. Needed for `:read`, undo, and
+---   programmatic `nvim_buf_set_lines` (including test setups).
+--- - **Insert mode**: return `"="` ("keep previous level") for every line.
+---   This tells Neovim's fold engine "nothing changed" — a fast path that
+---   skips fold state recalculation entirely. The fold map catches up on
+---   CursorHold via invalidate_folds.
+---
+---The `"="` return during insert mode means folds are visually stale while
+---typing. This is acceptable because fold boundaries (role markers, tool
+---blocks) rarely change mid-keystroke, and any inaccuracy is corrected the
+---moment the user pauses (CursorHold fires after `updatetime` ms).
 ---@param lnum integer
 ---@return string
 function M.get_fold_level(lnum)
   local bufnr = vim.api.nvim_get_current_buf()
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
   local conceal = vim.wo.conceallevel
-  if fold_map_cache.changedtick ~= tick or fold_map_cache.bufnr ~= bufnr or fold_map_cache.conceallevel ~= conceal then
+  if fold_map_cache.bufnr ~= bufnr or fold_map_cache.conceallevel ~= conceal then
+    local doc = parser.get_parsed_document(bufnr)
+    fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
+  elseif fold_map_cache.changedtick ~= tick then
+    local mode = vim.api.nvim_get_mode().mode
+    -- "=" tells Neovim "fold level unchanged from previous line evaluation",
+    -- which it fast-paths without updating fold state. Returning the cached
+    -- map value instead would force fold state recalculation for each line.
+    if mode == "i" or mode == "ic" or mode == "ix" or mode == "R" or mode == "Rc" or mode == "Rx" then
+      return "="
+    end
     local doc = parser.get_parsed_document(bufnr)
     fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
   end
@@ -581,24 +617,56 @@ function M.toggle_message_fold()
   end
 end
 
----Force Neovim to re-evaluate all fold levels for a buffer.
+---Rebuild the fold map and tell Neovim to re-evaluate fold levels.
+---Called from update_ui on CursorHold/CursorHoldI.
 ---
----Incremental fold recalculation only updates changed lines, but tool_use
----fold levels depend on distant tool_result segments — resetting foldmethod
----forces a complete re-evaluation. The fold map cache is also invalidated
----so get_fold_level rebuilds from the current AST even when changedtick
----has not advanced (e.g., update_ui on the same event loop tick).
+---## Why `set foldmethod=expr` is expensive
 ---
----Unconditionally sets foldmethod=expr rather than guarding on the current
----value: external view restoration (`:loadview` when `viewoptions` includes
----`folds`) silently switches foldmethod to `manual`, which would prevent
----foldexpr from being evaluated for new content. Re-asserting expr on every
----UI cycle ensures self-healing regardless of session/view persistence.
+---`set foldmethod=expr` forces Neovim to call the foldexpr callback for
+---every visible line. Even if get_fold_level returns instantly, Neovim's
+---C-level fold engine must process the returned level string, update the
+---fold tree, and recalculate the display. On a 5000-line buffer with ~300
+---visible lines, this costs 50-100ms (profiled May 2025). Doing it on
+---every CursorHoldI (which fires every `updatetime` ms during pauses in
+---insert mode) makes typing feel sluggish.
+---
+---## Strategy: skip redundant re-evaluations
+---
+--- 1. **Already current**: if changedtick hasn't advanced, the fold map is
+---    already built — skip the rebuild AND the `set foldmethod=expr`. Only
+---    re-assert foldmethod if something external switched it away from
+---    `expr` (e.g., `:loadview` restoring `foldmethod=manual`).
+---
+--- 2. **Changed in insert mode**: rebuild the fold map (cheap, ~3ms) so
+---    it's ready for the next normal-mode evaluation, but SKIP the
+---    `set foldmethod=expr` re-assertion (expensive). get_fold_level is
+---    already returning `"="` during insert mode, so Neovim's fold state
+---    won't pick up the new map until the user leaves insert mode anyway.
+---
+--- 3. **Changed in normal mode**: full rebuild + re-assert. This handles
+---    undo, `:read`, streaming content, and the first CursorHold after
+---    leaving insert mode.
 ---@param bufnr integer
 function M.invalidate_folds(bufnr)
-  invalidate_cache()
   local winid = vim.fn.bufwinid(bufnr)
-  if winid ~= -1 then
+  if winid == -1 then
+    return
+  end
+  local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+  local conceal = vim.wo.conceallevel
+  local foldmethod_ok = vim.wo[winid].foldmethod == "expr"
+  -- Path 1: fold map already current — only fix foldmethod if overridden.
+  if fold_map_cache.bufnr == bufnr and fold_map_cache.changedtick == tick and fold_map_cache.conceallevel == conceal then
+    if not foldmethod_ok then
+      vim.fn.win_execute(winid, "set foldmethod=expr")
+    end
+    return
+  end
+  -- Paths 2 & 3: rebuild fold map, conditionally re-assert foldmethod.
+  local doc = parser.get_parsed_document(bufnr)
+  fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
+  local mode = vim.api.nvim_get_mode().mode
+  if not foldmethod_ok or (mode ~= "i" and mode ~= "ic" and mode ~= "ix" and mode ~= "R" and mode ~= "Rc" and mode ~= "Rx") then
     vim.fn.win_execute(winid, "set foldmethod=expr")
   end
 end
