@@ -108,6 +108,58 @@ describe("UI Fence Brackets", function()
     end)
   end)
 
+  describe("resolve_fence_highlights", function()
+    it("returns nil for non-chat buffers", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "markdown"
+      highlight.strip_fence_conceal()
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = 0, scope = "local" })
+
+      local bar_hl, label_hl = ui.resolve_fence_highlights(bufnr, vim.api.nvim_get_current_win(), 0)
+      assert.is_nil(bar_hl)
+      assert.is_nil(label_hl)
+    end)
+
+    it("returns nil when conceal patch is inactive", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = 0, scope = "local" })
+
+      local bar_hl, label_hl = ui.resolve_fence_highlights(bufnr, vim.api.nvim_get_current_win(), 0)
+      assert.is_nil(bar_hl)
+      assert.is_nil(label_hl)
+    end)
+
+    it("returns nil when conceallevel < 2", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      highlight.strip_fence_conceal()
+
+      vim.api.nvim_set_option_value("conceallevel", 0, { win = 0, scope = "local" })
+      local bar_hl = ui.resolve_fence_highlights(bufnr, vim.api.nvim_get_current_win(), 0)
+      assert.is_nil(bar_hl, "nil at conceallevel=0")
+
+      vim.api.nvim_set_option_value("conceallevel", 1, { win = 0, scope = "local" })
+      bar_hl = ui.resolve_fence_highlights(bufnr, vim.api.nvim_get_current_win(), 0)
+      assert.is_nil(bar_hl, "nil at conceallevel=1")
+    end)
+
+    it("returns default highlight groups when all gates pass", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      highlight.strip_fence_conceal()
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = 0, scope = "local" })
+
+      local bar_hl, label_hl = ui.resolve_fence_highlights(bufnr, vim.api.nvim_get_current_win(), 0)
+      assert.are.equal("FlemmaFenceBar", bar_hl)
+      assert.are.equal("FlemmaFenceLabel", label_hl)
+    end)
+  end)
+
   describe("restore_highlighter_conceal", function()
     it("is a no-op when fence_conceal_patched is false", function()
       assert.is_false(highlight.is_fence_conceal_patched())

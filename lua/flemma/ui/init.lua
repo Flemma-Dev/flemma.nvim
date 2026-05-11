@@ -55,6 +55,38 @@ function M.build_fence_virt_text(line, bar_hl, label_hl)
   return { { bar, bar_hl } }
 end
 
+---Resolve the highlight groups for a fence overlay on the given row.
+---Returns nil when fence overlays should not be shown (wrong filetype,
+---conceal patch inactive, conceallevel too low, or line is not a fence).
+---@param bufnr integer
+---@param winid integer
+---@param row integer 0-indexed line number
+---@return string|nil bar_hl
+---@return string|nil label_hl
+function M.resolve_fence_highlights(bufnr, winid, row)
+  if vim.bo[bufnr].filetype ~= "chat" then
+    return nil, nil
+  end
+  if not highlight.is_fence_conceal_patched() then
+    return nil, nil
+  end
+  local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
+  if win_cl < 2 then
+    return nil, nil
+  end
+  local bar_hl = "FlemmaFenceBar"
+  local label_hl = "FlemmaFenceLabel"
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.cursorline_prev_row == row and buffer_state.cursorline_hl_group then
+    local variants = highlight.get_fence_cursorline_map()[buffer_state.cursorline_hl_group]
+    if variants then
+      bar_hl = variants[bar_hl] or bar_hl
+      label_hl = variants[label_hl] or label_hl
+    end
+  end
+  return bar_hl, label_hl
+end
+
 ---Register (or re-register) the decoration provider that places ephemeral
 ---fence overlay extmarks at draw time. Because marks are ephemeral they are
 ---re-evaluated on every redraw — no persistent state to invalidate when the
@@ -70,25 +102,16 @@ function M.setup_fence_decoration_provider()
       end
     end,
     on_line = function(_, winid, bufnr, row)
-      local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
-      if win_cl < 2 then
+      local bar_hl, label_hl = M.resolve_fence_highlights(bufnr, winid, row)
+      if not bar_hl then
         return
       end
       local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
       if not line then
         return
       end
-      local bar_hl = "FlemmaFenceBar"
-      local label_hl = "FlemmaFenceLabel"
-      -- Apply WCAG contrast-adjusted highlights when cursor is on this line
-      local buffer_state = state.get_buffer_state(bufnr)
-      if buffer_state.cursorline_prev_row == row and buffer_state.cursorline_hl_group then
-        local variants = highlight.get_fence_cursorline_map()[buffer_state.cursorline_hl_group]
-        if variants then
-          bar_hl = variants[bar_hl] or bar_hl
-          label_hl = variants[label_hl] or label_hl
-        end
-      end
+      ---@cast bar_hl string
+      ---@cast label_hl string
       local chunks = M.build_fence_virt_text(line, bar_hl, label_hl)
       if chunks then
         vim.api.nvim_buf_set_extmark(bufnr, fence_ns, row, 0, {
