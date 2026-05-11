@@ -266,4 +266,17 @@ describe("UI Fence Brackets", function()
       end
     end)
   end)
+
+  describe("fence CursorLine contrast swap", function()
+    it("should expose fence_conceal_patched accessor", function()
+      assert.is_false(highlight.is_fence_conceal_patched())
+      highlight.strip_fence_conceal()
+      assert.is_true(highlight.is_fence_conceal_patched())
+    end)
+
+    it("should expose fence cursorline map accessor", function()
+      local map = highlight.get_fence_cursorline_map()
+      assert.is_table(map)
+    end)
+  end)
 end)

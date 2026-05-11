@@ -28,6 +28,11 @@ local function get_hl_color(group_name, attr)
   return nil
 end
 
+local FENCE_CURSORLINE_CONTRAST = 4.5
+
+---@type table<string, table<string, string>>
+local fence_cursorline_map = {}
+
 ---Walk a chain of highlight group names and return the first group whose
 ---resolved highlight definition provides BOTH a foreground and a background
 ---colour. Matches the "complete" criterion used by the usage bar and
@@ -325,6 +330,44 @@ local function setup_cursorline_highlights()
 
     hl_opts.default = true
     vim.api.nvim_set_hl(0, cl_group_name, hl_opts)
+  end
+
+  -- Precompute contrast-adjusted fence highlight groups for CursorLine overlays.
+  -- For each role's CursorLine variant bg, check if the fence fg meets WCAG 4.5:1.
+  -- Only create adjusted groups where contrast fails — the map stays empty when
+  -- the colorscheme already provides sufficient contrast, making runtime cost zero.
+  fence_cursorline_map = {}
+  local fence_source_groups = { "FlemmaFenceBar", "FlemmaFenceLabel" }
+  ---@type table<string, string|nil>
+  local fence_fgs = {}
+  for _, group in ipairs(fence_source_groups) do
+    fence_fgs[group] = get_hl_color(group, "fg")
+  end
+
+  for _, base_group in ipairs(base_groups) do
+    local cl_group_name = base_group .. "CursorLine"
+    local cl_variant_bg = get_hl_color(cl_group_name, "bg")
+    if not cl_variant_bg then
+      goto continue_fence
+    end
+
+    ---@type table<string, string>
+    local variants = {}
+    for _, fence_group in ipairs(fence_source_groups) do
+      local fg = fence_fgs[fence_group]
+      if fg and color.contrast_ratio(fg, cl_variant_bg) < FENCE_CURSORLINE_CONTRAST then
+        local adjusted_fg = color.ensure_contrast(fg, cl_variant_bg, FENCE_CURSORLINE_CONTRAST)
+        local variant_name = fence_group .. "On" .. cl_group_name
+        vim.api.nvim_set_hl(0, variant_name, { fg = adjusted_fg, default = true })
+        variants[fence_group] = variant_name
+      end
+    end
+
+    if next(variants) then
+      fence_cursorline_map[cl_group_name] = variants
+    end
+
+    ::continue_fence::
   end
 end
 
@@ -630,6 +673,16 @@ local function strip_fence_conceal_directives(lang, query_name)
 end
 
 local fence_conceal_patched = false
+
+---@return boolean
+function M.is_fence_conceal_patched()
+  return fence_conceal_patched
+end
+
+---@return table<string, table<string, string>>
+function M.get_fence_cursorline_map()
+  return fence_cursorline_map
+end
 
 ---Strip fenced code block conceal from the markdown treesitter highlights query.
 ---Idempotent — safe to call on every .chat BufRead; only patches once.

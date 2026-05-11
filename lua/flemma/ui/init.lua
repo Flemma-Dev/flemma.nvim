@@ -249,10 +249,30 @@ function M.apply_line_highlights(bufnr, doc)
   state.get_buffer_state(bufnr).cursorline_prev_row = nil
 end
 
+---Restore fence extmarks that were swapped for CursorLine contrast.
+---@param bufnr integer
+---@param buffer_state flemma.state.BufferState
+local function restore_fence_cursorline(bufnr, buffer_state)
+  local originals = buffer_state.cursorline_fence_originals
+  if not originals then
+    return
+  end
+  buffer_state.cursorline_fence_originals = nil
+  for _, orig in ipairs(originals) do
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, fence_ns, orig.row, 0, {
+      id = orig.id,
+      virt_text = orig.virt_text,
+      virt_text_pos = "overlay",
+      hl_mode = "combine",
+    })
+  end
+end
+
 ---Remove the CursorLine overlay extmark for a buffer.
 ---@param bufnr integer
 local function remove_cursorline(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
+  restore_fence_cursorline(bufnr, buffer_state)
   local eid = buffer_state.cursorline_extmark_id
   if eid then
     pcall(vim.api.nvim_buf_del_extmark, bufnr, cursorline_ns, eid)
@@ -310,6 +330,9 @@ local function update_cursorline(bufnr)
   end
   buffer_state.cursorline_prev_row = row
 
+  -- Restore fence extmarks on the previous cursor row before evaluating the new one
+  restore_fence_cursorline(bufnr, buffer_state)
+
   -- Find the line highlight group at the cursor row
   ---@type string|nil
   local target_hl_group
@@ -359,6 +382,37 @@ local function update_cursorline(bufnr)
       opts.id = eid
     end
     buffer_state.cursorline_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, cursorline_ns, row, 0, opts)
+
+    -- Swap fence extmark highlights for WCAG contrast on CursorLine
+    if highlight.is_fence_conceal_patched() then
+      local win_cl = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
+      if win_cl >= 2 then
+        local variants = highlight.get_fence_cursorline_map()[target_hl_group]
+        if variants then
+          local fence_marks = vim.api.nvim_buf_get_extmarks(bufnr, fence_ns, { row, 0 }, { row, -1 }, { details = true })
+          local originals = {}
+          for _, mark in ipairs(fence_marks) do
+            local details = mark[4]
+            if details and details.virt_text then
+              table.insert(originals, { id = mark[1], row = mark[2], virt_text = details.virt_text })
+              local swapped = {}
+              for _, chunk in ipairs(details.virt_text) do
+                table.insert(swapped, { chunk[1], variants[chunk[2]] or chunk[2] })
+              end
+              vim.api.nvim_buf_set_extmark(bufnr, fence_ns, mark[2], mark[3], {
+                id = mark[1],
+                virt_text = swapped,
+                virt_text_pos = "overlay",
+                hl_mode = "combine",
+              })
+            end
+          end
+          if #originals > 0 then
+            buffer_state.cursorline_fence_originals = originals
+          end
+        end
+      end
+    end
   else
     remove_cursorline(bufnr)
   end

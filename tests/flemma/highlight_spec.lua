@@ -651,6 +651,48 @@ describe("CursorLine overlay highlights", function()
       end
     end)
   end)
+
+  describe("fence CursorLine contrast variants", function()
+    it("should create adjusted fence groups when contrast fails", function()
+      -- Set a fence fg that will fail contrast against the assistant CursorLine bg
+      vim.api.nvim_set_hl(0, "FlemmaFenceLabel", { fg = 0x303030 })
+      vim.api.nvim_set_hl(0, "FlemmaFenceBar", { fg = 0x303030 })
+      -- Clear any existing variants
+      vim.api.nvim_set_hl(0, "FlemmaFenceLabelOnFlemmaLineAssistantCursorLine", {})
+      vim.api.nvim_set_hl(0, "FlemmaFenceBarOnFlemmaLineAssistantCursorLine", {})
+
+      setup_and_apply()
+
+      local map = highlight.get_fence_cursorline_map()
+      local assistant_variants = map["FlemmaLineAssistantCursorLine"]
+      assert.is_truthy(assistant_variants, "should have variants for assistant CursorLine")
+
+      local label_variant = vim.api.nvim_get_hl(0, { name = assistant_variants.FlemmaFenceLabel, link = false })
+      assert.is_not_nil(label_variant.fg, "adjusted label variant should have fg")
+      assert.are_not.equal(0x303030, label_variant.fg, "adjusted fg should differ from original")
+    end)
+
+    it("should not create variants when contrast already passes", function()
+      -- Set a high-contrast fence fg (white on dark)
+      vim.api.nvim_set_hl(0, "FlemmaFenceLabel", { fg = 0xffffff })
+      vim.api.nvim_set_hl(0, "FlemmaFenceBar", { fg = 0xffffff })
+
+      setup_and_apply()
+
+      local map = highlight.get_fence_cursorline_map()
+      assert.is_falsy(map["FlemmaLineAssistantCursorLine"], "should not create variants when contrast passes")
+    end)
+
+    it("should return empty map when CursorLine has no attributes", function()
+      vim.api.nvim_set_hl(0, "CursorLine", {})
+      vim.api.nvim_set_hl(0, "FlemmaFenceLabel", { fg = 0x303030 })
+
+      setup_and_apply()
+
+      local map = highlight.get_fence_cursorline_map()
+      assert.are.same({}, map)
+    end)
+  end)
 end)
 
 describe("flemma.highlight.resolve_first_complete", function()
