@@ -1694,6 +1694,48 @@ describe("UI Folding", function()
       local meta_chunk = chunks[#chunks]
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
     end)
+
+    it("should not include trailing fence delimiter in frontmatter fold text", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "model = 'claude-sonnet-4-20250514'",
+        "temperature = 0.7",
+        "```",
+        "",
+        "@You:",
+        "Hello",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("1,4 foldclose")
+
+      vim.v.foldstart = 1
+      vim.v.foldend = 4
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("```lua"), "Fold text should start with ```lua prefix")
+      assert.is_truthy(text:match("%(4 lines%)"), "Fold text should show line count")
+
+      -- The trailing ``` fence should not appear in the fold text
+      local backtick_count = 0
+      for _ in text:gmatch("```") do
+        backtick_count = backtick_count + 1
+      end
+      assert.are.equal(1, backtick_count, "Should have exactly one ``` (prefix only, no trailing fence)")
+    end)
   end)
 
   describe("fold_completed_blocks", function()

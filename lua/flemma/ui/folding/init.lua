@@ -261,14 +261,13 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
   local fm = doc.frontmatter
   if fm and fm.position.start_line == foldstart_lnum then
     local prefix = "```" .. fm.language .. " "
-    local suffix_full = " ``` " .. suffix
+    local suffix_full = " " .. suffix
     local fold_preview =
       preview.format_content_preview(fm.code, text_width - str.strwidth(prefix) - str.strwidth(suffix_full))
     if fold_preview ~= "" then
       return {
         { prefix, "Comment" },
-        { fold_preview, "Comment" },
-        { " ``` ", "Comment" },
+        { fold_preview .. " ", "Comment" },
         { suffix, "FlemmaFoldMeta" },
       }
     else
