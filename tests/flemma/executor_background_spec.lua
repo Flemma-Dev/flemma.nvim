@@ -675,4 +675,175 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("re-adopt background job on duplicate tool_id", function()
+    local function make_readopt_buffer()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `test_readopt_tool` (`tool_readopt`)",
+        "",
+        "```json",
+        '{"cmd": "test"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_readopt` (approved)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+      return bufnr
+    end
+
+    local function make_readopt_context()
+      ---@type flemma.tools.ToolContext
+      return {
+        tool_id = "tool_readopt",
+        tool_name = "test_readopt_tool",
+        input = { cmd = "test" },
+        node = {
+          kind = "tool_use",
+          id = "tool_readopt",
+          name = "test_readopt_tool",
+          input = {},
+          position = { start_line = 2, end_line = 6 },
+        },
+        start_line = 2,
+        end_line = 6,
+      }
+    end
+
+    it("re-adopts existing background job instead of rejecting", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_readopt_tool", {
+        name = "test_readopt_tool",
+        description = "Test tool for re-adopt",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      local bufnr = make_readopt_buffer()
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_readopt"] = {
+          tool_id = "tool_readopt",
+          tool_name = "test_readopt_tool",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = nil,
+          started_at = 1000,
+          completed = false,
+          placeholder_modified = true,
+          job_id = "job_original",
+        },
+      }
+
+      local context = make_readopt_context()
+      local ok, err = executor.execute(bufnr, context, { background = true })
+      assert.is_true(ok, "expected success, got error: " .. tostring(err))
+      assert.is_nil(err)
+
+      local entry = buffer_state.pending_executions["tool_readopt"]
+      assert.truthy(entry)
+      assert.equals("job_original", entry.job_id, "job_id must remain the original, not a new allocation")
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local header_line = lines[9]
+      assert.truthy(header_line:match("job=job_original"), "header should reference original job: " .. header_line)
+      assert.is_falsy(header_line:match("%(approved%)"), "approved status should be cleared: " .. header_line)
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("re-adopts completed background job whose result is queued", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_readopt_tool", {
+        name = "test_readopt_tool",
+        description = "Test tool for re-adopt",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      local bufnr = make_readopt_buffer()
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_readopt"] = {
+          tool_id = "tool_readopt",
+          tool_name = "test_readopt_tool",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = nil,
+          started_at = 1000,
+          completed = true,
+          placeholder_modified = true,
+          job_id = "job_completed",
+        },
+      }
+
+      local context = make_readopt_context()
+      local ok, err = executor.execute(bufnr, context, { background = true })
+      assert.is_true(ok, "expected success for completed job, got error: " .. tostring(err))
+
+      local entry = buffer_state.pending_executions["tool_readopt"]
+      assert.truthy(entry)
+      assert.equals("job_completed", entry.job_id, "job_id must remain the completed job's id")
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("rejects duplicate foreground execution", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_readopt_tool", {
+        name = "test_readopt_tool",
+        description = "Test tool for re-adopt",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      local bufnr = make_readopt_buffer()
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_readopt"] = {
+          tool_id = "tool_readopt",
+          tool_name = "test_readopt_tool",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = nil,
+          started_at = 1000,
+          completed = false,
+          placeholder_modified = true,
+        },
+      }
+
+      local context = make_readopt_context()
+      local ok, err = executor.execute(bufnr, context, { background = true })
+      assert.is_false(ok)
+      assert.truthy(err:match("already executing"))
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

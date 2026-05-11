@@ -503,6 +503,39 @@ function M.execute(bufnr, context, opts)
   -- Check for duplicate execution
   local pending = get_buffer_pending(bufnr)
   if pending[tool_id] then
+    local existing_entry = pending[tool_id]
+    if existing_entry.job_id then
+      -- Background job already running for this tool_id (undo + resend scenario).
+      -- Re-adopt: link the fresh (approved) placeholder to the existing job.
+      log.debug(
+        "executor: re-adopting existing job "
+          .. existing_entry.job_id
+          .. " for "
+          .. tool_id
+          .. " ("
+          .. existing_entry.tool_name
+          .. ") — started_at="
+          .. existing_entry.started_at
+          .. " completed="
+          .. tostring(existing_entry.completed)
+      )
+      injector.clear_header_status(bufnr, tool_id)
+      local header_ok, header_err = injector.set_header_modeline(bufnr, tool_id, "job=" .. existing_entry.job_id)
+      if not header_ok then
+        log.warn("executor: failed to set re-adopt header for " .. tool_id .. ": " .. (header_err or "unknown"))
+      end
+      local placeholder_text
+      if is_tool_available("flemma:jobs:status", bufnr) then
+        placeholder_text = messages.render("job-executing--tracked", { job_id = existing_entry.job_id })
+      else
+        placeholder_text = messages.render("job-executing--untracked")
+      end
+      local fence_ok, fence_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+      if not fence_ok then
+        log.warn("executor: failed to set re-adopt placeholder for " .. tool_id .. ": " .. (fence_err or "unknown"))
+      end
+      return true, nil
+    end
     return false, "Tool " .. tool_id .. " is already executing"
   end
 

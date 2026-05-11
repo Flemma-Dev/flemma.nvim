@@ -62,44 +62,99 @@ local function drain_and_inject_completions(bufnr)
   local user_is_typing = false
 
   for _, item in ipairs(items) do
-    local placement = injector.append_job_result(bufnr, item.job_id, item.result)
-    log.debug(
-      "drain_and_inject_completions(): injected "
-        .. item.job_id
-        .. " ("
-        .. item.tool_name
-        .. ", "
-        .. item.tool_id
-        .. ") placement="
-        .. placement
-        .. (item.result.success and "" or " [error]")
-    )
-    if placement == "displaced" then
-      user_is_typing = true
-      log.debug("drain_and_inject_completions(): user is typing in last @You block, skipping auto-continue")
-    end
-
-    local job_doc = parser.get_parsed_document(bufnr)
-    local job_seg = query.find_job_result(job_doc, item.job_id)
-    if job_seg and job_seg.position then
-      local header_line = job_seg.position.start_line
-      indicators.show_job_result_indicator(bufnr, item.job_id, header_line, item.result.success)
-      indicators.schedule_tool_indicator_clear(bufnr, item.job_id, 1500)
-    end
-
+    -- Detect orphaned deliveries: after undo the tool_result placeholder with
+    -- job=<id> disappears. If a pending_executions entry still tracks this job
+    -- but the buffer no longer references it, silently drop the result.
+    local document = parser.get_parsed_document(bufnr)
+    local tool_result_segment = query.find_tool_result_for_job(document, item.job_id)
     local buffer_state = state.get_buffer_state(bufnr)
-    if buffer_state.pending_executions then
-      buffer_state.pending_executions[item.tool_id] = nil
-    end
+    local pending_execution = buffer_state.pending_executions and buffer_state.pending_executions[item.tool_id]
+    local is_orphaned = not tool_result_segment and pending_execution and pending_execution.job_id == item.job_id
 
-    hooks.dispatch("job:completed", {
-      bufnr = bufnr,
-      job_id = item.job_id,
-      tool_id = item.tool_id,
-      tool_name = item.tool_name,
-      success = item.result.success,
-      active_count = executor.count_active_jobs(bufnr),
-    })
+    if is_orphaned then
+      ---@cast pending_execution flemma.tools.PendingExecution
+      log.debug(
+        "drain_and_inject_completions(): dropping orphaned job "
+          .. item.job_id
+          .. " ("
+          .. item.tool_name
+          .. ", "
+          .. item.tool_id
+          .. ") — no tool_result placeholder with job="
+          .. item.job_id
+          .. " found in buffer "
+          .. bufnr
+          .. "; the placeholder was likely undone"
+      )
+      log.debug(
+        "drain_and_inject_completions(): cleaning up pending_executions["
+          .. item.tool_id
+          .. "] for orphaned job "
+          .. item.job_id
+          .. " (started_at="
+          .. pending_execution.started_at
+          .. " completed="
+          .. tostring(pending_execution.completed)
+          .. ")"
+      )
+      buffer_state.pending_executions[item.tool_id] = nil
+      hooks.dispatch("job:completed", {
+        bufnr = bufnr,
+        job_id = item.job_id,
+        tool_id = item.tool_id,
+        tool_name = item.tool_name,
+        success = item.result.success,
+        active_count = executor.count_active_jobs(bufnr),
+      })
+    else
+      if tool_result_segment then
+        log.debug(
+          "drain_and_inject_completions(): tool_result placeholder for job "
+            .. item.job_id
+            .. " found at line "
+            .. tool_result_segment.position.start_line
+            .. ", proceeding with injection"
+        )
+      end
+
+      local placement = injector.append_job_result(bufnr, item.job_id, item.result)
+      log.debug(
+        "drain_and_inject_completions(): injected "
+          .. item.job_id
+          .. " ("
+          .. item.tool_name
+          .. ", "
+          .. item.tool_id
+          .. ") placement="
+          .. placement
+          .. (item.result.success and "" or " [error]")
+      )
+      if placement == "displaced" then
+        user_is_typing = true
+        log.debug("drain_and_inject_completions(): user is typing in last @You block, skipping auto-continue")
+      end
+
+      local job_doc = parser.get_parsed_document(bufnr)
+      local job_seg = query.find_job_result(job_doc, item.job_id)
+      if job_seg and job_seg.position then
+        local header_line = job_seg.position.start_line
+        indicators.show_job_result_indicator(bufnr, item.job_id, header_line, item.result.success)
+        indicators.schedule_tool_indicator_clear(bufnr, item.job_id, 1500)
+      end
+
+      if buffer_state.pending_executions then
+        buffer_state.pending_executions[item.tool_id] = nil
+      end
+
+      hooks.dispatch("job:completed", {
+        bufnr = bufnr,
+        job_id = item.job_id,
+        tool_id = item.tool_id,
+        tool_name = item.tool_name,
+        success = item.result.success,
+        active_count = executor.count_active_jobs(bufnr),
+      })
+    end
   end
 
   if #items > 0 then

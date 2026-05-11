@@ -711,4 +711,134 @@ describe("job completion drain", function()
 
     core.send_or_execute = real_send
   end)
+
+  it("drops orphaned job result when tool_result placeholder was undone", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({})
+    local executor = require("flemma.tools.executor")
+    local bridge = require("flemma.bridge")
+    local st = require("flemma.state")
+
+    -- Buffer does NOT contain a tool_result with job=job_orphan — simulates undo
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    -- Stale pending entry that survived the undo (in-memory state is not reverted)
+    local buffer_state = st.get_buffer_state(bufnr)
+    buffer_state.pending_executions = {
+      ["tool_01"] = {
+        tool_id = "tool_01",
+        tool_name = "bash",
+        bufnr = bufnr,
+        start_line = 2,
+        end_line = 6,
+        started_at = os.time(),
+        completed = true,
+        placeholder_modified = true,
+        job_id = "job_orphan",
+      },
+    }
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_orphan",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "orphaned output" },
+    })
+
+    bridge.drain_job_completions(bufnr)
+
+    -- Result must NOT appear in the buffer — the placeholder was undone
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local joined = table.concat(lines, "\n")
+    assert.is_falsy(
+      joined:match("%*%*Job Result:%*%*%s*`job_orphan`"),
+      "Orphaned job result must not be injected into the buffer"
+    )
+    assert.is_falsy(joined:match("orphaned output"), "Orphaned output must not appear in the buffer")
+
+    -- Stale pending entry must be cleaned up
+    assert.is_nil(
+      buffer_state.pending_executions["tool_01"],
+      "Stale pending_executions entry must be removed after orphaned drop"
+    )
+  end)
+
+  it("injects job result normally when no pending entry exists", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({})
+    local executor = require("flemma.tools.executor")
+    local bridge = require("flemma.bridge")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    -- No pending_executions entry — backward-compatible direct enqueue path
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_direct1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "direct enqueue output" },
+    })
+
+    bridge.drain_job_completions(bufnr)
+
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local joined = table.concat(lines, "\n")
+    assert.truthy(
+      joined:match("%*%*Job Result:%*%*%s*`job_direct1`"),
+      "Job result must be injected when no pending entry exists"
+    )
+    assert.truthy(joined:match("direct enqueue output"), "Job output must appear in the buffer")
+  end)
 end)
