@@ -18,13 +18,13 @@ local COUNTDOWN_FRAMES = spinners.FRAMES.countdown
 local EXECUTING_FRAMES = spinners.FRAMES.tool
 local EXECUTING_SPEED = spinners.SPEED.tool
 
+local COUNTDOWN_SPEED = spinners.SPEED.countdown
+
 ---@class flemma.ui.jobs.BufferState
 ---@field bar? table Bar handle
 ---@field count integer Active background job count
----@field spinner_timer? integer vim.fn timer id for executing animation
----@field spinner_tick integer Current spinner tick counter
----@field resume_timer? integer vim.fn timer id for countdown animation
----@field resume_frame integer Current countdown frame index
+---@field animation_timer? integer vim.fn timer id for the shared 100ms tick loop
+---@field animation_tick integer Current tick counter (drives all frame selection)
 ---@field resume_delay_ms? integer Total resume delay in milliseconds
 ---@field resume_started_at? integer High-resolution start timestamp (vim.uv.hrtime)
 
@@ -36,30 +36,25 @@ local buffer_states = {}
 local function get_state(bufnr)
   local s = buffer_states[bufnr]
   if not s then
-    s = { count = 0, resume_frame = 0, spinner_tick = 0 }
+    s = { count = 0, animation_tick = 0 }
     buffer_states[bufnr] = s
   end
   return s
 end
 
 ---@param bufnr integer
-local function cancel_spinner_timer(bufnr)
+local function cancel_animation_timer(bufnr)
   local s = buffer_states[bufnr]
-  if s and s.spinner_timer then
-    vim.fn.timer_stop(s.spinner_timer)
-    s.spinner_timer = nil
-    s.spinner_tick = 0
+  if s and s.animation_timer then
+    vim.fn.timer_stop(s.animation_timer)
+    s.animation_timer = nil
+    s.animation_tick = 0
   end
 end
 
 ---@param bufnr integer
-local function cancel_resume_timer(bufnr)
+local function clear_resume(bufnr)
   local s = buffer_states[bufnr]
-  if s and s.resume_timer then
-    vim.fn.timer_stop(s.resume_timer)
-    s.resume_timer = nil
-    s.resume_frame = 0
-  end
   if s then
     s.resume_delay_ms = nil
     s.resume_started_at = nil
@@ -77,15 +72,14 @@ local function get_resume_remaining(s)
   return math.max(0, (s.resume_delay_ms - elapsed_ms) / 1000)
 end
 
----Get the current spinner icon for the executing animation.
+---Get the current frame for a spinner phase from the shared tick counter.
 ---@param s flemma.ui.jobs.BufferState
----@return string|nil
-local function get_spinner_icon(s)
-  if s.count <= 0 then
-    return nil
-  end
-  local frame_index = (math.floor(s.spinner_tick / EXECUTING_SPEED) % #EXECUTING_FRAMES) + 1
-  return EXECUTING_FRAMES[frame_index]
+---@param frames string[]
+---@param speed integer
+---@return string
+local function get_frame(s, frames, speed)
+  local frame_index = (math.floor(s.animation_tick / speed) % #frames) + 1
+  return frames[frame_index]
 end
 
 ---Build segments from current buffer state.
@@ -94,8 +88,8 @@ end
 local function build_segments(s)
   ---@type flemma.ui.bar.layout.Segment[]
   local segments = {}
-  if s.resume_frame > 0 then
-    local frame = COUNTDOWN_FRAMES[s.resume_frame] or COUNTDOWN_FRAMES[#COUNTDOWN_FRAMES]
+  if s.resume_started_at then
+    local frame = get_frame(s, COUNTDOWN_FRAMES, COUNTDOWN_SPEED)
     local remaining = string.format("%.1fs", get_resume_remaining(s))
     segments[#segments + 1] = {
       key = "resume",
@@ -106,11 +100,10 @@ local function build_segments(s)
   end
   if s.count > 0 then
     local label = s.count == 1 and "1 job" or (s.count .. " jobs")
-    local spinner = get_spinner_icon(s)
-    local text = spinner and (spinner .. " " .. label) or label
+    local frame = get_frame(s, EXECUTING_FRAMES, EXECUTING_SPEED)
     segments[#segments + 1] = {
       key = "jobs",
-      items = { { key = "count", text = text, priority = PRIORITY_COUNT } },
+      items = { { key = "count", text = frame .. " " .. label, priority = PRIORITY_COUNT } },
     }
   end
   return segments
@@ -143,20 +136,31 @@ local function ensure_bar(bufnr)
   end
 end
 
----Start the spinner animation timer for a buffer.
+---Start the shared animation timer for a buffer.
 ---@param bufnr integer
-local function start_spinner(bufnr)
+local function start_animation(bufnr)
   local s = get_state(bufnr)
-  if s.spinner_timer then
+  if s.animation_timer then
     return
   end
-  s.spinner_tick = 0
-  s.spinner_timer = vim.fn.timer_start(SPINNER_INTERVAL_MS, function()
+  s.animation_tick = 0
+  s.animation_timer = vim.fn.timer_start(SPINNER_INTERVAL_MS, function()
     local inner = buffer_states[bufnr]
-    if not inner or not inner.spinner_timer then
+    if not inner or not inner.animation_timer then
       return
     end
-    inner.spinner_tick = inner.spinner_tick + 1
+    inner.animation_tick = inner.animation_tick + 1
+    if inner.resume_started_at and get_resume_remaining(inner) <= 0 then
+      inner.resume_started_at = nil
+      inner.resume_delay_ms = nil
+    end
+    if inner.count <= 0 and not inner.resume_started_at then
+      cancel_animation_timer(bufnr)
+      if inner.bar and not inner.bar:is_dismissed() then
+        inner.bar:dismiss()
+      end
+      return
+    end
     if inner.bar and not inner.bar:is_dismissed() then
       inner.bar:set_segments(build_segments(inner))
     end
@@ -166,16 +170,14 @@ end
 ---@param bufnr integer
 local function refresh(bufnr)
   local s = get_state(bufnr)
-  if s.count > 0 or s.resume_frame > 0 then
+  if s.count > 0 or s.resume_started_at then
     ensure_bar(bufnr)
-    if s.count > 0 then
-      start_spinner(bufnr)
-    else
-      cancel_spinner_timer(bufnr)
+    start_animation(bufnr)
+  else
+    cancel_animation_timer(bufnr)
+    if s.bar and not s.bar:is_dismissed() then
+      s.bar:dismiss()
     end
-  elseif s.bar and not s.bar:is_dismissed() then
-    cancel_spinner_timer(bufnr)
-    s.bar:dismiss()
   end
 end
 
@@ -194,49 +196,26 @@ hooks.on("job:completed", function(data)
 end)
 
 hooks.on("autopilot:resume-scheduled", function(data)
-  local bufnr = data.bufnr
-  cancel_resume_timer(bufnr)
-  local s = get_state(bufnr)
-  s.resume_frame = 1
+  local s = get_state(data.bufnr)
   s.resume_delay_ms = data.delay_ms
   s.resume_started_at = vim.uv.hrtime()
-  ensure_bar(bufnr)
-  local frame_interval = math.max(1, math.floor(data.delay_ms / #COUNTDOWN_FRAMES))
-  s.resume_timer = vim.fn.timer_start(frame_interval, function()
-    local inner = buffer_states[bufnr]
-    if not inner or not inner.resume_timer then
-      return
-    end
-    inner.resume_frame = inner.resume_frame + 1
-    if inner.resume_frame > #COUNTDOWN_FRAMES then
-      inner.resume_timer = nil
-      inner.resume_frame = 0
-      refresh(bufnr)
-      return
-    end
-    if inner.bar and not inner.bar:is_dismissed() then
-      inner.bar:update({ segments = build_segments(inner) })
-    end
-  end, { ["repeat"] = #COUNTDOWN_FRAMES - 1 })
+  refresh(data.bufnr)
 end)
 
 hooks.on("autopilot:resume-cancelled", function(data)
-  cancel_resume_timer(data.bufnr)
+  clear_resume(data.bufnr)
   refresh(data.bufnr)
 end)
 
 hooks.on("autopilot:resumed", function(data)
-  cancel_resume_timer(data.bufnr)
-  local s = get_state(data.bufnr)
-  s.resume_frame = 0
+  clear_resume(data.bufnr)
   refresh(data.bufnr)
 end)
 
 ---Clean up all state for a buffer. Called from buffer cleanup hooks.
 ---@param bufnr integer
 function M.cleanup(bufnr)
-  cancel_spinner_timer(bufnr)
-  cancel_resume_timer(bufnr)
+  cancel_animation_timer(bufnr)
   local s = buffer_states[bufnr]
   if s and s.bar and not s.bar:is_dismissed() then
     s.bar:dismiss()

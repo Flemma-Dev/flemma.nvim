@@ -22,8 +22,6 @@ M.FRAMES = {
 -- stylua: ignore end
 
 --- Animation speed per phase — number of 100ms ticks per frame advance.
---- Phases driven by external timers (e.g. countdown) use 0 to signal
---- that the caller controls timing, not the 100ms tick loop.
 ---@type table<string, integer>
 M.SPEED = {
   waiting = 1,
@@ -31,7 +29,7 @@ M.SPEED = {
   streaming = 1,
   buffering = 2,
   tool = 2,
-  countdown = 0,
+  countdown = 1,
 }
 
 return M
