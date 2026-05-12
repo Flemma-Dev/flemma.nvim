@@ -17,13 +17,18 @@ local writequeue = require("flemma.buffer.writequeue")
 
 ---@alias flemma.state.ProgressPhase "waiting"|"thinking"|"streaming"|"buffering"
 
+---@class flemma.state.PendingSend
+---@field subscription flemma.readiness.Subscription
+---@field opts table
+---@field kind? "phase2"
+
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
 ---@field request_cancelled boolean Whether the current request has been cancelled
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
----@field pending_send? { subscription: flemma.readiness.Subscription, opts: table } Queued send awaiting async readiness
+---@field pending_send? flemma.state.PendingSend Queued send awaiting async readiness
 ---@field resume_delay_timer? uv.uv_timer_t Debounce timer for auto-continue after background job drain
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST

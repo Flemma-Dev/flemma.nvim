@@ -553,6 +553,11 @@ function M.execute(bufnr, context, opts)
     return false, "No executor found for tool: " .. tool_name
   end
 
+  local job_status_tool_available = false
+  if opts.background then
+    job_status_tool_available = is_tool_available("flemma:jobs:status", bufnr)
+  end
+
   -- Create pending entry
   pending[tool_id] = {
     tool_id = tool_id,
@@ -609,7 +614,7 @@ function M.execute(bufnr, context, opts)
       log.warn("executor: failed to set background header for " .. tool_id .. ": " .. (h_err or "unknown"))
     end
     local placeholder_text
-    if is_tool_available("flemma:jobs:status", bufnr) then
+    if job_status_tool_available then
       placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
     else
       placeholder_text = messages.render("job-executing--untracked")

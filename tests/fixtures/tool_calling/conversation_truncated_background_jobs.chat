@@ -1,0 +1,44 @@
+```lua
+flemma.opt.tools:append("calculator_async")
+flemma.opt.tools.auto_approve:append("calculator_async")
+flemma.opt.tools.max_concurrent = 4
+```
+@System:
+You are maintaining Flemma.nvim.
+
+Use calculator_async for arithmetic. Run bash commands in the background when checking the repository.
+
+@You:
+In this Flemma.nvim checkout, calculate 2+2 and 4+4, then check the Lua module count and the current git branch.
+
+@Assistant:
+
+**Tool Use:** `calculator_async` (`toolu_calc_2_plus_2`)
+
+```json
+{"delay":2000,"expression":"2 + 2"}
+```
+
+**Tool Use:** `calculator_async` (`toolu_calc_4_plus_4`)
+
+```json
+{"delay":2000,"expression":"4 + 4"}
+```
+
+**Tool Use:** `bash` (`toolu_count_lua_modules`)
+
+```json
+{"label":"counting Lua modules","command":"find lua/flemma -name '*.lua' | wc -l","background":true,"timeout":30}
+```
+
+**Tool Use:** `bash` (`toolu_git_branch`)
+
+```json
+{"label":"checking git branch","command":"git branch --show-current","background":true,"timeout":30}
+```
+
+<thinking>
+The user asked for two simple calculations and two repository checks.
+The calculations can run in the foreground.
+The repository checks can run as background bash jobs because the answer does not depend on them before continuing.
+</thinking>

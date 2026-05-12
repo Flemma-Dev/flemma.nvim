@@ -700,6 +700,57 @@ local function advance_phase2(opts)
   })
 end
 
+---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
+local function attempt_advance_phase2(opts)
+  local bufnr = opts.bufnr
+  local buffer_state = state.get_buffer_state(bufnr)
+  local existing_pending = buffer_state.pending_send
+  if existing_pending and existing_pending.kind == "phase2" then
+    buffer_state.pending_send = nil
+  end
+
+  local ok, err = pcall(advance_phase2, opts)
+  if ok then
+    return
+  end
+
+  if not readiness.is_suspense(err) then
+    state.unlock_buffer(bufnr)
+    notify.error(tostring(err))
+    return
+  end
+
+  ---@cast err flemma.readiness.Suspense
+  local deferred = notify.delay(600).warn(err.message)
+  ---@type flemma.state.PendingSend
+  local pending_entry
+  local subscription = err.boundary:subscribe(function(result)
+    deferred.cancel()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    local current_state = state.get_buffer_state(bufnr)
+    if current_state.pending_send ~= pending_entry then
+      return
+    end
+    if not result or not result.ok then
+      current_state.pending_send = nil
+      state.unlock_buffer(bufnr)
+      local diagnostic_message = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
+      notify.error("Could not satisfy dependency: " .. (diagnostic_message or err.message))
+      return
+    end
+    attempt_advance_phase2(pending_entry.opts)
+  end)
+
+  pending_entry = {
+    subscription = subscription,
+    opts = opts,
+    kind = "phase2",
+  }
+  buffer_state.pending_send = pending_entry
+end
+
 ---Unified dispatch: three-phase advance algorithm.
 ---Phase 1 (Categorize): Find unmatched tool_use blocks → run approval → inject tool_result placeholders with a (status) suffix.
 ---Phase 2 (Execute): Process tool_result blocks by lifecycle status (approved/denied/rejected/pending).
@@ -810,14 +861,14 @@ function M.send_or_execute(opts)
       user_initiated = opts.user_initiated,
     }
     writequeue.schedule(bufnr, function()
-      advance_phase2(phase2_opts)
+      attempt_advance_phase2(phase2_opts)
     end)
     return
   end
 
   -- Phase 1 had nothing to categorize — run Phase 2 directly
   -- (handles existing lifecycle-status tool_result blocks from a previous Phase 1)
-  advance_phase2({
+  attempt_advance_phase2({
     on_request_complete = opts.on_request_complete,
     bufnr = bufnr,
     evaluated_frontmatter = evaluated_frontmatter,
