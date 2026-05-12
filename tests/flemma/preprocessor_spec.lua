@@ -462,6 +462,11 @@ describe("flemma.preprocessor", function()
         assert.equals("No, skip", err.options.no_label)
       end)
 
+      it("tostring produces a human-readable label for log output", function()
+        local c = context_module.Confirmation.new("test:id", "Do the thing?")
+        assert.equals("Confirmation(test:id: Do the thing?)", tostring(c))
+      end)
+
       it("is_confirmation returns false for non-confirmation values", function()
         assert.is_false(context_module.is_confirmation(nil))
         assert.is_false(context_module.is_confirmation("string"))

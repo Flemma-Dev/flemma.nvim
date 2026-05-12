@@ -113,6 +113,9 @@ M.Boundary = Boundary
 ---@field _is_suspense boolean
 local Suspense = {}
 Suspense.__index = Suspense
+Suspense.__tostring = function(self)
+  return "Suspense(" .. self.message .. ")"
+end
 
 ---@param message string Human-readable description of what is being awaited
 ---@param boundary flemma.readiness.Boundary

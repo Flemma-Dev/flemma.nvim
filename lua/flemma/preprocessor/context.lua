@@ -20,6 +20,9 @@ local state = require("flemma.state")
 ---@field _is_confirmation boolean Always true — sentinel for is_confirmation()
 local Confirmation = {}
 Confirmation.__index = Confirmation
+Confirmation.__tostring = function(self)
+  return "Confirmation(" .. self.id .. ": " .. self.prompt .. ")"
+end
 
 --- Create a new Confirmation instance.
 ---@param id string Stable identifier for answer caching
