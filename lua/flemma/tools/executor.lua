@@ -306,6 +306,8 @@ local function do_completion(bufnr, tool_id, result, opts)
     })
     log.debug("executor: job " .. entry.job_id .. " (tool=" .. tool_id .. ") completed, queued for delivery")
 
+    maybe_unlock_buffer(bufnr)
+
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return

@@ -382,6 +382,52 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    it("unlocks buffer after background job completes", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_lock_01`)",
+        "",
+        "```json",
+        '{"command": "sleep 10"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_lock_01` (job=job_lock1)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_lock_01"] = {
+          tool_id = "tool_lock_01",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+          job_id = "job_lock1",
+        },
+      }
+
+      -- Lock the buffer as execute() would
+      state.lock_buffer(bufnr)
+      assert.is_false(vim.bo[bufnr].modifiable)
+
+      executor._test_complete_execution(bufnr, "tool_lock_01", { success = true, output = "done" })
+
+      assert.is_true(vim.bo[bufnr].modifiable, "buffer must be unlocked after background job completes")
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
     it("schedules drain via bridge when conversation is idle", function()
       local executor = require("flemma.tools.executor")
       local bridge = require("flemma.bridge")
