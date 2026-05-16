@@ -448,7 +448,7 @@ function M.set_fence_content(bufnr, tool_id, content)
   return true, nil
 end
 
----@alias flemma.tools.injector.Placement "appended"|"created"|"displaced"
+---@alias flemma.tools.injector.Placement "appended"|"created"|"displaced"|"replaced"
 
 ---Append a **Job Result:** block to the buffer.
 ---@param bufnr integer
@@ -468,6 +468,21 @@ function M.append_job_result(bufnr, job_id, result)
   end
 
   local doc = parser.get_parsed_document(bufnr)
+
+  -- Replace in-place when a Job Result with this ID already exists (re-execution)
+  local existing_seg = ast.find_job_result(doc, job_id)
+  if existing_seg then
+    local new_lines = { header }
+    for _, line in ipairs(content_lines) do
+      table.insert(new_lines, line)
+    end
+    set_lines(bufnr, existing_seg.position.start_line - 1, existing_seg.position.end_line, new_lines)
+    log.debug(
+      "injector: replaced existing job_result " .. job_id .. " in-place at line " .. existing_seg.position.start_line
+    )
+    return "replaced"
+  end
+
   local last_msg = #doc.messages > 0 and doc.messages[#doc.messages] or nil
 
   if last_msg and roles.is_user(last_msg.role) then

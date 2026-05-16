@@ -566,6 +566,105 @@ describe("executor background filtering", function()
     end)
   end)
 
+  describe("re-execution reuses job_id and replaces Job Result in-place", function()
+    it("reuses existing job_id from tool_result header on re-execution", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_reuse_tool", {
+        name = "test_reuse_tool",
+        description = "Test tool for job reuse",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `test_reuse_tool` (`tool_reuse_01`)",
+        "",
+        "```json",
+        '{"cmd": "work", "background": true}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_reuse_01` (job=job_original)",
+        "",
+        "```",
+        "Running as a background job `job_original`.",
+        "```",
+        "",
+        "**Job Result:** `job_original`",
+        "",
+        "```",
+        "first run output",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      ---@type flemma.tools.ToolContext
+      local context = {
+        tool_id = "tool_reuse_01",
+        tool_name = "test_reuse_tool",
+        input = { cmd = "work", background = true },
+        node = {
+          kind = "tool_use",
+          id = "tool_reuse_01",
+          name = "test_reuse_tool",
+          input = {},
+          position = { start_line = 2, end_line = 6 },
+        },
+        start_line = 2,
+        end_line = 6,
+      }
+
+      local ok, err = executor.execute(bufnr, context)
+      assert.is_true(ok, err)
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      local entry = buffer_state.pending_executions["tool_reuse_01"]
+      assert.truthy(entry)
+      assert.equals("job_original", entry.job_id, "should reuse existing job_id, not allocate new")
+
+      if entry.cancel_fn then
+        pcall(entry.cancel_fn)
+      end
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("replaces existing Job Result in-place on completion", function()
+      local injector = require("flemma.tools.injector")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "",
+        "**Job Result:** `job_reuse_01`",
+        "",
+        "```",
+        "old output",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local placement = injector.append_job_result(bufnr, "job_reuse_01", {
+        success = true,
+        output = "new output from re-execution",
+      })
+      assert.equals("replaced", placement)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.truthy(joined:match("new output from re%-execution"), "should contain new output")
+      assert.is_falsy(joined:match("old output"), "old output should be gone")
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("execute_at_cursor honors background in input", function()
     it("allocates job_id when input contains background=true", function()
       local executor = require("flemma.tools.executor")
@@ -587,7 +686,7 @@ describe("executor background filtering", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@Assistant:",
-        '**Tool Use:** `test_bg_cursor_tool` (`tool_bg_cursor`)',
+        "**Tool Use:** `test_bg_cursor_tool` (`tool_bg_cursor`)",
         "",
         "```json",
         '{"cmd": "slow task", "background": true}',
@@ -654,7 +753,7 @@ describe("executor background filtering", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@Assistant:",
-        '**Tool Use:** `test_fg_cursor_tool` (`tool_fg_cursor`)',
+        "**Tool Use:** `test_fg_cursor_tool` (`tool_fg_cursor`)",
         "",
         "```json",
         '{"expr": "6*7"}',
@@ -712,7 +811,7 @@ describe("executor background filtering", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
         "@Assistant:",
-        '**Tool Use:** `test_suspense_tool` (`tool_suspense_01`)',
+        "**Tool Use:** `test_suspense_tool` (`tool_suspense_01`)",
         "",
         "```json",
         '{"cmd": "test", "background": true}',

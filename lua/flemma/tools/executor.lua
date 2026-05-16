@@ -621,9 +621,26 @@ function M.execute(bufnr, context)
     placeholder_modified = false,
   }
   if is_background then
-    pending[tool_id].job_id = M.generate_job_id(M.collect_buffer_job_ids(bufnr))
+    -- Reuse existing job_id from the tool_result header when re-executing, so that
+    -- the completed result replaces the existing Job Result block in-place.
+    local existing_job_id = nil
+    local doc = parser.get_parsed_document(bufnr)
+    local sibling = ast.find_tool_sibling(doc, context.node)
+    if sibling and sibling.kind == "tool_result" then
+      ---@cast sibling flemma.ast.ToolResultSegment
+      existing_job_id = sibling.meta and sibling.meta.job --[[@as string|nil]]
+    end
+    pending[tool_id].job_id = existing_job_id or M.generate_job_id(M.collect_buffer_job_ids(bufnr))
     log.debug(
-      "executor: allocated job_id " .. pending[tool_id].job_id .. " for " .. tool_id .. " (" .. tool_name .. ")"
+      "executor: "
+        .. (existing_job_id and "reusing" or "allocated")
+        .. " job_id "
+        .. pending[tool_id].job_id
+        .. " for "
+        .. tool_id
+        .. " ("
+        .. tool_name
+        .. ")"
     )
   end
 
@@ -1158,7 +1175,8 @@ function M.execute_at_cursor(bufnr)
     end
     error(raised)
   end
-  return success_or_err --[[@as boolean]], err_msg --[[@as string|nil]]
+  return success_or_err, --[[@as boolean]]
+    err_msg --[[@as string|nil]]
 end
 
 ---Clean up all state for a buffer (called on buffer close)
