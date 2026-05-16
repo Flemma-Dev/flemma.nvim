@@ -169,6 +169,112 @@ describe("executor background filtering", function()
         ids[id] = true
       end
     end)
+
+    it("avoids IDs present in the exclusion set", function()
+      local executor = require("flemma.tools.executor")
+      local original_uv_random = vim.uv.random
+      local call_count = 0
+      vim.uv.random = function(n) -- luacheck: ignore 122
+        call_count = call_count + 1
+        if call_count == 1 then
+          return string.rep("\0", n)
+        end
+        return original_uv_random(n)
+      end
+
+      local colliding_id = "job_" .. string.rep("a", 8)
+      local result = executor.generate_job_id({ [colliding_id] = true })
+
+      vim.uv.random = original_uv_random -- luacheck: ignore 122
+
+      assert.is_string(result)
+      assert.are_not.equal(colliding_id, result)
+      assert.truthy(result:match("^job_[a-z0-9]+$"))
+    end)
+
+    it("returns normally when exclusion set is nil", function()
+      local executor = require("flemma.tools.executor")
+      local id = executor.generate_job_id(nil)
+      assert.is_string(id)
+      assert.truthy(id:match("^job_[a-z0-9]+$"))
+    end)
+
+    it("returns normally when exclusion set is empty", function()
+      local executor = require("flemma.tools.executor")
+      local id = executor.generate_job_id({})
+      assert.is_string(id)
+      assert.truthy(id:match("^job_[a-z0-9]+$"))
+    end)
+  end)
+
+  describe("collect_buffer_job_ids", function()
+    it("collects job IDs from tool_result meta and job_result segments", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "",
+        "**Tool Use:** `bash` (`toolu_01AAA`)",
+        "",
+        "```json",
+        '{"command":"ls","label":"listing","timeout":10,"background":true}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`toolu_01BBB`)",
+        "",
+        "```json",
+        '{"command":"pwd","label":"cwd","timeout":10,"background":true}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01AAA` (job=job_alpha111)",
+        "",
+        "```",
+        "Running as a background job `job_alpha111`.",
+        "```",
+        "",
+        "**Tool Result:** `toolu_01BBB` (job=job_beta2222)",
+        "",
+        "```",
+        "Running as a background job `job_beta2222`.",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_alpha111`",
+        "",
+        "```",
+        "file.txt",
+        "```",
+        "",
+      })
+      local ids = executor.collect_buffer_job_ids(bufnr)
+      assert.is_true(ids["job_alpha111"])
+      assert.is_true(ids["job_beta2222"])
+      assert.is_nil(ids["job_nonexist"])
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("returns empty table for buffer with no jobs", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "Hi there!",
+      })
+      local ids = executor.collect_buffer_job_ids(bufnr)
+      assert.same({}, ids)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("completion queue", function()

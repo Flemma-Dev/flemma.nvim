@@ -80,16 +80,55 @@ local function get_delivery_queue(bufnr)
   return buffer_state.delivery_queue
 end
 
----Generate a random unique job identifier (e.g. "job_k7x2m").
----Relies on Neovim seeding math.randomseed(vim.uv.hrtime()) at startup.
+---Collect all job IDs referenced in the buffer (tool_result meta.job + job_result IDs).
+---@param bufnr integer
+---@return table<string, true>
+function M.collect_buffer_job_ids(bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+  local ids = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ids[seg.meta.job] = true
+      elseif seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
+        ids[seg.job_id] = true
+      end
+    end
+  end
+  return ids
+end
+
+local MAX_JOB_ID_ATTEMPTS = 100
+
+---Generate a single random job ID candidate using OS-level randomness.
 ---@return string
-function M.generate_job_id()
+local function generate_raw_job_id()
+  local bytes = vim.uv.random(JOB_ID_LENGTH) --[[@as string]]
   local parts = { "job_" }
-  for _ = 1, JOB_ID_LENGTH do
-    local idx = math.random(1, #JOB_ID_CHARS)
+  for i = 1, JOB_ID_LENGTH do
+    local idx = (
+      bytes:byte(i) --[[@as integer]]
+      % #JOB_ID_CHARS
+    ) + 1
     parts[#parts + 1] = JOB_ID_CHARS:sub(idx, idx)
   end
   return table.concat(parts)
+end
+
+---Generate a random job identifier (e.g. "job_k7x2m") that does not collide
+---with any ID already present in the buffer or the provided exclusion set.
+---@param existing_ids? table<string, true>
+---@return string
+function M.generate_job_id(existing_ids)
+  for _ = 1, MAX_JOB_ID_ATTEMPTS do
+    local id = generate_raw_job_id()
+    if not existing_ids or not existing_ids[id] then
+      return id
+    end
+    log.debug("executor: job ID collision detected (" .. id .. "), regenerating")
+  end
+  return generate_raw_job_id()
 end
 
 ---Enqueue a completed job result for later delivery.
@@ -571,7 +610,7 @@ function M.execute(bufnr, context, opts)
     placeholder_modified = false,
   }
   if opts.background then
-    pending[tool_id].job_id = M.generate_job_id()
+    pending[tool_id].job_id = M.generate_job_id(M.collect_buffer_job_ids(bufnr))
     log.debug(
       "executor: allocated job_id " .. pending[tool_id].job_id .. " for " .. tool_id .. " (" .. tool_name .. ")"
     )
@@ -868,7 +907,7 @@ function M.background_at_cursor(bufnr)
     return false, "Tool " .. ctx.tool_id .. " is already running in background"
   end
 
-  entry.job_id = M.generate_job_id()
+  entry.job_id = M.generate_job_id(M.collect_buffer_job_ids(bufnr))
   local job_id = entry.job_id --[[@as string]]
 
   local header_ok, header_err = injector.set_header_modeline(bufnr, ctx.tool_id, "job=" .. job_id)
