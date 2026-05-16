@@ -766,6 +766,12 @@ function M.execute(bufnr, context)
     if type(cancel_or_err) == "function" then
       pending[tool_id].cancel_fn = cancel_or_err
     end
+
+    -- Background tools are dispatched — unlock immediately so autopilot can
+    -- resume without waiting for the job to finish.
+    if is_background then
+      maybe_unlock_buffer(bufnr)
+    end
   else
     -- Sync execution — complete inline for reliable undojoin
     local ok, result = pcall(executor_fn, context.input, exec_context)

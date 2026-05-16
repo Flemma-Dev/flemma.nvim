@@ -845,6 +845,98 @@ describe("executor background filtering", function()
     end)
   end)
 
+  describe("autopilot resumes immediately after background tool dispatch", function()
+    it("transitions from paused to sending when last pending tool is dispatched as background", function()
+      local executor = require("flemma.tools.executor")
+      local ap = require("flemma.autopilot")
+      local config_facade = require("flemma.config")
+      local schema = require("flemma.config.schema")
+      local registry = require("flemma.tools.registry")
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
+      registry.clear()
+      registry.register("test_bg_ap_tool", {
+        name = "test_bg_ap_tool",
+        description = "Async tool for autopilot test",
+        async = true,
+        input_schema = {
+          type = "object",
+          properties = { cmd = { type = "string" }, background = { type = "boolean" } },
+        },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      -- Buffer: one tool already completed, one pending with background=true
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `test_bg_ap_tool` (`tool_done`)",
+        "",
+        "```json",
+        '{"cmd": "first"}',
+        "```",
+        "",
+        "**Tool Use:** `test_bg_ap_tool` (`tool_pending`)",
+        "",
+        "```json",
+        '{"cmd": "second", "background": true}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_done`",
+        "",
+        "```",
+        "already done",
+        "```",
+        "",
+        "**Tool Result:** `tool_pending` (pending)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      -- Position cursor on the pending tool_result
+      vim.api.nvim_win_set_cursor(winid, { 21, 0 })
+
+      -- Simulate autopilot paused state (as advance_phase2 would set after
+      -- completing the first tool but finding the second still pending)
+      ap.arm(bufnr)
+      ap.on_tools_complete(bufnr)
+      assert.equals("paused", ap.get_state(bufnr))
+
+      -- User presses Alt+Enter on the pending bash tool
+      executor.execute_at_cursor(bufnr)
+
+      -- Autopilot should advance to "sending" immediately — the background
+      -- placeholder satisfies the tool_result, no need to wait for job completion.
+      local final_state = ap.get_state(bufnr)
+      assert.equals("sending", final_state, "expected autopilot to resume immediately, got: " .. final_state)
+
+      -- Clean up
+      local buffer_state = state.get_buffer_state(bufnr)
+      if buffer_state.pending_executions then
+        for _, entry in pairs(buffer_state.pending_executions) do
+          if entry.cancel_fn then
+            pcall(entry.cancel_fn)
+          end
+        end
+        buffer_state.pending_executions = nil
+      end
+      vim.api.nvim_win_close(winid, true)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("execute_at_cursor disarms autopilot from idle", function()
     it("disarms autopilot when executing from idle state", function()
       local executor = require("flemma.tools.executor")
