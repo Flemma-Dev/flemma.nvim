@@ -460,7 +460,11 @@ function M._process_data(self, data, _parsed, callbacks)
         local fc = part.functionCall
         if fc.name then
           -- Generate synthetic ID: urn:flemma:tool:<name>:<unique>
-          local unique_suffix = string.format("%x", os.time()) .. string.format("%04x", math.random(0, 65535))
+          local unique_bytes = vim.uv.random(8) --[[@as string]]
+          local unique_suffix = ""
+          for bi = 1, 8 do
+            unique_suffix = unique_suffix .. string.format("%02x", unique_bytes:byte(bi))
+          end
           local generated_id = string.format("urn:flemma:tool:%s:%s", fc.name, unique_suffix)
 
           local json_str = json.encode(fc.args or {})
