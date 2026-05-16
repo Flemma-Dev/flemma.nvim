@@ -644,6 +644,62 @@ describe("executor background filtering", function()
     end)
   end)
 
+  describe("execute_at_cursor during tool discovery", function()
+    it("returns false with suspense message when tools are not ready", function()
+      local executor = require("flemma.tools.executor")
+      local tools = require("flemma.tools")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_suspense_tool", {
+        name = "test_suspense_tool",
+        description = "Test tool",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      -- Simulate tool discovery in progress — get_for_prompt will raise Suspense
+      tools.register_async(function() end)
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        '**Tool Use:** `test_suspense_tool` (`tool_suspense_01`)',
+        "",
+        "```json",
+        '{"cmd": "test", "background": true}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_suspense_01` (pending)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      vim.api.nvim_win_set_cursor(winid, { 9, 0 })
+
+      local ok, err = executor.execute_at_cursor(bufnr)
+      assert.is_false(ok)
+      assert.truthy(err, "expected error message")
+      assert.truthy(err:match("[Ww]aiting"), "expected suspense message, got: " .. tostring(err))
+
+      tools.clear()
+      vim.api.nvim_win_close(winid, true)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("background_at_cursor", function()
     it("returns error when tool is not running", function()
       local executor = require("flemma.tools.executor")

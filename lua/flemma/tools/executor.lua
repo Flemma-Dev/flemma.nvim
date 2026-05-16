@@ -26,6 +26,8 @@ local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
 local messages = require("flemma.messages")
 local tools_module = require("flemma.tools")
+local readiness = require("flemma.readiness")
+local notify = require("flemma.notify")
 
 local JOB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 local JOB_ID_LENGTH = 8
@@ -1144,7 +1146,17 @@ function M.execute_at_cursor(bufnr)
     autopilot.arm(bufnr)
   end
 
-  return M.execute(bufnr, ctx)
+  local ok, success_or_err, err_msg = pcall(M.execute, bufnr, ctx)
+  if not ok then
+    local raised = success_or_err --[[@as flemma.readiness.Suspense|string]]
+    if readiness.is_suspense(raised) then
+      local suspense = raised --[[@as flemma.readiness.Suspense]]
+      notify.warn(suspense.message)
+      return false, suspense.message
+    end
+    error(raised)
+  end
+  return success_or_err --[[@as boolean]], err_msg --[[@as string|nil]]
 end
 
 ---Clean up all state for a buffer (called on buffer close)
