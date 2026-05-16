@@ -40,7 +40,6 @@ local hooks = require("flemma.hooks")
 local messages = require("flemma.messages")
 local preprocessor = require("flemma.preprocessor")
 local str = require("flemma.utilities.string")
-local usage = require("flemma.usage")
 
 local nav = require("flemma.schema.navigation")
 local schema_definition = require("flemma.config.schema")
@@ -1286,9 +1285,7 @@ function M._run_send_pipeline(bufnr, opts)
             cache_write_price = pricing_info.cache_write,
           })
 
-          -- Use the just-created Request for the usage bar
           latest_request = session:get_latest_request()
-          usage.show(bufnr, latest_request)
         end
 
         -- Diagnostics: publish expectations for the next request only after

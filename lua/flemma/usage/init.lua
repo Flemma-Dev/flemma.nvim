@@ -15,6 +15,7 @@
 ---@class flemma.Usage
 local M = {}
 
+local hooks = require("flemma.hooks")
 local layout = require("flemma.ui.bar.layout")
 local config_facade = require("flemma.config")
 local provider_registry = require("flemma.provider.registry")
@@ -335,6 +336,12 @@ end
 
 state.register_cleanup("usage", function(bufnr)
   M.cleanup_buffer(bufnr)
+end)
+
+hooks.on("request:finished", function(data)
+  if data.request then
+    M.show(data.bufnr, data.request)
+  end
 end)
 
 return M
