@@ -311,8 +311,8 @@ return s.object({
         s.string([[
           {{ model.name }}
           {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
-          {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
-          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#·%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+          {%- if session.cost then %} %#FlemmaStatusTextMuted#·%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
           {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
         ]]),
         s.func():type_as("flemma.statusline.FormatFunction")
