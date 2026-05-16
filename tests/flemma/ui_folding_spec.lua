@@ -906,7 +906,7 @@ describe("UI Folding", function()
       assert.are.equal(6, foldclosed, "Thinking block should be folded at line 6")
     end)
 
-    it("should handle multiple thinking blocks and only fold the last one", function()
+    it("should fold thinking blocks from all completed assistant messages", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -940,13 +940,54 @@ describe("UI Folding", function()
       -- Call the function
       folding.fold_completed_blocks(bufnr)
 
-      -- The second thinking block (line 11) should be folded
+      -- Both thinking blocks should be folded (both are in completed messages)
+      local foldclosed_first = vim.fn.foldclosed(3)
+      assert.are.equal(3, foldclosed_first, "First thinking block should be folded")
+
       local foldclosed_second = vim.fn.foldclosed(11)
       assert.are.equal(11, foldclosed_second, "Second thinking block should be folded")
+    end)
 
-      -- The first thinking block (line 3) should remain open
-      local foldclosed_first = vim.fn.foldclosed(3)
-      assert.are.equal(-1, foldclosed_first, "First thinking block should remain open")
+    it("should fold earlier thinking block even after conversation advances past it", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      -- Simulate the bug scenario: a multi-turn conversation where the first
+      -- thinking block's auto-close failed (e.g., foldexpr not yet evaluated),
+      -- and the conversation has since advanced with new messages.
+      local lines = {
+        "@Assistant:", -- 1 (msg 1)
+        "first response",
+        "<thinking>", -- 3
+        "first thought content that is quite long",
+        "</thinking>", -- 5
+        "first answer",
+        "@You:", -- 7 (msg 2)
+        "question",
+        "@Assistant:", -- 9 (msg 3)
+        "second response",
+        "@You:", -- 11 (msg 4)
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- The thinking block at line 3 is in message 1 — no longer the
+      -- second-to-last message. Previously this would never get folded.
+      folding.fold_completed_blocks(bufnr)
+
+      assert.are.equal(3, vim.fn.foldclosed(3), "Thinking in earlier message should still be auto-closed")
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      assert.is_truthy(
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:1:3"],
+        "Earlier thinking block should be tracked in auto_closed_folds"
+      )
     end)
 
     it("should fold <thinking redacted> block", function()
@@ -2472,7 +2513,7 @@ describe("UI Folding", function()
 
       -- Critical: the fold should NOT be in auto_closed_folds
       local buffer_state = state.get_buffer_state(bufnr)
-      local fold_id = "thinking:1" -- message_index for second-to-last message
+      local fold_id = "thinking:1:3"
       assert.is_falsy(
         buffer_state.auto_closed_folds and buffer_state.auto_closed_folds[fold_id],
         "Failed foldclose should NOT mark fold as closed in auto_closed_folds"
@@ -2522,7 +2563,7 @@ describe("UI Folding", function()
 
       -- Now it should be in auto_closed_folds
       local buffer_state = state.get_buffer_state(bufnr)
-      local fold_id = "thinking:1"
+      local fold_id = "thinking:1:3"
       assert.is_truthy(
         buffer_state.auto_closed_folds and buffer_state.auto_closed_folds[fold_id],
         "Successfully closed fold should be marked in auto_closed_folds"
@@ -2863,7 +2904,7 @@ describe("UI Folding", function()
 
       local buffer_state = state.get_buffer_state(bufnr)
       assert.is_truthy(
-        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:2"],
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:2:7"],
         "Tracker must retain the fold ID across forward edits"
       )
     end)

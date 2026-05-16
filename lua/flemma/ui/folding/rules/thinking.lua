@@ -25,9 +25,10 @@ function M.populate(doc, fold_map)
 end
 
 ---Get closeable ranges for auto-fold.
----Only returns thinking blocks from the second-to-last message when the
----last message is @You: (preserves existing behavior: don't fold thinking
----while the assistant is still the latest speaker).
+---Returns thinking blocks from all assistant messages that are no longer the
+---active speaker (i.e., a subsequent message exists). This ensures thinking
+---blocks are closeable even if the initial auto-close attempt failed during
+---the narrow window when they were in the second-to-last message.
 ---@param doc flemma.ast.DocumentNode
 ---@return flemma.ui.folding.CloseableRange[]
 function M.get_closeable_ranges(doc)
@@ -42,15 +43,18 @@ function M.get_closeable_ranges(doc)
     return ranges
   end
 
-  local message_index = #doc.messages - 1
-  local second_to_last = doc.messages[message_index]
-  for _, seg in ipairs(second_to_last.segments) do
-    if seg.kind == "thinking" and seg.position and seg.position.start_line ~= seg.position.end_line then
-      table.insert(ranges, {
-        id = "thinking:" .. message_index,
-        start_line = seg.position.start_line,
-        end_line = seg.position.end_line,
-      })
+  for message_index, msg in ipairs(doc.messages) do
+    if message_index == #doc.messages then
+      break
+    end
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "thinking" and seg.position and seg.position.start_line ~= seg.position.end_line then
+        table.insert(ranges, {
+          id = "thinking:" .. message_index .. ":" .. seg.position.start_line,
+          start_line = seg.position.start_line,
+          end_line = seg.position.end_line,
+        })
+      end
     end
   end
 
