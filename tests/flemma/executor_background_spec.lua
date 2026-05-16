@@ -475,7 +475,7 @@ describe("executor background filtering", function()
       local context = {
         tool_id = "tool_job_01",
         tool_name = "test_job_tool",
-        input = { cmd = "long task" },
+        input = { cmd = "long task", background = true },
         node = {
           kind = "tool_use",
           id = "tool_job_01",
@@ -487,7 +487,7 @@ describe("executor background filtering", function()
         end_line = 6,
       }
 
-      local ok, err = executor.execute(bufnr, context, { background = true })
+      local ok, err = executor.execute(bufnr, context)
       assert.is_true(ok, err)
 
       local buffer_state = state.get_buffer_state(bufnr)
@@ -516,6 +516,130 @@ describe("executor background filtering", function()
         pcall(entry.cancel_fn)
       end
       buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("execute_at_cursor honors background in input", function()
+    it("allocates job_id when input contains background=true", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_bg_cursor_tool", {
+        name = "test_bg_cursor_tool",
+        description = "Test tool for background via cursor",
+        async = true,
+        input_schema = {
+          type = "object",
+          properties = { cmd = { type = "string" }, background = { type = "boolean" } },
+        },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        '**Tool Use:** `test_bg_cursor_tool` (`tool_bg_cursor`)',
+        "",
+        "```json",
+        '{"cmd": "slow task", "background": true}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_bg_cursor` (pending)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      vim.api.nvim_win_set_cursor(winid, { 9, 0 })
+
+      local ok, err = executor.execute_at_cursor(bufnr)
+      assert.is_true(ok, err)
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      local entry = buffer_state.pending_executions["tool_bg_cursor"]
+      assert.truthy(entry, "expected pending entry")
+      assert.truthy(entry.job_id, "expected job_id allocation for background tool")
+      assert.truthy(entry.job_id:match("^job_"), "job_id should start with job_ prefix")
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local header_found = false
+      for _, line in ipairs(lines) do
+        if line:match("Tool Result.*tool_bg_cursor.*job=") then
+          header_found = true
+          break
+        end
+      end
+      assert.is_true(header_found, "Expected job= in tool_result header")
+
+      if entry.cancel_fn then
+        pcall(entry.cancel_fn)
+      end
+      buffer_state.pending_executions = nil
+      vim.api.nvim_win_close(winid, true)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("executes foreground when input has no background flag", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_fg_cursor_tool", {
+        name = "test_fg_cursor_tool",
+        description = "Test tool for foreground via cursor",
+        async = false,
+        input_schema = { type = "object", properties = { expr = { type = "string" } } },
+        execute = function()
+          return { success = true, output = "42" }
+        end,
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        '**Tool Use:** `test_fg_cursor_tool` (`tool_fg_cursor`)',
+        "",
+        "```json",
+        '{"expr": "6*7"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_fg_cursor` (pending)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      vim.api.nvim_win_set_cursor(winid, { 9, 0 })
+
+      local ok, err = executor.execute_at_cursor(bufnr)
+      assert.is_true(ok, err)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.truthy(joined:match("42"), "Expected inline result")
+      assert.is_falsy(joined:match("job="), "Expected no job= marker for foreground tool")
+
+      vim.api.nvim_win_close(winid, true)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
@@ -808,7 +932,7 @@ describe("executor background filtering", function()
       return {
         tool_id = "tool_readopt",
         tool_name = "test_readopt_tool",
-        input = { cmd = "test" },
+        input = { cmd = "test", background = true },
         node = {
           kind = "tool_use",
           id = "tool_readopt",
@@ -853,7 +977,7 @@ describe("executor background filtering", function()
       }
 
       local context = make_readopt_context()
-      local ok, err = executor.execute(bufnr, context, { background = true })
+      local ok, err = executor.execute(bufnr, context)
       assert.is_true(ok, "expected success, got error: " .. tostring(err))
       assert.is_nil(err)
 
@@ -902,7 +1026,7 @@ describe("executor background filtering", function()
       }
 
       local context = make_readopt_context()
-      local ok, err = executor.execute(bufnr, context, { background = true })
+      local ok, err = executor.execute(bufnr, context)
       assert.is_true(ok, "expected success for completed job, got error: " .. tostring(err))
 
       local entry = buffer_state.pending_executions["tool_readopt"]
@@ -944,7 +1068,7 @@ describe("executor background filtering", function()
       }
 
       local context = make_readopt_context()
-      local ok, err = executor.execute(bufnr, context, { background = true })
+      local ok, err = executor.execute(bufnr, context)
       assert.is_false(ok)
       assert.truthy(err:match("already executing"))
 

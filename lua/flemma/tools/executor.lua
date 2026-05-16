@@ -525,13 +525,20 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
----@param opts? { background?: boolean }
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context, opts)
-  opts = opts or {}
+function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
+
+  -- Extract execution directives from the tool input so that both the normal
+  -- flow (core.lua) and manual approval (execute_at_cursor) share one path.
+  local is_background = context.input and context.input.background == true
+  if is_background then
+    context.input = vim.tbl_extend("keep", {}, context.input)
+    context.input.background = nil
+    log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested background execution")
+  end
 
   -- Check for API request in flight (mutually exclusive)
   local buffer_state = state.get_buffer_state(bufnr)
@@ -593,7 +600,7 @@ function M.execute(bufnr, context, opts)
   end
 
   local job_status_tool_available = false
-  if opts.background then
+  if is_background then
     job_status_tool_available = is_tool_available("flemma:jobs:status", bufnr)
   end
 
@@ -609,7 +616,7 @@ function M.execute(bufnr, context, opts)
     completed = false,
     placeholder_modified = false,
   }
-  if opts.background then
+  if is_background then
     pending[tool_id].job_id = M.generate_job_id(M.collect_buffer_job_ids(bufnr))
     log.debug(
       "executor: allocated job_id " .. pending[tool_id].job_id .. " for " .. tool_id .. " (" .. tool_name .. ")"
@@ -646,7 +653,7 @@ function M.execute(bufnr, context, opts)
     injector.clear_header_status(bufnr, tool_id)
   end
 
-  if opts.background and pending[tool_id] and pending[tool_id].job_id then
+  if is_background and pending[tool_id] and pending[tool_id].job_id then
     local job_id = pending[tool_id].job_id --[[@as string]]
     local h_ok, h_err = injector.set_header_modeline(bufnr, tool_id, "job=" .. job_id)
     if not h_ok then

@@ -597,13 +597,7 @@ local function advance_phase2(opts)
       throttled = true
       break
     end
-    local is_background = ctx.input.background == true
-    if is_background then
-      ctx.input = vim.tbl_extend("keep", {}, ctx.input)
-      ctx.input.background = nil
-      log.debug("advance_phase2: tool " .. ctx.tool_id .. " (" .. ctx.tool_name .. ") requested background execution")
-    end
-    local ok, err = executor.execute(bufnr, ctx, { background = is_background })
+    local ok, err = executor.execute(bufnr, ctx)
     if not ok then
       notify.error(err or "Execution failed")
     else
