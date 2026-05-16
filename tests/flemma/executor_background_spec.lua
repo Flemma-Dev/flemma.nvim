@@ -845,6 +845,67 @@ describe("executor background filtering", function()
     end)
   end)
 
+  describe("execute_at_cursor disarms autopilot from idle", function()
+    it("disarms autopilot when executing from idle state", function()
+      local executor = require("flemma.tools.executor")
+      local ap = require("flemma.autopilot")
+      local config_facade = require("flemma.config")
+      local schema = require("flemma.config.schema")
+      local registry = require("flemma.tools.registry")
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
+      registry.clear()
+      registry.register("test_ap_tool", {
+        name = "test_ap_tool",
+        description = "Test",
+        async = false,
+        input_schema = { type = "object", properties = { x = { type = "string" } } },
+        execute = function()
+          return { success = true, output = "done" }
+        end,
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `test_ap_tool` (`tool_ap_01`)",
+        "",
+        "```json",
+        '{"x": "test"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_ap_01` (pending)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      vim.api.nvim_win_set_cursor(winid, { 9, 0 })
+
+      -- Autopilot is idle (never engaged)
+      assert.equals("idle", ap.get_state(bufnr))
+      assert.is_false(ap.was_disarmed(bufnr))
+
+      executor.execute_at_cursor(bufnr)
+
+      -- After manual execution from idle, autopilot should be disarmed
+      -- to prevent drain_job_completions from auto-continuing
+      assert.is_true(ap.was_disarmed(bufnr))
+
+      vim.api.nvim_win_close(winid, true)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("background_at_cursor", function()
     it("returns error when tool is not running", function()
       local executor = require("flemma.tools.executor")

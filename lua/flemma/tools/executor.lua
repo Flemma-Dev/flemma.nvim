@@ -1163,6 +1163,8 @@ function M.execute_at_cursor(bufnr)
   -- manually executing tools without an autopilot loop running.
   if autopilot.get_state(bufnr) == "paused" then
     autopilot.arm(bufnr)
+  elseif autopilot.get_state(bufnr) == "idle" then
+    autopilot.disarm(bufnr)
   end
 
   local ok, success_or_err, err_msg = pcall(M.execute, bufnr, ctx)
