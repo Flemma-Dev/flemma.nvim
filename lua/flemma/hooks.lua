@@ -29,6 +29,8 @@ local notify = require("flemma.notify")
 ---| "autopilot:resume-scheduled"
 ---| "autopilot:resume-cancelled"
 ---| "autopilot:resumed"
+---| "buffer:created"
+---| "buffer:destroyed"
 
 ---@class flemma.hooks.RequestSendingData
 ---@field bufnr integer
@@ -92,6 +94,12 @@ local notify = require("flemma.notify")
 ---@class flemma.hooks.AutopilotResumedData
 ---@field bufnr integer
 
+---@class flemma.hooks.BufferCreatedData
+---@field bufnr integer
+
+---@class flemma.hooks.BufferDestroyedData
+---@field bufnr integer
+
 ---@class flemma.hooks.Subscription
 ---@field off fun(self: flemma.hooks.Subscription): nil Unsubscribe this listener
 
@@ -144,6 +152,8 @@ end
 ---@overload fun(name: "autopilot:resume-scheduled", callback: fun(data: flemma.hooks.AutopilotResumeScheduledData)): flemma.hooks.Subscription
 ---@overload fun(name: "autopilot:resume-cancelled", callback: fun(data: flemma.hooks.AutopilotResumeCancelledData)): flemma.hooks.Subscription
 ---@overload fun(name: "autopilot:resumed", callback: fun(data: flemma.hooks.AutopilotResumedData)): flemma.hooks.Subscription
+---@overload fun(name: "buffer:created", callback: fun(data: flemma.hooks.BufferCreatedData)): flemma.hooks.Subscription
+---@overload fun(name: "buffer:destroyed", callback: fun(data: flemma.hooks.BufferDestroyedData)): flemma.hooks.Subscription
 ---@param name flemma.hooks.Name Hook name in "domain:action" format
 ---@param callback fun(data: table) Subscriber function receiving the hook payload
 ---@return flemma.hooks.Subscription
@@ -192,6 +202,8 @@ end
 ---@overload fun(name: "autopilot:resume-scheduled", data: flemma.hooks.AutopilotResumeScheduledData)
 ---@overload fun(name: "autopilot:resume-cancelled", data: flemma.hooks.AutopilotResumeCancelledData)
 ---@overload fun(name: "autopilot:resumed", data: flemma.hooks.AutopilotResumedData)
+---@overload fun(name: "buffer:created", data: flemma.hooks.BufferCreatedData)
+---@overload fun(name: "buffer:destroyed", data: flemma.hooks.BufferDestroyedData)
 ---@param name flemma.hooks.Name Hook name in "domain:action" format
 ---@param data? table Payload passed to handlers
 function M.dispatch(name, data)

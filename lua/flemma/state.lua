@@ -3,6 +3,7 @@
 ---@class flemma.State
 local M = {}
 
+local hooks = require("flemma.hooks")
 local session_module = require("flemma.session")
 local client = require("flemma.client")
 local writequeue = require("flemma.buffer.writequeue")
@@ -74,17 +75,6 @@ local writequeue = require("flemma.buffer.writequeue")
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
-
----@type table<string, fun(bufnr: integer)>
-local cleanup_hooks = {}
-
----Register a buffer cleanup hook. Called during cleanup_buffer_state().
----Used by modules that state cannot require directly (circular dependency).
----@param name string Hook identifier (for idempotent registration)
----@param fn fun(bufnr: integer) Cleanup function
-function M.register_cleanup(name, fn)
-  cleanup_hooks[name] = fn
-end
 
 ---Get the global session (tracks all requests across buffers)
 ---@return flemma.session.Session
@@ -167,11 +157,7 @@ function M.cleanup_buffer_state(bufnr)
       vim.fn.timer_stop(st.progress_timer)
     end
   end
-  -- Run registered cleanup hooks (executor, usage) before clearing state.
-  -- Hooks may access buffer state (e.g., executor), so this runs before nil.
-  for _, fn in pairs(cleanup_hooks) do
-    pcall(fn, bufnr)
-  end
+  hooks.dispatch("buffer:destroyed", { bufnr = bufnr })
   buffer_states[bufnr] = nil
   writequeue.clear(bufnr)
 end

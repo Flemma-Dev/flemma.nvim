@@ -212,7 +212,7 @@ hooks.on("autopilot:resumed", function(data)
   refresh(data.bufnr)
 end)
 
----Clean up all state for a buffer. Called from buffer cleanup hooks.
+---Clean up all state for a buffer. Called from the buffer:destroyed hook.
 ---@param bufnr integer
 function M.cleanup(bufnr)
   cancel_animation_timer(bufnr)

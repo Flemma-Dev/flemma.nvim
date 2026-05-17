@@ -2,8 +2,8 @@ describe("Flemma LSP", function()
   local flemma
 
   before_each(function()
-    -- Clear the FlemmaLsp augroup to prevent stale autocmds from previous tests
-    vim.api.nvim_create_augroup("FlemmaLsp", { clear = true })
+    -- Clear hooks subscribers to prevent stale subscriptions from previous tests
+    require("flemma.hooks")._clear_subscribers()
     -- Stop any lingering LSP clients
     for _, client in pairs(vim.lsp.get_clients({ name = "flemma" })) do
       client:stop(true)

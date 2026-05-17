@@ -1202,9 +1202,8 @@ function M.cleanup_buffer(bufnr)
   buffer_state.pending_executions = nil
 end
 
--- Register cleanup hook with state (breaks circular dependency: state cannot require executor)
-state.register_cleanup("executor", function(bufnr)
-  M.cleanup_buffer(bufnr)
+hooks.on("buffer:destroyed", function(data)
+  M.cleanup_buffer(data.bufnr)
 end)
 
 ---@private

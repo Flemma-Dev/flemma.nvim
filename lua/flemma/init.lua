@@ -4,6 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local hooks = require("flemma.hooks")
 local schema_definition = require("flemma.config.schema")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
@@ -54,10 +55,8 @@ M.setup = function(user_opts)
   -- (tool/provider/sandbox-specific config) are deferred until modules register.
   config_facade.init(schema_definition)
 
-  -- Register cleanup hook to release per-buffer frontmatter ops on buffer delete.
-  -- Prevents orphaned L40 entries from accumulating across long sessions.
-  state.register_cleanup("config", function(bufnr)
-    config_facade.cleanup_buffer(bufnr)
+  hooks.on("buffer:destroyed", function(data)
+    config_facade.cleanup_buffer(data.bufnr)
   end)
 
   local _, apply_errors, deferred =

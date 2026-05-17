@@ -5,6 +5,7 @@ local M = {}
 
 local ast = require("flemma.ast")
 local dump = require("flemma.ast.dump")
+local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local navigation = require("flemma.navigation")
 local parser = require("flemma.parser")
@@ -318,19 +319,13 @@ function M.attach(bufnr)
   })
 end
 
----Set up the LSP server. Registers a FileType autocmd for chat buffers.
+---Set up the LSP server. Attaches to chat buffers via buffer:created hook.
 ---Only call this when experimental.lsp is enabled.
 function M.setup()
   log.info("lsp: experimental LSP server enabled")
-  local augroup = vim.api.nvim_create_augroup("FlemmaLsp", { clear = true })
-
-  vim.api.nvim_create_autocmd("FileType", {
-    group = augroup,
-    pattern = "chat",
-    callback = function(ev)
-      M.attach(ev.buf)
-    end,
-  })
+  hooks.on("buffer:created", function(data)
+    M.attach(data.bufnr)
+  end)
 end
 
 return M

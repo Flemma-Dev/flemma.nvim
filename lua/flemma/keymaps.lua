@@ -6,6 +6,7 @@ local M = {}
 local bridge = require("flemma.bridge")
 local config_facade = require("flemma.config")
 local core = require("flemma.core")
+local hooks = require("flemma.hooks")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local log = require("flemma.logging")
@@ -60,219 +61,212 @@ end
 
 ---Setup function to initialize all keymaps
 M.setup = function()
-  -- Create or clear the augroup for keymap-related autocmds
-  local augroup = vim.api.nvim_create_augroup("FlemmaKeymaps", { clear = true })
-
   -- Set up the mappings for Flemma interaction if enabled
   local config = config_facade.get()
   if config.keymaps.enabled then
-    vim.api.nvim_create_autocmd("FileType", {
-      group = augroup,
-      pattern = "chat",
-      callback = function()
-        -- Normal mode mappings
-        if config.keymaps.normal.send then
-          vim.keymap.set("n", config.keymaps.normal.send, function()
-            core.send_or_execute({ user_initiated = true, bufnr = vim.api.nvim_get_current_buf() })
-          end, { buffer = true, desc = "Send to Flemma" })
-        end
+    hooks.on("buffer:created", function()
+      -- Normal mode mappings
+      if config.keymaps.normal.send then
+        vim.keymap.set("n", config.keymaps.normal.send, function()
+          core.send_or_execute({ user_initiated = true, bufnr = vim.api.nvim_get_current_buf() })
+        end, { buffer = true, desc = "Send to Flemma" })
+      end
 
-        if config.keymaps.normal.tool_execute then
-          vim.keymap.set("n", config.keymaps.normal.tool_execute, function()
-            local bufnr = vim.api.nvim_get_current_buf()
+      if config.keymaps.normal.tool_execute then
+        vim.keymap.set("n", config.keymaps.normal.tool_execute, function()
+          local bufnr = vim.api.nvim_get_current_buf()
 
-            local ok, err = executor.execute_at_cursor(bufnr)
-            if not ok then
-              notify.error(err or "Execution failed")
-            end
-          end, { buffer = true, desc = "Execute Flemma tool at cursor" })
-        end
-
-        if config.keymaps.normal.tool_background then
-          vim.keymap.set("n", config.keymaps.normal.tool_background, function()
-            local bufnr = vim.api.nvim_get_current_buf()
-
-            local ok, err = executor.background_at_cursor(bufnr)
-            if not ok then
-              notify.error(err or "Failed to move tool to background")
-            else
-              notify.info("Tool moved to background.")
-            end
-          end, { buffer = true, desc = "Move Flemma tool to background" })
-        end
-
-        if config.keymaps.normal.cancel then
-          vim.keymap.set("n", config.keymaps.normal.cancel, function()
-            local bufnr = vim.api.nvim_get_current_buf()
-
-            if executor.cancel_for_buffer(bufnr) then
-              last_cancel_miss_at = nil
-              return
-            end
-
-            local buffer_state = state.get_buffer_state(bufnr)
-            if buffer_state.resume_delay_timer then
-              bridge.cancel_request({ bufnr = bufnr })
-              last_cancel_miss_at = nil
-              return
-            end
-
-            local now = vim.uv.now()
-            if last_cancel_miss_at and (now - last_cancel_miss_at) < RAGE_CANCEL_MS then
-              last_cancel_miss_at = nil
-              log.info("RAGE cancel: user double-tapped Ctrl+C, cancelling all tools in buffer " .. bufnr)
-              executor.cancel_all(bufnr)
-              if buffer_state.current_request then
-                bridge.cancel_request({ bufnr = bufnr })
-              end
-              return
-            end
-
-            last_cancel_miss_at = now
-            log.debug("keymaps: Ctrl+C miss in buffer " .. bufnr .. ", awaiting double-tap for RAGE cancel")
-            notify.info("Nothing to cancel (press again to cancel all)")
-          end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
-        end
-
-        -- Message navigation keymaps
-        if config.keymaps.normal.message_next then
-          vim.keymap.set(
-            "n",
-            config.keymaps.normal.message_next,
-            navigation.find_next_message,
-            { buffer = true, desc = "Jump to next message" }
-          )
-        end
-
-        if config.keymaps.normal.message_prev then
-          vim.keymap.set(
-            "n",
-            config.keymaps.normal.message_prev,
-            navigation.find_prev_message,
-            { buffer = true, desc = "Jump to previous message" }
-          )
-        end
-
-        -- Fold toggle keymap (skip when the key conflicts with mapleader)
-        local fold_toggle_key = config.keymaps.normal.fold_toggle
-        if fold_toggle_key then
-          local leader = vim.g.mapleader or "\\"
-          if vim.keycode(fold_toggle_key) ~= leader then
-            vim.keymap.set(
-              "n",
-              fold_toggle_key,
-              folding.toggle_message_fold,
-              { buffer = true, desc = "Toggle message fold" }
-            )
+          local ok, err = executor.execute_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Execution failed")
           end
-        end
+        end, { buffer = true, desc = "Execute Flemma tool at cursor" })
+      end
 
-        -- Turn fold keymaps
-        if config.keymaps.normal.fold_turn then
-          vim.keymap.set(
-            "n",
-            config.keymaps.normal.fold_turn,
-            folding.fold_turn_at_cursor,
-            { buffer = true, desc = "Fold intermediate messages in current turn" }
-          )
-        end
+      if config.keymaps.normal.tool_background then
+        vim.keymap.set("n", config.keymaps.normal.tool_background, function()
+          local bufnr = vim.api.nvim_get_current_buf()
 
-        if config.keymaps.normal.fold_turns then
-          vim.keymap.set(
-            "n",
-            config.keymaps.normal.fold_turns,
-            folding.fold_all_turns,
-            { buffer = true, desc = "Fold intermediate messages in all turns" }
-          )
-        end
-
-        -- Conceal keymaps (toggle / on / off) — only when editing.conceal is configured
-        local cfg_for_conceal = config_facade.get()
-        local has_conceal = cfg_for_conceal
-          and cfg_for_conceal.editing
-          and cfg_for_conceal.editing.conceal ~= nil
-          and cfg_for_conceal.editing.conceal ~= false
-        if has_conceal then
-          local conceal_maps = {
-            { key = config.keymaps.normal.conceal_toggle, fn = ui.toggle_conceal, desc = "Toggle conceal level" },
-            { key = config.keymaps.normal.conceal_on, fn = ui.enable_conceal, desc = "Enable conceal" },
-            { key = config.keymaps.normal.conceal_off, fn = ui.disable_conceal, desc = "Disable conceal" },
-          }
-          for _, m in ipairs(conceal_maps) do
-            if m.key then
-              vim.keymap.set("n", m.key, m.fn, { buffer = true, desc = m.desc })
-            end
+          local ok, err = executor.background_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Failed to move tool to background")
+          else
+            notify.info("Tool moved to background.")
           end
-        end
+        end, { buffer = true, desc = "Move Flemma tool to background" })
+      end
 
-        -- Set up text objects with configured key
-        textobject.setup({ text_object = config.keymaps.text_object })
+      if config.keymaps.normal.cancel then
+        vim.keymap.set("n", config.keymaps.normal.cancel, function()
+          local bufnr = vim.api.nvim_get_current_buf()
 
-        -- Insert-mode : auto-newline for role markers
-        vim.keymap.set("i", ":", function()
-          if not M.handle_colon_insert() then
-            vim.api.nvim_feedkeys(":", "n", false)
+          if executor.cancel_for_buffer(bufnr) then
+            last_cancel_miss_at = nil
             return
           end
 
-          -- Eat one Space or Enter typed within 800ms (muscle memory protection).
-          -- Space triggers InsertCharPre; Enter does not, so we catch it via
-          -- a temporary keymap. Both share one idempotent cleanup.
-          local completion_time = vim.uv.now()
-          local cleaned_up = false
-          local autocmd_id
-
-          local function cleanup()
-            if cleaned_up then
-              return
-            end
-            cleaned_up = true
-            if autocmd_id then
-              pcall(vim.api.nvim_del_autocmd, autocmd_id)
-            end
-            pcall(vim.keymap.del, "i", "<CR>", { buffer = true })
+          local buffer_state = state.get_buffer_state(bufnr)
+          if buffer_state.resume_delay_timer then
+            bridge.cancel_request({ bufnr = bufnr })
+            last_cancel_miss_at = nil
+            return
           end
 
-          -- Catch Space (printable char → InsertCharPre fires)
-          autocmd_id = vim.api.nvim_create_autocmd("InsertCharPre", {
-            buffer = 0,
-            callback = function()
-              if vim.v.char == " " and (vim.uv.now() - completion_time) < CANCEL_WINDOW_MS then
-                vim.v.char = ""
-              end
-              cleanup()
-            end,
-          })
+          local now = vim.uv.now()
+          if last_cancel_miss_at and (now - last_cancel_miss_at) < RAGE_CANCEL_MS then
+            last_cancel_miss_at = nil
+            log.info("RAGE cancel: user double-tapped Ctrl+C, cancelling all tools in buffer " .. bufnr)
+            executor.cancel_all(bufnr)
+            if buffer_state.current_request then
+              bridge.cancel_request({ bufnr = bufnr })
+            end
+            return
+          end
 
-          -- Catch Enter (special key → needs a temporary keymap)
-          vim.keymap.set("i", "<CR>", function()
-            cleanup()
-          end, { buffer = true })
+          last_cancel_miss_at = now
+          log.debug("keymaps: Ctrl+C miss in buffer " .. bufnr .. ", awaiting double-tap for RAGE cancel")
+          notify.info("Nothing to cancel (press again to cancel all)")
+        end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
+      end
 
-          -- Safety timer: clean up if nothing typed within the window
-          vim.defer_fn(cleanup, CANCEL_WINDOW_MS)
-        end, { buffer = true, desc = "Auto-newline after role markers" })
+      -- Message navigation keymaps
+      if config.keymaps.normal.message_next then
+        vim.keymap.set(
+          "n",
+          config.keymaps.normal.message_next,
+          navigation.find_next_message,
+          { buffer = true, desc = "Jump to next message" }
+        )
+      end
 
-        -- Insert mode mapping - send and return to insert mode
-        if config.keymaps.insert.send then
-          vim.keymap.set("i", config.keymaps.insert.send, function()
-            local bufnr = vim.api.nvim_get_current_buf()
-            buffer_utils.buffer_cmd(bufnr, "stopinsert")
-            -- Defer to next event loop iteration so stopinsert takes effect
-            -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
-            vim.schedule(function()
-              core.send_or_execute({
-                bufnr = bufnr,
-                user_initiated = true,
-                on_request_complete = function()
-                  buffer_utils.buffer_cmd(bufnr, "startinsert!")
-                end,
-              })
-            end)
-          end, { buffer = true, desc = "Send to Flemma and continue editing" })
+      if config.keymaps.normal.message_prev then
+        vim.keymap.set(
+          "n",
+          config.keymaps.normal.message_prev,
+          navigation.find_prev_message,
+          { buffer = true, desc = "Jump to previous message" }
+        )
+      end
+
+      -- Fold toggle keymap (skip when the key conflicts with mapleader)
+      local fold_toggle_key = config.keymaps.normal.fold_toggle
+      if fold_toggle_key then
+        local leader = vim.g.mapleader or "\\"
+        if vim.keycode(fold_toggle_key) ~= leader then
+          vim.keymap.set(
+            "n",
+            fold_toggle_key,
+            folding.toggle_message_fold,
+            { buffer = true, desc = "Toggle message fold" }
+          )
         end
-      end,
-    })
+      end
+
+      -- Turn fold keymaps
+      if config.keymaps.normal.fold_turn then
+        vim.keymap.set(
+          "n",
+          config.keymaps.normal.fold_turn,
+          folding.fold_turn_at_cursor,
+          { buffer = true, desc = "Fold intermediate messages in current turn" }
+        )
+      end
+
+      if config.keymaps.normal.fold_turns then
+        vim.keymap.set(
+          "n",
+          config.keymaps.normal.fold_turns,
+          folding.fold_all_turns,
+          { buffer = true, desc = "Fold intermediate messages in all turns" }
+        )
+      end
+
+      -- Conceal keymaps (toggle / on / off) — only when editing.conceal is configured
+      local cfg_for_conceal = config_facade.get()
+      local has_conceal = cfg_for_conceal
+        and cfg_for_conceal.editing
+        and cfg_for_conceal.editing.conceal ~= nil
+        and cfg_for_conceal.editing.conceal ~= false
+      if has_conceal then
+        local conceal_maps = {
+          { key = config.keymaps.normal.conceal_toggle, fn = ui.toggle_conceal, desc = "Toggle conceal level" },
+          { key = config.keymaps.normal.conceal_on, fn = ui.enable_conceal, desc = "Enable conceal" },
+          { key = config.keymaps.normal.conceal_off, fn = ui.disable_conceal, desc = "Disable conceal" },
+        }
+        for _, m in ipairs(conceal_maps) do
+          if m.key then
+            vim.keymap.set("n", m.key, m.fn, { buffer = true, desc = m.desc })
+          end
+        end
+      end
+
+      -- Set up text objects with configured key
+      textobject.setup({ text_object = config.keymaps.text_object })
+
+      -- Insert-mode : auto-newline for role markers
+      vim.keymap.set("i", ":", function()
+        if not M.handle_colon_insert() then
+          vim.api.nvim_feedkeys(":", "n", false)
+          return
+        end
+
+        -- Eat one Space or Enter typed within 800ms (muscle memory protection).
+        -- Space triggers InsertCharPre; Enter does not, so we catch it via
+        -- a temporary keymap. Both share one idempotent cleanup.
+        local completion_time = vim.uv.now()
+        local cleaned_up = false
+        local autocmd_id
+
+        local function cleanup()
+          if cleaned_up then
+            return
+          end
+          cleaned_up = true
+          if autocmd_id then
+            pcall(vim.api.nvim_del_autocmd, autocmd_id)
+          end
+          pcall(vim.keymap.del, "i", "<CR>", { buffer = true })
+        end
+
+        -- Catch Space (printable char → InsertCharPre fires)
+        autocmd_id = vim.api.nvim_create_autocmd("InsertCharPre", {
+          buffer = 0,
+          callback = function()
+            if vim.v.char == " " and (vim.uv.now() - completion_time) < CANCEL_WINDOW_MS then
+              vim.v.char = ""
+            end
+            cleanup()
+          end,
+        })
+
+        -- Catch Enter (special key → needs a temporary keymap)
+        vim.keymap.set("i", "<CR>", function()
+          cleanup()
+        end, { buffer = true })
+
+        -- Safety timer: clean up if nothing typed within the window
+        vim.defer_fn(cleanup, CANCEL_WINDOW_MS)
+      end, { buffer = true, desc = "Auto-newline after role markers" })
+
+      -- Insert mode mapping - send and return to insert mode
+      if config.keymaps.insert.send then
+        vim.keymap.set("i", config.keymaps.insert.send, function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          buffer_utils.buffer_cmd(bufnr, "stopinsert")
+          -- Defer to next event loop iteration so stopinsert takes effect
+          -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
+          vim.schedule(function()
+            core.send_or_execute({
+              bufnr = bufnr,
+              user_initiated = true,
+              on_request_complete = function()
+                buffer_utils.buffer_cmd(bufnr, "startinsert!")
+              end,
+            })
+          end)
+        end, { buffer = true, desc = "Send to Flemma and continue editing" })
+      end
+    end)
   end
 end
 

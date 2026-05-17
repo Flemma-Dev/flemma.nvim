@@ -4,6 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local preview = require("flemma.ui.preview")
@@ -594,6 +595,7 @@ function M.setup_chat_filetype_autocmds()
     desc = "Flemma: apply buffer+window settings on filetype=chat",
     callback = function(ev)
       apply_chat_buffer_settings(ev.buf)
+      hooks.dispatch("buffer:created", { bufnr = ev.buf })
     end,
   })
 

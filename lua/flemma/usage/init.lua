@@ -320,7 +320,7 @@ function M.recall_last()
   M.show(bufnr, latest)
 end
 
----Per-buffer cleanup; called via state.register_cleanup.
+---Per-buffer cleanup; called via buffer:destroyed hook.
 ---@param bufnr integer
 function M.cleanup_buffer(bufnr)
   local bs = state.get_buffer_state(bufnr)
@@ -334,8 +334,8 @@ function M.cleanup_buffer(bufnr)
   end
 end
 
-state.register_cleanup("usage", function(bufnr)
-  M.cleanup_buffer(bufnr)
+hooks.on("buffer:destroyed", function(data)
+  M.cleanup_buffer(data.bufnr)
 end)
 
 hooks.on("request:finished", function(data)

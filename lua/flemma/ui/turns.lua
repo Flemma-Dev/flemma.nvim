@@ -7,6 +7,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
@@ -453,14 +454,15 @@ end
 -- ============================================================================
 
 ---Clean up turn cache for a buffer.
----Registered as a state cleanup hook so it runs on buffer teardown.
+---Runs on buffer teardown via the buffer:destroyed hook.
 ---@param bufnr integer
 function M.cleanup(bufnr)
   turn_caches[bufnr] = nil
 end
 
--- Register cleanup hook with state module
-state.register_cleanup("turns", M.cleanup)
+hooks.on("buffer:destroyed", function(data)
+  M.cleanup(data.bufnr)
+end)
 
 ---Get the detected turn ranges for a buffer.
 ---@param bufnr integer

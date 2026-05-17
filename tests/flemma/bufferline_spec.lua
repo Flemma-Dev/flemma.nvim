@@ -184,7 +184,7 @@ describe("Bufferline integration", function()
       assert.is_nil(icon)
     end)
 
-    it("should handle BufWipeout cleanup", function()
+    it("should handle buffer:destroyed cleanup", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_buf_set_name(bufnr, "/tmp/wiped.chat")
       vim.bo[bufnr].filetype = "chat"
@@ -192,18 +192,19 @@ describe("Bufferline integration", function()
       -- Mark as busy
       hooks.dispatch("request:sending", { bufnr = bufnr })
 
-      -- Verify busy before wipe
+      -- Verify busy before cleanup
       local icon = bufferline_integration.get_element_icon({
         path = "/tmp/wiped.chat",
         filetype = "chat",
       })
       assert.are.equal("󰔟", icon)
 
-      -- Wipe the buffer (triggers BufWipeout autocmd which clears busy state)
-      vim.api.nvim_buf_delete(bufnr, { force = true })
+      -- Dispatch buffer:destroyed (fired by state.cleanup_buffer_state in production)
+      hooks.dispatch("buffer:destroyed", { bufnr = bufnr })
 
       -- Use the test-only accessor to verify the entry was cleaned up
       assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
     it("should track multiple busy buffers independently", function()

@@ -1743,25 +1743,25 @@ bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
 bridge.register("drain_job_completions", M.drain_job_completions)
 
-state.register_cleanup("core.jobs_bar", function(bufnr)
-  jobs_bar.cleanup(bufnr)
+hooks.on("buffer:destroyed", function(data)
+  jobs_bar.cleanup(data.bufnr)
 end)
 
-state.register_cleanup("core.pending_send", function(bufnr)
-  local bs = state.get_buffer_state(bufnr)
+hooks.on("buffer:destroyed", function(data)
+  local bs = state.get_buffer_state(data.bufnr)
   if bs.pending_send then
     bs.pending_send.subscription:cancel()
     bs.pending_send = nil
   end
 end)
 
-state.register_cleanup("core.resume_delay_timer", function(bufnr)
-  local bs = state.get_buffer_state(bufnr)
+hooks.on("buffer:destroyed", function(data)
+  local bs = state.get_buffer_state(data.bufnr)
   if bs.resume_delay_timer then
     bs.resume_delay_timer:stop()
     bs.resume_delay_timer:close()
     bs.resume_delay_timer = nil
-    hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+    hooks.dispatch("autopilot:resume-cancelled", { bufnr = data.bufnr })
   end
 end)
 

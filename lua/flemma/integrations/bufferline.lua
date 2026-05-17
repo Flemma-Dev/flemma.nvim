@@ -60,14 +60,9 @@ hooks.on("tool:completed", function(data)
   decrement(data.bufnr)
 end)
 
-local augroup = vim.api.nvim_create_augroup("FlemmaBufferlineIntegration", { clear = true })
-
-vim.api.nvim_create_autocmd("BufWipeout", {
-  group = augroup,
-  callback = function(ev)
-    busy_count[ev.buf] = nil
-  end,
-})
+hooks.on("buffer:destroyed", function(data)
+  busy_count[data.bufnr] = nil
+end)
 
 ---Check whether opts represent a bufferline callback invocation (has path or filetype)
 ---versus a Flemma factory invocation (has icon or is empty).

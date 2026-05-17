@@ -3,7 +3,7 @@
 --- Activation is resolver-driven: the lualine resolver for
 --- `buffer.tokens.input` calls `start_tracking(bufnr)` idempotently on
 --- first access. That installs per-buffer TextChanged autocmds and registers
---- a state cleanup hook. Subsequent fetches (added in later commits) are
+--- a buffer:destroyed hook. Subsequent fetches (added in later commits) are
 --- debounced 2.5s after the user stops editing.
 ---
 --- This module is the only consumer of provider try_estimate_usage hooks that
@@ -17,7 +17,6 @@ local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local provider_registry = require("flemma.provider.registry")
 local readiness = require("flemma.readiness")
-local state = require("flemma.state")
 
 ---@type integer Debounce window in milliseconds. Exposed for tests.
 M._DEBOUNCE_MS = 2500
@@ -38,8 +37,6 @@ local config_listener_subscription = nil
 
 ---@type flemma.hooks.Subscription[]
 local request_listener_subscriptions = {}
-
-local CLEANUP_HOOK_NAME = "flemma.usage.prefetch"
 
 ---Tear down all state. Test-only.
 function M._reset_for_tests()
@@ -305,8 +302,7 @@ local function install_request_listener()
   end)
 end
 
----Idempotent. First call per buffer creates state + augroup and registers
----the state cleanup hook.
+---Idempotent. First call per buffer creates state + augroup.
 ---@param bufnr integer
 function M.start_tracking(bufnr)
   if entries[bufnr] then
@@ -324,11 +320,6 @@ function M.start_tracking(bufnr)
     in_flight = false,
     request_active = false,
   }
-
-  -- One global cleanup hook registration — idempotent under the hook name.
-  state.register_cleanup(CLEANUP_HOOK_NAME, function(wiped_bufnr)
-    M.untrack(wiped_bufnr)
-  end)
 
   install_config_listener()
   install_request_listener()
@@ -371,5 +362,9 @@ function M.untrack(bufnr)
   pcall(vim.api.nvim_del_augroup_by_id, entry.augroup_id)
   entries[bufnr] = nil
 end
+
+hooks.on("buffer:destroyed", function(data)
+  M.untrack(data.bufnr)
+end)
 
 return M

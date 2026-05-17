@@ -390,37 +390,42 @@ describe("State Management", function()
   end)
 
   describe("cleanup hooks", function()
-    it("register_cleanup stores and runs hooks during cleanup", function()
+    it("buffer:destroyed hook fires during cleanup", function()
+      package.loaded["flemma.hooks"] = nil
       package.loaded["flemma.state"] = nil
       package.loaded["flemma.tools"] = nil
+      local hooks = require("flemma.hooks")
       local st = require("flemma.state")
       local buf = vim.api.nvim_create_buf(false, true)
       st.get_buffer_state(buf)
 
       local hook_called_with = nil
-      st.register_cleanup("test_hook", function(bufnr)
-        hook_called_with = bufnr
+      hooks.on("buffer:destroyed", function(data)
+        hook_called_with = data.bufnr
       end)
 
       st.cleanup_buffer_state(buf)
       assert.are.equal(buf, hook_called_with)
+      hooks._clear_subscribers()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
-    it("hooks run even without prior buffer state", function()
+    it("buffer:destroyed fires even without prior buffer state", function()
+      package.loaded["flemma.hooks"] = nil
       package.loaded["flemma.state"] = nil
       package.loaded["flemma.tools"] = nil
+      local hooks = require("flemma.hooks")
       local st = require("flemma.state")
       local buf = vim.api.nvim_create_buf(false, true)
-      -- Don't initialize buffer state
 
       local hook_called = false
-      st.register_cleanup("test_hook2", function()
+      hooks.on("buffer:destroyed", function()
         hook_called = true
       end)
 
       st.cleanup_buffer_state(buf)
       assert.is_true(hook_called)
+      hooks._clear_subscribers()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
