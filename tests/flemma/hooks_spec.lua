@@ -226,5 +226,55 @@ describe("flemma.hooks", function()
     it("transforms autopilot:resumed", function()
       assert.equals("FlemmaAutopilotResumed", hooks._name_to_pattern("autopilot:resumed"))
     end)
+
+    it("transforms tool:approval-required", function()
+      assert.equals("FlemmaToolApprovalRequired", hooks._name_to_pattern("tool:approval-required"))
+    end)
+  end)
+
+  describe("tool:approval-required hook contract", function()
+    after_each(function()
+      hooks._clear_subscribers()
+    end)
+
+    it("delivers batched tool data to subscribers", function()
+      local received = nil
+      hooks.on("tool:approval-required", function(data)
+        received = data
+      end)
+
+      hooks.dispatch("tool:approval-required", {
+        bufnr = 42,
+        tools = {
+          { tool_id = "toolu_01", tool_name = "bash", input = { command = "ls" } },
+          { tool_id = "toolu_02", tool_name = "read", input = { path = "/tmp/x" } },
+        },
+      })
+
+      assert.is_not_nil(received)
+      assert.equals(42, received.bufnr)
+      assert.equals(2, #received.tools)
+      assert.equals("toolu_01", received.tools[1].tool_id)
+      assert.equals("bash", received.tools[1].tool_name)
+      assert.equals("ls", received.tools[1].input.command)
+      assert.equals("toolu_02", received.tools[2].tool_id)
+      assert.equals("read", received.tools[2].tool_name)
+    end)
+
+    it("fires User autocmd with FlemmaToolApprovalRequired pattern", function()
+      local autocmd_received = nil
+      track_autocmd("FlemmaToolApprovalRequired", function(ev)
+        autocmd_received = ev
+      end)
+
+      hooks.dispatch("tool:approval-required", {
+        bufnr = 7,
+        tools = { { tool_id = "t1", tool_name = "bash", input = {} } },
+      })
+
+      assert.is_not_nil(autocmd_received)
+      assert.equals(7, autocmd_received.data.bufnr)
+      assert.equals(1, #autocmd_received.data.tools)
+    end)
   end)
 end)

@@ -395,4 +395,31 @@ M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor
 
+--------------------------------------------------------------------------------
+-- Tool approval (public API)
+--------------------------------------------------------------------------------
+
+---Approve a pending tool call by ID.
+---Sets the tool_result header to `(approved)`. The next phase advance
+---(manual `<C-]>` or autopilot) will execute the tool.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error
+function M.approve(bufnr, tool_id)
+  return require("flemma.tools.executor").approve(bufnr, tool_id)
+end
+
+---Reject a pending tool call by ID.
+---Sets the tool_result header to `(rejected)`, optionally writing a
+---rejection message into the fence body that the model will see.
+---@param bufnr integer
+---@param tool_id string
+---@param message string|nil Optional rejection reason
+---@return boolean success
+---@return string|nil error
+function M.reject(bufnr, tool_id, message)
+  return require("flemma.tools.executor").reject(bufnr, tool_id, message)
+end
+
 return M

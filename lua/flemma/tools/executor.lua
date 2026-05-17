@@ -1084,8 +1084,91 @@ local function resolve_lifecycle_tool_at_cursor(bufnr)
   return ctx, result_seg, nil
 end
 
+---Validate that a tool_result placeholder exists and is in a lifecycle state
+---(pending/approved/denied/rejected) — not already completed or errored.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean ok
+---@return string|nil error
+local function validate_lifecycle_status(bufnr, tool_id)
+  local doc = parser.get_parsed_document(bufnr)
+  local tool_use_seg = nil
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" and seg.id == tool_id then
+        tool_use_seg = seg
+        break
+      end
+    end
+    if tool_use_seg then
+      break
+    end
+  end
+  if not tool_use_seg then
+    return false, "Tool not found: " .. tool_id
+  end
+  local result_seg = ast.find_tool_sibling(doc, tool_use_seg)
+  if not result_seg or result_seg.kind ~= "tool_result" then
+    return false, "No tool result placeholder for " .. tool_id
+  end
+  ---@cast result_seg flemma.ast.ToolResultSegment
+  if not result_seg.status or result_seg.status == "error" then
+    return false, "Tool " .. tool_id .. " has already completed"
+  end
+  return true, nil
+end
+
+---Set the `(approved)` header suffix on a tool_result placeholder by tool ID.
+---Re-engages autopilot if it was paused waiting for approval.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error
+function M.approve(bufnr, tool_id)
+  local valid, validate_err = validate_lifecycle_status(bufnr, tool_id)
+  if not valid then
+    return false, validate_err
+  end
+  local ok, update_err = injector.set_header_status(bufnr, tool_id, "approved")
+  if not ok then
+    return false, update_err
+  end
+  editing.auto_write(bufnr)
+  autopilot.nudge(bufnr)
+  return true, nil
+end
+
+---Set the `(rejected)` header suffix on a tool_result placeholder by tool ID,
+---optionally replacing the fence body with a user-supplied message that the
+---model will see as the rejection reason.
+---Re-engages autopilot if it was paused waiting for approval.
+---@param bufnr integer
+---@param tool_id string
+---@param message string|nil Optional rejection message written into the fence
+---@return boolean success
+---@return string|nil error
+function M.reject(bufnr, tool_id, message)
+  local valid, validate_err = validate_lifecycle_status(bufnr, tool_id)
+  if not valid then
+    return false, validate_err
+  end
+  local ok, update_err = injector.set_header_status(bufnr, tool_id, "rejected")
+  if not ok then
+    return false, update_err
+  end
+  if message and message ~= "" then
+    local content_ok, content_err = injector.set_fence_content(bufnr, tool_id, message)
+    if not content_ok then
+      return false, content_err
+    end
+  end
+  editing.auto_write(bufnr)
+  autopilot.nudge(bufnr)
+  return true, nil
+end
+
 ---Set the `(approved)` header suffix on the tool_result placeholder at cursor.
----The tool is not executed here — the next `<C-]>` advances the cycle.
+---Resolves the tool ID from cursor position, then delegates to approve().
 ---@param bufnr integer
 ---@return boolean success
 ---@return string|nil error
@@ -1094,17 +1177,11 @@ function M.approve_at_cursor(bufnr)
   if not ctx then
     return false, err
   end
-  local ok, update_err = injector.set_header_status(bufnr, ctx.tool_id, "approved")
-  if not ok then
-    return false, update_err
-  end
-  editing.auto_write(bufnr)
-  return true, nil
+  return M.approve(bufnr, ctx.tool_id)
 end
 
----Set the `(rejected)` header suffix on the tool_result placeholder at cursor,
----optionally replacing the fence body with a user-supplied message that the
----model will see as the rejection reason.
+---Set the `(rejected)` header suffix on the tool_result placeholder at cursor.
+---Resolves the tool ID from cursor position, then delegates to reject().
 ---@param bufnr integer
 ---@param message string|nil Optional rejection message written into the fence
 ---@return boolean success
@@ -1114,18 +1191,7 @@ function M.reject_at_cursor(bufnr, message)
   if not ctx then
     return false, err
   end
-  local ok, update_err = injector.set_header_status(bufnr, ctx.tool_id, "rejected")
-  if not ok then
-    return false, update_err
-  end
-  if message and message ~= "" then
-    local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, message)
-    if not content_ok then
-      return false, content_err
-    end
-  end
-  editing.auto_write(bufnr)
-  return true, nil
+  return M.reject(bufnr, ctx.tool_id, message)
 end
 
 ---Resolve and execute the tool at cursor position.

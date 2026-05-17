@@ -29,6 +29,7 @@ local notify = require("flemma.notify")
 ---| "autopilot:resume-scheduled"
 ---| "autopilot:resume-cancelled"
 ---| "autopilot:resumed"
+---| "tool:approval-required"
 ---| "buffer:created"
 ---| "buffer:destroyed"
 
@@ -94,6 +95,15 @@ local notify = require("flemma.notify")
 ---@class flemma.hooks.AutopilotResumedData
 ---@field bufnr integer
 
+---@class flemma.hooks.ToolApprovalRequiredTool
+---@field tool_id string
+---@field tool_name string
+---@field input table<string, any>
+
+---@class flemma.hooks.ToolApprovalRequiredData
+---@field bufnr integer
+---@field tools flemma.hooks.ToolApprovalRequiredTool[]
+
 ---@class flemma.hooks.BufferCreatedData
 ---@field bufnr integer
 
@@ -141,6 +151,7 @@ end
 ---@overload fun(name: "request:finished", callback: fun(data: flemma.hooks.RequestFinishedData)): flemma.hooks.Subscription
 ---@overload fun(name: "tool:executing", callback: fun(data: flemma.hooks.ToolExecutingData)): flemma.hooks.Subscription
 ---@overload fun(name: "tool:completed", callback: fun(data: flemma.hooks.ToolCompletedData)): flemma.hooks.Subscription
+---@overload fun(name: "tool:approval-required", callback: fun(data: flemma.hooks.ToolApprovalRequiredData)): flemma.hooks.Subscription
 ---@overload fun(name: "boot:complete", callback: fun(data: flemma.hooks.BootCompleteData)): flemma.hooks.Subscription
 ---@overload fun(name: "sink:created", callback: fun(data: flemma.hooks.SinkCreatedData)): flemma.hooks.Subscription
 ---@overload fun(name: "sink:destroyed", callback: fun(data: flemma.hooks.SinkDestroyedData)): flemma.hooks.Subscription
@@ -191,6 +202,7 @@ end
 ---@overload fun(name: "request:finished", data: flemma.hooks.RequestFinishedData)
 ---@overload fun(name: "tool:executing", data: flemma.hooks.ToolExecutingData)
 ---@overload fun(name: "tool:completed", data: flemma.hooks.ToolCompletedData)
+---@overload fun(name: "tool:approval-required", data: flemma.hooks.ToolApprovalRequiredData)
 ---@overload fun(name: "boot:complete", data?: flemma.hooks.BootCompleteData)
 ---@overload fun(name: "sink:created", data: flemma.hooks.SinkCreatedData)
 ---@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData)

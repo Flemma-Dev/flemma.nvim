@@ -4,20 +4,38 @@
 # Exits 0 if clean, 1 if violations found.
 set -euo pipefail
 
-# Files with intentional lazy loading (require at point of use)
+# Intentional inline requires: file=module pairs where lazy loading is justified.
+# Format: "file=module" — the module is the require argument without quotes.
+# commands.lua:      subcommand handlers lazy-require heavy modules
 # config/schema.lua: DISCOVER callbacks lazy-require tools/provider/sandbox registries
 #                    to avoid coupling the schema definition to heavy modules at load time
-LAZY_LOAD_FILES="lua/flemma/commands.lua lua/flemma/config/schema.lua"
+# tools/init.lua:    facade delegates to executor inline to avoid circular dependency
+#                    (executor already requires tools/init)
+ALLOWED_INLINE=(
+  "lua/flemma/commands.lua=*"
+  "lua/flemma/config/schema.lua=*"
+  "lua/flemma/tools/init.lua=flemma.tools.executor"
+)
+
+# Build a lookup function from the allowlist.
+# Returns 0 (true) if the file+module pair is allowed.
+is_allowed() {
+  local file="$1" module="$2"
+  for entry in "${ALLOWED_INLINE[@]}"; do
+    local allowed_file="${entry%%=*}"
+    local allowed_module="${entry#*=}"
+    if [ "$file" = "$allowed_file" ]; then
+      if [ "$allowed_module" = "*" ] || [ "$allowed_module" = "$module" ]; then
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
 
 violations=0
 
 for file in $(find lua/flemma -name '*.lua' -type f | sort); do
-  # Skip files with intentional lazy loading
-  for lazy_file in $LAZY_LOAD_FILES; do
-    if [ "$file" = "$lazy_file" ]; then
-      continue 2
-    fi
-  done
   # Find line number of first function definition
   first_fn=$(grep -n -m1 -E '^\s*(local\s+)?function\s' "$file" || true)
   if [ -z "$first_fn" ]; then
@@ -39,6 +57,14 @@ for file in $(find lua/flemma -name '*.lua' -type f | sort); do
 
     # Skip dynamic requires (no string literal — require(variable))
     if echo "$content" | grep -qE 'require\([^"'"'"']'; then
+      continue
+    fi
+
+    # Extract the module name from require("flemma.foo.bar")
+    module=$(echo "$content" | grep -oE 'require\("flemma\.[^"]*"' | head -1 | sed 's/require("//;s/"$//')
+
+    # Check against the allowlist
+    if [ -n "$module" ] && is_allowed "$file" "$module"; then
       continue
     fi
 

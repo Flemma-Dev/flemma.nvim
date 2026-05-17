@@ -2228,3 +2228,224 @@ describe("Executor approve_at_cursor / reject_at_cursor", function()
     vim.api.nvim_win_close(winid, true)
   end)
 end)
+
+-- ============================================================================
+-- ID-based approve / reject (public API via flemma.tools)
+-- ============================================================================
+
+describe("tools.approve / tools.reject (ID-based)", function()
+  local tools_module
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    tools_module = require("flemma.tools")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("approve sets the header to (approved) by tool ID", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `calculator` (`toolu_id_1`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_id_1` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    local ok, err = tools_module.approve(bufnr, "toolu_id_1")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    assert.equals("**Tool Result:** `toolu_id_1` (approved)", lines[8])
+  end)
+
+  it("reject sets the header to (rejected) by tool ID", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `calculator` (`toolu_id_2`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_id_2` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    local ok, err = tools_module.reject(bufnr, "toolu_id_2")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    assert.equals("**Tool Result:** `toolu_id_2` (rejected)", lines[8])
+  end)
+
+  it("reject writes a message into the fence body", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`toolu_id_3`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_id_3` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    local ok, err = tools_module.reject(bufnr, "toolu_id_3", "Dangerous command.")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    assert.equals("**Tool Result:** `toolu_id_3` (rejected)", lines[8])
+    assert.equals("```", lines[10])
+    assert.equals("Dangerous command.", lines[11])
+    assert.equals("```", lines[12])
+  end)
+
+  it("approve errors on already-completed tool", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `calculator` (`toolu_done`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_done`",
+      "",
+      "```",
+      "4",
+      "```",
+    })
+
+    local ok, err = tools_module.approve(bufnr, "toolu_done")
+    assert.is_false(ok)
+    assert.is_truthy(err and err:find("already completed"))
+  end)
+
+  it("reject errors on nonexistent tool ID", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "Hello",
+    })
+
+    local ok, err = tools_module.reject(bufnr, "toolu_ghost")
+    assert.is_false(ok)
+    assert.is_truthy(err and err:find("not found"))
+  end)
+end)
+
+-- ============================================================================
+-- Autopilot re-engagement after programmatic approval
+-- ============================================================================
+
+describe("approve / reject nudges autopilot", function()
+  local autopilot_module
+  local executor_module
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    config_facade = require("flemma.config")
+    local config_schema = require("flemma.config.schema")
+    config_facade.init(config_schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
+    autopilot_module = require("flemma.autopilot")
+    executor_module = require("flemma.tools.executor")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("re-arms autopilot from paused after approve", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `calculator` (`toolu_ap_1`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_ap_1` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    autopilot_module.arm(bufnr)
+    autopilot_module.on_tools_complete(bufnr)
+    assert.equals("paused", autopilot_module.get_state(bufnr))
+
+    executor_module.approve(bufnr, "toolu_ap_1")
+    -- nudge_autopilot re-arms from paused
+    assert.equals("armed", autopilot_module.get_state(bufnr))
+    autopilot_module.cleanup_buffer(bufnr)
+  end)
+
+  it("schedules on_tools_complete from armed after reject", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`toolu_ap_2`)",
+      "```json",
+      '{ "command": "ls" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_ap_2` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    -- Simulate armed state (Phase 2 hasn't run yet)
+    autopilot_module.arm(bufnr)
+    assert.equals("armed", autopilot_module.get_state(bufnr))
+
+    executor_module.reject(bufnr, "toolu_ap_2")
+    -- State stays armed — on_tools_complete is scheduled but hasn't fired yet
+    assert.equals("armed", autopilot_module.get_state(bufnr))
+    autopilot_module.cleanup_buffer(bufnr)
+  end)
+
+  it("does not nudge autopilot when idle", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "**Tool Use:** `calculator` (`toolu_ap_3`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_ap_3` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    assert.equals("idle", autopilot_module.get_state(bufnr))
+    executor_module.approve(bufnr, "toolu_ap_3")
+    -- Autopilot was idle — nudge is a no-op, user must press <C-]> manually
+    assert.equals("idle", autopilot_module.get_state(bufnr))
+    autopilot_module.cleanup_buffer(bufnr)
+  end)
+end)

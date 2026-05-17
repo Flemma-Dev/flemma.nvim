@@ -818,6 +818,8 @@ function M.send_or_execute(opts)
     end
 
     -- Normal tools: run through approval flow
+    ---@type flemma.hooks.ToolApprovalRequiredTool[]
+    local approval_required = {}
     for _, ctx in ipairs(normal_pending) do
       local decision = tool_approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
 
@@ -829,6 +831,11 @@ function M.send_or_execute(opts)
         status = "denied"
       else
         status = "pending"
+        approval_required[#approval_required + 1] = {
+          tool_id = ctx.tool_id,
+          tool_name = ctx.tool_name,
+          input = ctx.input,
+        }
       end
 
       local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { status = status })
@@ -842,6 +849,17 @@ function M.send_or_execute(opts)
     -- Move cursor to first pending placeholder so the user can review
     if first_placeholder_line then
       cursor.request_move(bufnr, { line = first_placeholder_line, reason = "phase1/pending-placeholder" })
+    end
+
+    -- Notify subscribers that tools are awaiting approval.
+    -- Dispatched via vim.schedule so subscribers can safely call Vim APIs.
+    if #approval_required > 0 then
+      vim.schedule(function()
+        hooks.dispatch("tool:approval-required", {
+          bufnr = bufnr,
+          tools = approval_required,
+        })
+      end)
     end
 
     -- Schedule Phase 2 via vim.schedule for undo boundary separation.

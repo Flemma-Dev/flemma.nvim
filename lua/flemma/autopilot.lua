@@ -266,6 +266,29 @@ function M.on_tools_complete(bufnr)
   end)
 end
 
+---Re-engage autopilot after a programmatic approval/rejection.
+---When autopilot is paused or armed, schedule on_tools_complete to
+---evaluate the remaining state and advance the cycle if appropriate.
+---No-op when autopilot is idle (no active loop).
+---@param bufnr integer
+function M.nudge(bufnr)
+  local ap_state = M.get_state(bufnr)
+  if ap_state == "paused" then
+    M.arm(bufnr)
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        M.on_tools_complete(bufnr)
+      end
+    end)
+  elseif ap_state == "armed" then
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        M.on_tools_complete(bufnr)
+      end
+    end)
+  end
+end
+
 ---Reset autopilot tracking for a buffer (used by tests for isolation)
 ---@param bufnr integer
 function M.cleanup_buffer(bufnr)
