@@ -462,6 +462,15 @@ end
 -- Register cleanup hook with state module
 state.register_cleanup("turns", M.cleanup)
 
+---Get the detected turn ranges for a buffer.
+---@param bufnr integer
+---@return flemma.ui.TurnRange[]
+function M.get_ranges(bufnr)
+  M.update(bufnr)
+  local cache = turn_caches[bufnr]
+  return cache and cache.ranges or {}
+end
+
 -- ============================================================================
 -- Test helpers
 -- ============================================================================

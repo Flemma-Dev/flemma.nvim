@@ -180,6 +180,8 @@
 ---@field conceal_on string|false
 ---@field conceal_toggle string|false
 ---@field fold_toggle string|false
+---@field fold_turn string|false
+---@field fold_turns string|false
 ---@field message_next string
 ---@field message_prev string
 ---@field send string

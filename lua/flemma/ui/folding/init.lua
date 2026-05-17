@@ -13,6 +13,7 @@ local roles = require("flemma.utilities.roles")
 local str = require("flemma.utilities.string")
 local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
+local turns = require("flemma.ui.turns")
 
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
 local LABEL_DETAIL_SEPARATOR = " — "
@@ -605,6 +606,143 @@ function M.toggle_message_fold()
       vim.cmd(fm_start .. " foldopen")
     else
       vim.cmd(fm_start .. " foldclose")
+    end
+  end
+end
+
+-- ============================================================================
+-- Turn Folding
+-- ============================================================================
+
+---Check whether a @You message contains only job results (no real user text).
+---Such messages are auto-delivered background task completions, not user input.
+---@param msg flemma.ast.MessageNode
+---@return boolean
+local function is_job_delivery_only(msg)
+  if msg.role ~= "You" then
+    return false
+  end
+  for _, seg in ipairs(msg.segments) do
+    if seg.kind == "text" and seg.value:match("%S") then
+      return false
+    elseif seg.kind ~= "job_result" and seg.kind ~= "tool_result" and seg.kind ~= "text" then
+      return false
+    end
+  end
+  return true
+end
+
+---Open a message fold if it's closed, then close its inner sub-folds.
+---@param msg flemma.ast.MessageNode
+local function open_and_tidy_message(msg)
+  local msg_start = msg.position.start_line
+  if vim.fn.foldclosed(msg_start) ~= -1 then
+    pcall(function()
+      vim.cmd(msg_start .. " foldopen")
+    end)
+  end
+  close_sub_folds(msg_start + 1, msg.position.end_line)
+end
+
+---Fold intermediate messages in a single turn.
+---Closes inner folds (level 2) first, then the message fold (level 1) for
+---each message that is not the first or last in the turn. Also folds a leading
+---@You message if it contains only auto-delivered job results.
+---The first and last visible messages are opened (if closed) and their inner
+---folds (thinking, tool blocks) are closed for a clean overview.
+---@param bufnr integer
+---@param range flemma.ui.TurnRange
+local function fold_turn_range(bufnr, range)
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Collect messages within this turn's line range
+  local turn_messages = {} ---@type flemma.ast.MessageNode[]
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line >= range.start_line and msg.position.end_line <= range.end_line then
+      table.insert(turn_messages, msg)
+    end
+  end
+
+  if #turn_messages < 2 then
+    return
+  end
+
+  -- Determine the effective first visible message (skip leading job-delivery messages)
+  local first_visible = 1
+  while first_visible < #turn_messages and is_job_delivery_only(turn_messages[first_visible]) do
+    first_visible = first_visible + 1
+  end
+
+  -- Ensure the fold map is fresh
+  M.get_fold_level(range.start_line)
+
+  local last = #turn_messages
+
+  -- Fold everything except first_visible and last
+  for i = 1, #turn_messages do
+    if i == first_visible or i == last then
+      open_and_tidy_message(turn_messages[i])
+    else
+      local msg = turn_messages[i]
+      local msg_start = msg.position.start_line
+      if vim.fn.foldclosed(msg_start) == -1 then
+        close_sub_folds(msg_start + 1, msg.position.end_line)
+        pcall(function()
+          vim.cmd(msg_start .. " foldclose")
+        end)
+      end
+    end
+  end
+end
+
+---Fold intermediate messages in the turn containing the cursor.
+---No-op if cursor is outside any turn or the turn has 2 or fewer messages.
+---@param bufnr? integer Buffer number (defaults to current buffer)
+function M.fold_turn_at_cursor(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local lnum = vim.fn.line(".")
+  local ranges = turns.get_ranges(bufnr)
+
+  for _, range in ipairs(ranges) do
+    if lnum >= range.start_line and lnum <= range.end_line then
+      fold_turn_range(bufnr, range)
+      return
+    end
+  end
+end
+
+---Fold intermediate messages in all turns, plus frontmatter and system messages.
+---@param bufnr? integer Buffer number (defaults to current buffer)
+function M.fold_all_turns(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local ranges = turns.get_ranges(bufnr)
+
+  for _, range in ipairs(ranges) do
+    fold_turn_range(bufnr, range)
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Ensure the fold map is fresh for foldclose operations below
+  if #doc.messages > 0 then
+    M.get_fold_level(doc.messages[1].position.start_line)
+  end
+
+  -- Fold frontmatter
+  local fm = doc.frontmatter
+  if fm and vim.fn.foldclosed(fm.position.start_line) == -1 then
+    pcall(function()
+      vim.cmd(fm.position.start_line .. " foldclose")
+    end)
+  end
+
+  -- Fold system messages
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "System" and vim.fn.foldclosed(msg.position.start_line) == -1 then
+      close_sub_folds(msg.position.start_line + 1, msg.position.end_line)
+      pcall(function()
+        vim.cmd(msg.position.start_line .. " foldclose")
+      end)
     end
   end
 end

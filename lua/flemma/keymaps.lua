@@ -167,6 +167,25 @@ M.setup = function()
           end
         end
 
+        -- Turn fold keymaps
+        if config.keymaps.normal.fold_turn then
+          vim.keymap.set(
+            "n",
+            config.keymaps.normal.fold_turn,
+            folding.fold_turn_at_cursor,
+            { buffer = true, desc = "Fold intermediate messages in current turn" }
+          )
+        end
+
+        if config.keymaps.normal.fold_turns then
+          vim.keymap.set(
+            "n",
+            config.keymaps.normal.fold_turns,
+            folding.fold_all_turns,
+            { buffer = true, desc = "Fold intermediate messages in all turns" }
+          )
+        end
+
         -- Conceal keymaps (toggle / on / off) — only when editing.conceal is configured
         local cfg_for_conceal = config_facade.get()
         local has_conceal = cfg_for_conceal
