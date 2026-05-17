@@ -25,7 +25,9 @@ describe("State Management", function()
     flemma.setup({
       editing = {
         manage_updatetime = true,
-        foldlevel = 1,
+        fold = {
+          level = 1,
+        },
       },
     })
 

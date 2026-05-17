@@ -226,7 +226,7 @@ Flemma uses a two-level fold hierarchy:
 | Level 1    | Each message                 | Collapse long exchanges without losing context.     |
 | Level 2    | Thinking blocks, frontmatter | Keep reasoning traces and templates out of the way. |
 
-The initial fold level is controlled by `editing.foldlevel` (default: `1`, which collapses thinking blocks and frontmatter but keeps messages open). Set to `0` to collapse everything, or `99` to open everything.
+The initial fold level is controlled by `editing.fold.level` (default: `1`, which collapses thinking blocks and frontmatter but keeps messages open). Set to `0` to collapse everything, or `99` to open everything.
 
 ### Fold text
 

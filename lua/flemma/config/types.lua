@@ -39,7 +39,7 @@
 ---@field auto_write boolean
 ---@field conceal? string|integer|false
 ---@field disable_textwidth boolean
----@field foldlevel integer
+---@field fold flemma.config.EditingFold
 ---@field manage_updatetime boolean
 
 ---@class flemma.config.Experimental
@@ -162,6 +162,9 @@
 ---@field thinking boolean
 ---@field tool_result boolean
 ---@field tool_use boolean
+
+---@class flemma.config.EditingFold
+---@field level integer
 
 ---@class flemma.config.HighlightsDefaults
 ---@field dark flemma.config.HighlightsDefaultsDark

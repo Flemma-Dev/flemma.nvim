@@ -554,7 +554,7 @@ function M.setup_folding(bufnr)
   vim.wo[winid].foldmethod = "expr"
   vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
   vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.folding").get_fold_text()'
-  vim.wo[winid].foldlevel = config_facade.get().editing.foldlevel
+  vim.wo[winid].foldlevel = config_facade.get().editing.fold.level
 end
 
 ---Close all open sub-folds within a line range before closing the outer fold.

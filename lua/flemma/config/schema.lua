@@ -329,7 +329,9 @@ return s.object({
     disable_textwidth = s.boolean(true),
     auto_write = s.boolean(false),
     manage_updatetime = s.boolean(true),
-    foldlevel = s.integer(1),
+    fold = s.object({
+      level = s.integer(1),
+    }),
     -- Compact `{conceallevel}{concealcursor}` format, e.g. "2nv" = conceallevel 2, concealcursor "nv".
     -- false disables the override and leaves the user's own window settings untouched.
     -- See docs/conceal.md.
