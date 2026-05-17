@@ -228,6 +228,8 @@ Flemma uses a two-level fold hierarchy:
 
 The initial fold level is controlled by `editing.fold.level` (default: `1`, which collapses thinking blocks and frontmatter but keeps messages open). Set to `0` to collapse everything, or `99` to open everything.
 
+When `editing.fold.gap` is `true`, folded messages leave one trailing blank line visible between them for visual separation. This only applies to message-level folds — tool block folds always collapse fully. Disabled by default.
+
 ### Fold text
 
 Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:

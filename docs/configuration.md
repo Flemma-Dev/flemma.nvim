@@ -151,6 +151,7 @@ require("flemma").setup({
     manage_updatetime = true,                -- Lower updatetime in chat buffers
     fold = {
       level = 1,                             -- 0=all closed, 1=thinking collapsed, 99=all open
+      gap = false,                           -- Leave one blank line visible between folded messages
     },
     conceal = "2nv",                         -- "{level}{cursor}" — hide markdown syntax by default; false/nil to opt out
     auto_close = {
@@ -307,6 +308,7 @@ Phase labeling is enabled by default. Set `false` to omit phase labels from the 
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
 | `editing.fold.level`        | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+| `editing.fold.gap`          | `false` | Leave one blank line visible between consecutive folded messages for visual separation. Only applies to message-level folds; tool block folds always collapse fully.                                                  |
 | `editing.conceal`           | `"2nv"` | Compact `{conceallevel}{concealcursor}` override applied to chat windows. See [docs/conceal.md](conceal.md) for format and the `line_highlights` interaction caveat.                                                  |
 | `editing.auto_close.*`      | varies  | Auto-close (fold) blocks when they reach a terminal state. See [Auto-close behaviour](#auto-close-behaviour) below.                                                                                                   |
 

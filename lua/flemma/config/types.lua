@@ -164,6 +164,7 @@
 ---@field tool_use boolean
 
 ---@class flemma.config.EditingFold
+---@field gap boolean
 ---@field level integer
 
 ---@class flemma.config.HighlightsDefaults

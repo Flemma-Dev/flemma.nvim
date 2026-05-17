@@ -331,6 +331,7 @@ return s.object({
     manage_updatetime = s.boolean(true),
     fold = s.object({
       level = s.integer(1),
+      gap = s.boolean(false),
     }),
     -- Compact `{conceallevel}{concealcursor}` format, e.g. "2nv" = conceallevel 2, concealcursor "nv".
     -- false disables the override and leaves the user's own window settings untouched.

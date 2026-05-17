@@ -178,11 +178,11 @@ describe("UI Folding", function()
 
       local lines = {
         "@You:",
-        "question", -- lines 1-2: >1, =
-        "more content", -- line 3: =
-        "", -- line 4: <1 (end of message, trailing empty line)
+        "question",
+        "more content",
+        "",
         "@Assistant:",
-        "answer", -- lines 5-6: >1
+        "answer",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -221,6 +221,91 @@ describe("UI Folding", function()
       assert.are.equal(">1", folding.get_fold_level(4), "@Assistant: should start message fold")
 
       parser.clear_ast_snapshot_before_send(bufnr)
+    end)
+
+    it("should show blank separator as gap in streaming scenario when fold.gap is enabled", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { fold = { gap = true } } })
+      folding = require("flemma.ui.folding")
+
+      local parser = require("flemma.parser")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hi!" })
+      parser.create_ast_snapshot_before_send(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant:" })
+
+      assert.are.equal(">1", folding.get_fold_level(1), "@You: should start message fold")
+      assert.are.equal("=", folding.get_fold_level(2), "Hi! should be inside fold")
+      assert.are.equal("0", folding.get_fold_level(3), "blank separator should be visible gap")
+      assert.are.equal(">1", folding.get_fold_level(4), "@Assistant: should start message fold")
+
+      parser.clear_ast_snapshot_before_send(bufnr)
+    end)
+
+    it("should leave trailing blank as gap when fold.gap is enabled", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { fold = { gap = true } } })
+      folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "more content",
+        "",
+        "@Assistant:",
+        "answer",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">1", folding.get_fold_level(1))
+      assert.are.equal("=", folding.get_fold_level(2))
+      assert.are.equal("=", folding.get_fold_level(3))
+      assert.are.equal("0", folding.get_fold_level(4))
+      assert.are.equal(">1", folding.get_fold_level(5))
+    end)
+
+    it("should leave exactly one blank line visible with multiple trailing blanks when fold.gap is enabled", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { fold = { gap = true } } })
+      folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "",
+        "",
+        "@Assistant:",
+        "answer",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">1", folding.get_fold_level(1))
+      assert.are.equal("=", folding.get_fold_level(3))
+      assert.are.equal("0", folding.get_fold_level(4))
+      assert.are.equal(">1", folding.get_fold_level(5))
     end)
 
     it("should return >2 for frontmatter on line 1", function()
