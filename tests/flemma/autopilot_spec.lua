@@ -571,6 +571,55 @@ describe("Autopilot on_tools_complete", function()
     assert.equals("paused", autopilot.get_state(bufnr))
     autopilot.cleanup_buffer(bufnr)
   end)
+
+  it("recovers from sending state when on_tools_complete is called again", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
+    -- Scenario: on_tools_complete set state to "sending" and scheduled
+    -- send_or_execute, but the scheduled callback bailed (e.g., executing
+    -- tools guard). A subsequent tool completion calls on_tools_complete
+    -- again — it must not be ignored, otherwise autopilot is stuck forever.
+    local bufnr = create_buffer({
+      "@You:",
+      "Run the calculator",
+      "",
+      "@Assistant:",
+      "Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_01` (pending)",
+      "",
+      "```",
+      "```",
+    })
+
+    -- Simulate the stuck state: autopilot set to "sending" by a prior
+    -- on_tools_complete whose scheduled send_or_execute bailed.
+    autopilot.arm(bufnr)
+    autopilot.on_tools_complete(bufnr)
+    -- With pending blocks, first call pauses.
+    assert.equals("paused", autopilot.get_state(bufnr))
+
+    -- Now simulate: user approved the tool externally, changing status in buffer.
+    -- Meanwhile autopilot was re-armed and on_tools_complete set state to "sending".
+    -- We directly set "sending" to simulate the stuck state.
+    local buffer_state = require("flemma.state").get_buffer_state(bufnr)
+    buffer_state.autopilot.state = "sending"
+    assert.equals("sending", autopilot.get_state(bufnr))
+
+    -- A second on_tools_complete fires (from tool completion callback).
+    -- BUG: currently ignored because state is "sending", not "armed".
+    -- FIX: on_tools_complete should also accept "sending" state.
+    autopilot.on_tools_complete(bufnr)
+    -- If the fix works, it should see the pending block and pause.
+    -- If the bug persists, state stays "sending" (stuck).
+    assert.equals("paused", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
 end)
 
 -- ============================================================================

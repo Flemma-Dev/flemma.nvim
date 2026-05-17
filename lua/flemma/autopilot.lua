@@ -187,8 +187,11 @@ end
 function M.on_tools_complete(bufnr)
   local bs = get_state(bufnr)
 
-  -- Only continue if we're in the armed state
-  if bs.state ~= "armed" then
+  -- Only continue if we're in the armed or sending state.
+  -- "sending" is included because the scheduled send_or_execute from a prior
+  -- on_tools_complete may have bailed on a guard (e.g., has_executing_tools).
+  -- Without re-evaluation, autopilot would be stuck in "sending" forever.
+  if bs.state ~= "armed" and bs.state ~= "sending" then
     log.debug("autopilot: on_tools_complete ignored (state=" .. bs.state .. ")")
     return
   end
