@@ -4,6 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local hooks = require("flemma.hooks")
 local normalize = require("flemma.provider.normalize")
 local autopilot = require("flemma.autopilot")
 local processor = require("flemma.processor")
@@ -2007,31 +2008,34 @@ function M.show(opts)
   vim.bo[buf].filetype = "flemma-status"
 
   -- Auto-refresh when async tool sources finish loading or config changes
-  local augroup = vim.api.nvim_create_augroup("FlemmaStatus", { clear = true })
-  vim.api.nvim_create_autocmd("User", {
-    group = augroup,
-    pattern = { "FlemmaBootComplete", "FlemmaConfigUpdated" },
+  local function on_refresh()
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    local source = vim.b[buf].flemma_source_bufnr
+    local refresh_bufnr = (source and vim.api.nvim_buf_is_valid(source)) and source or 0
+    local verbose = vim.b[buf].flemma_verbose or false
+    local refresh_data
+    if verbose then
+      refresh_data = M.collect_verbose(refresh_bufnr)
+    else
+      refresh_data = M.collect(refresh_bufnr)
+    end
+    local was_booting = vim.b[buf].flemma_was_booting or false
+    if was_booting and not refresh_data.tools.booting then
+      refresh_data.tools.boot_completed = true
+    end
+    vim.b[buf].flemma_was_booting = refresh_data.tools.booting
+    render_buffer(buf, win, M.format(refresh_data, verbose))
+  end
+  local boot_handle = hooks.on("boot:complete", on_refresh)
+  local config_handle = hooks.on("config:updated", on_refresh)
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    buffer = buf,
+    once = true,
     callback = function()
-      if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
-        pcall(vim.api.nvim_del_augroup_by_id, augroup)
-        return
-      end
-      local source = vim.b[buf].flemma_source_bufnr
-      local refresh_bufnr = (source and vim.api.nvim_buf_is_valid(source)) and source or 0
-      local verbose = vim.b[buf].flemma_verbose or false
-      local refresh_data
-      if verbose then
-        refresh_data = M.collect_verbose(refresh_bufnr)
-      else
-        refresh_data = M.collect(refresh_bufnr)
-      end
-      -- Show "finished" line only if the loading indicator was visible before
-      local was_booting = vim.b[buf].flemma_was_booting or false
-      if was_booting and not refresh_data.tools.booting then
-        refresh_data.tools.boot_completed = true
-      end
-      vim.b[buf].flemma_was_booting = refresh_data.tools.booting
-      render_buffer(buf, win, M.format(refresh_data, verbose))
+      boot_handle:off()
+      config_handle:off()
     end,
   })
 

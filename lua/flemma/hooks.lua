@@ -93,7 +93,7 @@ local notify = require("flemma.notify")
 ---@field bufnr integer
 
 ---@class flemma.hooks.Handle
----@field off fun(): nil Unsubscribe this listener
+---@field off fun(self: flemma.hooks.Handle): nil Unsubscribe this listener
 
 ---@type table<string, {callback: fun(data: table)}[]>
 local subscribers = {}

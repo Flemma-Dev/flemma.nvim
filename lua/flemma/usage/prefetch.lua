@@ -33,11 +33,11 @@ M._DEBOUNCE_MS = 2500
 ---@type table<integer, flemma.usage.prefetch.Entry>
 local entries = {}
 
----@type integer|nil
-local config_listener_augroup = nil
+---@type flemma.hooks.Handle|nil
+local config_listener_handle = nil
 
----@type integer|nil
-local request_listener_augroup = nil
+---@type flemma.hooks.Handle[]
+local request_listener_handles = {}
 
 local CLEANUP_HOOK_NAME = "flemma.usage.prefetch"
 
@@ -46,14 +46,14 @@ function M._reset_for_tests()
   for bufnr in pairs(entries) do
     M.untrack(bufnr)
   end
-  if config_listener_augroup then
-    pcall(vim.api.nvim_del_augroup_by_id, config_listener_augroup)
-    config_listener_augroup = nil
+  if config_listener_handle then
+    config_listener_handle:off()
+    config_listener_handle = nil
   end
-  if request_listener_augroup then
-    pcall(vim.api.nvim_del_augroup_by_id, request_listener_augroup)
-    request_listener_augroup = nil
+  for _, handle in ipairs(request_listener_handles) do
+    handle:off()
   end
+  request_listener_handles = {}
 end
 
 ---Introspection for tests.
@@ -205,7 +205,7 @@ local function schedule_fetch(bufnr)
   if not entry or entry.request_active then
     -- While a request is in flight, TextChanged fires constantly as the
     -- response streams in — suppress the debounced estimate. Real usage
-    -- will arrive via FlemmaRequestFinished.
+    -- will arrive via request:finished.
     return
   end
   if entry.timer then
@@ -228,23 +228,18 @@ end
 ---reschedules fetches so `:Flemma switch` and similar config changes clear
 ---stale numbers immediately.
 local function install_config_listener()
-  if config_listener_augroup then
+  if config_listener_handle then
     return
   end
-  config_listener_augroup = vim.api.nvim_create_augroup("FlemmaUsagePrefetchConfig", { clear = true })
-  vim.api.nvim_create_autocmd("User", {
-    group = config_listener_augroup,
-    pattern = "FlemmaConfigUpdated",
-    callback = function()
-      local count = 0
-      for bufnr_key in pairs(entries) do
-        clear_cache(bufnr_key)
-        schedule_fetch(bufnr_key)
-        count = count + 1
-      end
-      log.debug("prefetch: config:updated → invalidated " .. count .. " tracked buffer(s)")
-    end,
-  })
+  config_listener_handle = hooks.on("config:updated", function()
+    local count = 0
+    for bufnr_key in pairs(entries) do
+      clear_cache(bufnr_key)
+      schedule_fetch(bufnr_key)
+      count = count + 1
+    end
+    log.debug("prefetch: config:updated → invalidated " .. count .. " tracked buffer(s)")
+  end)
 end
 
 ---Installed once on first start_tracking. Suppresses debounced fetches while
@@ -252,78 +247,62 @@ end
 ---request.input_tokens when a request completes — avoiding a redundant
 ---count_tokens round-trip during tool-call loops.
 local function install_request_listener()
-  if request_listener_augroup then
+  if #request_listener_handles > 0 then
     return
   end
-  request_listener_augroup = vim.api.nvim_create_augroup("FlemmaUsagePrefetchRequest", { clear = true })
 
-  vim.api.nvim_create_autocmd("User", {
-    group = request_listener_augroup,
-    pattern = "FlemmaRequestSending",
-    callback = function(ev)
-      local data = ev.data --[[@as flemma.hooks.RequestSendingData]]
-      local entry = entries[data.bufnr]
-      if not entry then
-        return
-      end
-      log.debug("prefetch: request:sending → suppress fetches bufnr=" .. data.bufnr)
-      if entry.timer then
-        pcall(entry.timer.stop, entry.timer)
-        pcall(entry.timer.close, entry.timer)
-        entry.timer = nil
-      end
-      entry.request_active = true
-    end,
-  })
+  request_listener_handles[#request_listener_handles + 1] = hooks.on("request:sending", function(data)
+    local entry = entries[data.bufnr]
+    if not entry then
+      return
+    end
+    log.debug("prefetch: request:sending → suppress fetches bufnr=" .. data.bufnr)
+    if entry.timer then
+      pcall(entry.timer.stop, entry.timer)
+      pcall(entry.timer.close, entry.timer)
+      entry.timer = nil
+    end
+    entry.request_active = true
+  end)
 
-  vim.api.nvim_create_autocmd("User", {
-    group = request_listener_augroup,
-    pattern = "FlemmaRequestFinished",
-    callback = function(ev)
-      local data = ev.data --[[@as flemma.hooks.RequestFinishedData]]
-      local entry = entries[data.bufnr]
-      if not entry then
-        return
-      end
-      entry.request_active = false
-      if data.request then
-        -- Anthropic (and anyone mirroring its shape) splits input into three
-        -- counters: input_tokens = non-cached, cache_read_input_tokens = served
-        -- from cache, cache_creation_input_tokens = newly cached. count_tokens
-        -- returns the total, so we sum to keep the lualine display consistent
-        -- whether the value came from a prefetch or a real request.
-        local cache_read = data.request.cache_read_input_tokens or 0
-        local cache_creation = data.request.cache_creation_input_tokens or 0
-        local total_input = data.request.input_tokens + cache_read + cache_creation
-        log.debug(
-          "prefetch: request:finished → seed cache from actual request bufnr="
-            .. data.bufnr
-            .. " tokens="
-            .. total_input
-            .. " (input="
-            .. data.request.input_tokens
-            .. " cache_read="
-            .. cache_read
-            .. " cache_creation="
-            .. cache_creation
-            .. ") model="
-            .. data.request.model
-        )
-        write_cache(data.bufnr, {
-          tokens = total_input,
-          cache_key = data.request.provider .. ":" .. data.request.model,
-          model = data.request.model,
-        })
-      else
-        log.debug(
-          "prefetch: request:finished → cleared request_active (no request payload, status="
-            .. tostring(data.status)
-            .. ") bufnr="
-            .. data.bufnr
-        )
-      end
-    end,
-  })
+  request_listener_handles[#request_listener_handles + 1] = hooks.on("request:finished", function(data)
+    local entry = entries[data.bufnr]
+    if not entry then
+      return
+    end
+    entry.request_active = false
+    if data.request then
+      local cache_read = data.request.cache_read_input_tokens or 0
+      local cache_creation = data.request.cache_creation_input_tokens or 0
+      local total_input = data.request.input_tokens + cache_read + cache_creation
+      log.debug(
+        "prefetch: request:finished → seed cache from actual request bufnr="
+          .. data.bufnr
+          .. " tokens="
+          .. total_input
+          .. " (input="
+          .. data.request.input_tokens
+          .. " cache_read="
+          .. cache_read
+          .. " cache_creation="
+          .. cache_creation
+          .. ") model="
+          .. data.request.model
+      )
+      write_cache(data.bufnr, {
+        tokens = total_input,
+        cache_key = data.request.provider .. ":" .. data.request.model,
+        model = data.request.model,
+      })
+    else
+      log.debug(
+        "prefetch: request:finished → cleared request_active (no request payload, status="
+          .. tostring(data.status)
+          .. ") bufnr="
+          .. data.bufnr
+      )
+    end
+  end)
 end
 
 ---Idempotent. First call per buffer creates state + augroup and registers

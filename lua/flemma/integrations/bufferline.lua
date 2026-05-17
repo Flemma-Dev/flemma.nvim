@@ -9,6 +9,8 @@
 ---@class flemma.integrations.Bufferline
 local M = {}
 
+local hooks = require("flemma.hooks")
+
 local DEFAULT_ICON = "󰔟"
 local HIGHLIGHT = "FlemmaBusy"
 
@@ -42,29 +44,23 @@ end
 -- apply_syntax() will re-register it from config, but this ensures the group is always defined.
 vim.api.nvim_set_hl(0, HIGHLIGHT, { link = "DiagnosticWarn", default = true })
 
+hooks.on("request:sending", function(data)
+  increment(data.bufnr)
+end)
+
+hooks.on("tool:executing", function(data)
+  increment(data.bufnr)
+end)
+
+hooks.on("request:finished", function(data)
+  decrement(data.bufnr)
+end)
+
+hooks.on("tool:completed", function(data)
+  decrement(data.bufnr)
+end)
+
 local augroup = vim.api.nvim_create_augroup("FlemmaBufferlineIntegration", { clear = true })
-
-vim.api.nvim_create_autocmd("User", {
-  group = augroup,
-  pattern = { "FlemmaRequestSending", "FlemmaToolExecuting" },
-  callback = function(ev)
-    if not ev.data or not ev.data.bufnr then
-      return
-    end
-    increment(ev.data.bufnr)
-  end,
-})
-
-vim.api.nvim_create_autocmd("User", {
-  group = augroup,
-  pattern = { "FlemmaRequestFinished", "FlemmaToolCompleted" },
-  callback = function(ev)
-    if not ev.data or not ev.data.bufnr then
-      return
-    end
-    decrement(ev.data.bufnr)
-  end,
-})
 
 vim.api.nvim_create_autocmd("BufWipeout", {
   group = augroup,
