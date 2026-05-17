@@ -276,20 +276,26 @@ end
 ---@param bufnr integer
 function M.nudge(bufnr)
   local ap_state = M.get_state(bufnr)
+  if ap_state ~= "paused" and ap_state ~= "armed" then
+    return
+  end
+  -- Only advance when all pending tools are resolved. Individual
+  -- approve/reject calls during a batch should not trigger re-entry —
+  -- the cycle resumes once the entire batch is handled.
+  local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
+  for _, ctx in ipairs(tool_blocks["pending"] or {}) do
+    if not ctx.has_content then
+      return
+    end
+  end
   if ap_state == "paused" then
     M.arm(bufnr)
-    vim.schedule(function()
-      if vim.api.nvim_buf_is_valid(bufnr) then
-        M.on_tools_complete(bufnr)
-      end
-    end)
-  elseif ap_state == "armed" then
-    vim.schedule(function()
-      if vim.api.nvim_buf_is_valid(bufnr) then
-        M.on_tools_complete(bufnr)
-      end
-    end)
   end
+  vim.schedule(function()
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      M.on_tools_complete(bufnr)
+    end
+  end)
 end
 
 ---Reset autopilot tracking for a buffer (used by tests for isolation)
