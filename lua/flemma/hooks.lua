@@ -92,8 +92,8 @@ local notify = require("flemma.notify")
 ---@class flemma.hooks.AutopilotResumedData
 ---@field bufnr integer
 
----@class flemma.hooks.Handle
----@field off fun(self: flemma.hooks.Handle): nil Unsubscribe this listener
+---@class flemma.hooks.Subscription
+---@field off fun(self: flemma.hooks.Subscription): nil Unsubscribe this listener
 
 ---@type table<string, {callback: fun(data: table)}[]>
 local subscribers = {}
@@ -129,24 +129,24 @@ end
 ---Internal subscribers fire synchronously before the User autocmd,
 ---in registration order. Errors in one subscriber do not prevent
 ---subsequent subscribers or the autocmd from firing.
----@overload fun(name: "request:sending", callback: fun(data: flemma.hooks.RequestSendingData)): flemma.hooks.Handle
----@overload fun(name: "request:finished", callback: fun(data: flemma.hooks.RequestFinishedData)): flemma.hooks.Handle
----@overload fun(name: "tool:executing", callback: fun(data: flemma.hooks.ToolExecutingData)): flemma.hooks.Handle
----@overload fun(name: "tool:completed", callback: fun(data: flemma.hooks.ToolCompletedData)): flemma.hooks.Handle
----@overload fun(name: "boot:complete", callback: fun(data: flemma.hooks.BootCompleteData)): flemma.hooks.Handle
----@overload fun(name: "sink:created", callback: fun(data: flemma.hooks.SinkCreatedData)): flemma.hooks.Handle
----@overload fun(name: "sink:destroyed", callback: fun(data: flemma.hooks.SinkDestroyedData)): flemma.hooks.Handle
----@overload fun(name: "config:updated", callback: fun(data: flemma.hooks.ConfigUpdatedData)): flemma.hooks.Handle
----@overload fun(name: "usage:estimated", callback: fun(data: flemma.hooks.UsageEstimatedData)): flemma.hooks.Handle
----@overload fun(name: "conversation:idle", callback: fun(data: flemma.hooks.ConversationIdleData)): flemma.hooks.Handle
----@overload fun(name: "job:submitted", callback: fun(data: flemma.hooks.JobSubmittedData)): flemma.hooks.Handle
----@overload fun(name: "job:completed", callback: fun(data: flemma.hooks.JobCompletedData)): flemma.hooks.Handle
----@overload fun(name: "autopilot:resume-scheduled", callback: fun(data: flemma.hooks.AutopilotResumeScheduledData)): flemma.hooks.Handle
----@overload fun(name: "autopilot:resume-cancelled", callback: fun(data: flemma.hooks.AutopilotResumeCancelledData)): flemma.hooks.Handle
----@overload fun(name: "autopilot:resumed", callback: fun(data: flemma.hooks.AutopilotResumedData)): flemma.hooks.Handle
+---@overload fun(name: "request:sending", callback: fun(data: flemma.hooks.RequestSendingData)): flemma.hooks.Subscription
+---@overload fun(name: "request:finished", callback: fun(data: flemma.hooks.RequestFinishedData)): flemma.hooks.Subscription
+---@overload fun(name: "tool:executing", callback: fun(data: flemma.hooks.ToolExecutingData)): flemma.hooks.Subscription
+---@overload fun(name: "tool:completed", callback: fun(data: flemma.hooks.ToolCompletedData)): flemma.hooks.Subscription
+---@overload fun(name: "boot:complete", callback: fun(data: flemma.hooks.BootCompleteData)): flemma.hooks.Subscription
+---@overload fun(name: "sink:created", callback: fun(data: flemma.hooks.SinkCreatedData)): flemma.hooks.Subscription
+---@overload fun(name: "sink:destroyed", callback: fun(data: flemma.hooks.SinkDestroyedData)): flemma.hooks.Subscription
+---@overload fun(name: "config:updated", callback: fun(data: flemma.hooks.ConfigUpdatedData)): flemma.hooks.Subscription
+---@overload fun(name: "usage:estimated", callback: fun(data: flemma.hooks.UsageEstimatedData)): flemma.hooks.Subscription
+---@overload fun(name: "conversation:idle", callback: fun(data: flemma.hooks.ConversationIdleData)): flemma.hooks.Subscription
+---@overload fun(name: "job:submitted", callback: fun(data: flemma.hooks.JobSubmittedData)): flemma.hooks.Subscription
+---@overload fun(name: "job:completed", callback: fun(data: flemma.hooks.JobCompletedData)): flemma.hooks.Subscription
+---@overload fun(name: "autopilot:resume-scheduled", callback: fun(data: flemma.hooks.AutopilotResumeScheduledData)): flemma.hooks.Subscription
+---@overload fun(name: "autopilot:resume-cancelled", callback: fun(data: flemma.hooks.AutopilotResumeCancelledData)): flemma.hooks.Subscription
+---@overload fun(name: "autopilot:resumed", callback: fun(data: flemma.hooks.AutopilotResumedData)): flemma.hooks.Subscription
 ---@param name flemma.hooks.Name Hook name in "domain:action" format
 ---@param callback fun(data: table) Subscriber function receiving the hook payload
----@return flemma.hooks.Handle
+---@return flemma.hooks.Subscription
 function M.on(name, callback)
   local list = subscribers[name]
   if not list then

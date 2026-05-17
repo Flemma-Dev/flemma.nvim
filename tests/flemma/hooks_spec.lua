@@ -186,26 +186,26 @@ describe("flemma.hooks", function()
       assert.is_true(autocmd_called)
     end)
 
-    it("returns handle with off() for unsubscription", function()
+    it("returns subscription with off() for unsubscription", function()
       local call_count = 0
-      local handle = hooks.on("conversation:idle", function()
+      local subscription = hooks.on("conversation:idle", function()
         call_count = call_count + 1
       end)
 
       hooks.dispatch("conversation:idle", { bufnr = 1 })
       assert.equals(1, call_count)
 
-      handle:off()
+      subscription:off()
 
       hooks.dispatch("conversation:idle", { bufnr = 1 })
       assert.equals(1, call_count)
     end)
 
     it("off() is idempotent", function()
-      local handle = hooks.on("request:sending", function() end)
-      handle:off()
+      local subscription = hooks.on("request:sending", function() end)
+      subscription:off()
       assert.has_no.errors(function()
-        handle:off()
+        subscription:off()
       end)
     end)
   end)

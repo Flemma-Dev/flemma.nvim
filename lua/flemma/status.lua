@@ -2028,14 +2028,14 @@ function M.show(opts)
     vim.b[buf].flemma_was_booting = refresh_data.tools.booting
     render_buffer(buf, win, M.format(refresh_data, verbose))
   end
-  local boot_handle = hooks.on("boot:complete", on_refresh)
-  local config_handle = hooks.on("config:updated", on_refresh)
+  local boot_subscription = hooks.on("boot:complete", on_refresh)
+  local config_subscription = hooks.on("config:updated", on_refresh)
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = buf,
     once = true,
     callback = function()
-      boot_handle:off()
-      config_handle:off()
+      boot_subscription:off()
+      config_subscription:off()
     end,
   })
 

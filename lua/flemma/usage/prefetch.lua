@@ -33,11 +33,11 @@ M._DEBOUNCE_MS = 2500
 ---@type table<integer, flemma.usage.prefetch.Entry>
 local entries = {}
 
----@type flemma.hooks.Handle|nil
-local config_listener_handle = nil
+---@type flemma.hooks.Subscription|nil
+local config_listener_subscription = nil
 
----@type flemma.hooks.Handle[]
-local request_listener_handles = {}
+---@type flemma.hooks.Subscription[]
+local request_listener_subscriptions = {}
 
 local CLEANUP_HOOK_NAME = "flemma.usage.prefetch"
 
@@ -46,14 +46,14 @@ function M._reset_for_tests()
   for bufnr in pairs(entries) do
     M.untrack(bufnr)
   end
-  if config_listener_handle then
-    config_listener_handle:off()
-    config_listener_handle = nil
+  if config_listener_subscription then
+    config_listener_subscription:off()
+    config_listener_subscription = nil
   end
-  for _, handle in ipairs(request_listener_handles) do
+  for _, handle in ipairs(request_listener_subscriptions) do
     handle:off()
   end
-  request_listener_handles = {}
+  request_listener_subscriptions = {}
 end
 
 ---Introspection for tests.
@@ -228,10 +228,10 @@ end
 ---reschedules fetches so `:Flemma switch` and similar config changes clear
 ---stale numbers immediately.
 local function install_config_listener()
-  if config_listener_handle then
+  if config_listener_subscription then
     return
   end
-  config_listener_handle = hooks.on("config:updated", function()
+  config_listener_subscription = hooks.on("config:updated", function()
     local count = 0
     for bufnr_key in pairs(entries) do
       clear_cache(bufnr_key)
@@ -247,11 +247,11 @@ end
 ---request.input_tokens when a request completes — avoiding a redundant
 ---count_tokens round-trip during tool-call loops.
 local function install_request_listener()
-  if #request_listener_handles > 0 then
+  if #request_listener_subscriptions > 0 then
     return
   end
 
-  request_listener_handles[#request_listener_handles + 1] = hooks.on("request:sending", function(data)
+  request_listener_subscriptions[#request_listener_subscriptions + 1] = hooks.on("request:sending", function(data)
     local entry = entries[data.bufnr]
     if not entry then
       return
@@ -265,7 +265,7 @@ local function install_request_listener()
     entry.request_active = true
   end)
 
-  request_listener_handles[#request_listener_handles + 1] = hooks.on("request:finished", function(data)
+  request_listener_subscriptions[#request_listener_subscriptions + 1] = hooks.on("request:finished", function(data)
     local entry = entries[data.bufnr]
     if not entry then
       return
