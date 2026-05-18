@@ -13,6 +13,7 @@ package.loaded["flemma.parser"] = nil
 package.loaded["flemma.sandbox"] = nil
 package.loaded["flemma.sandbox.backends.bwrap"] = nil
 package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.listops"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
 package.loaded["flemma.config.schema"] = nil
@@ -1423,13 +1424,12 @@ describe("Frontmatter Approval", function()
       assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
 
-    it("frontmatter can remove $standard to disable auto-approval", function()
+    it("frontmatter can set empty auto_approve to disable auto-approval", function()
       set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
 
       local bufnr = create_buffer({
         "```lua",
-        'flemma.opt.tools.auto_approve = { "$standard" }',
-        'flemma.opt.tools.auto_approve:remove("$standard")',
+        "flemma.opt.tools.auto_approve = {}",
         "```",
         "@You:",
         "test",
@@ -2566,7 +2566,6 @@ describe("Approval Preset Expansion", function()
   end)
 
   it("unions multiple presets", function()
-    -- Register custom presets before facade init (presets.setup is called inside set_config_and_setup)
     config_facade.init(schema)
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { auto_approve = { "$standard", "$extra" } } })
     require("flemma.presets").setup({ ["$extra"] = { auto_approve = { "bash" } } })

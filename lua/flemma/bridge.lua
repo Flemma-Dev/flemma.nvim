@@ -7,9 +7,11 @@
 --- Only use this when a direct require would create a circular dependency.
 --- For everything else, require the owning module directly.
 ---
---- Registrants: flemma.core, flemma.buffer.editing, flemma.tools.executor
+--- Registrants: flemma.core, flemma.buffer.editing, flemma.tools.executor,
+---              flemma.presets (get_preset, closest_match_preset)
 --- Callers:     flemma.autopilot, flemma.migration, flemma.tools.executor,
----              flemma.ui, flemma.provider.adapters.{anthropic,vertex,moonshot}
+---              flemma.ui, flemma.provider.adapters.{anthropic,vertex,moonshot},
+---              flemma.config.listops (get_preset, closest_match_preset)
 ---@class flemma.Bridge
 local M = {}
 
@@ -70,6 +72,20 @@ end
 function M.resolve_orphaned_jobs(bufnr)
   assert(handlers.resolve_orphaned_jobs, "bridge: resolve_orphaned_jobs not registered")
   return handlers.resolve_orphaned_jobs(bufnr)
+end
+
+---@param name string Preset name (e.g., "$standard")
+---@return flemma.presets.Preset?
+function M.get_preset(name)
+  assert(handlers.get_preset, "bridge: get_preset not registered")
+  return handlers.get_preset(name)
+end
+
+---@param name string Preset name to match against
+---@return string|nil closest The closest preset name, or nil if none is close enough
+function M.closest_match_preset(name)
+  assert(handlers.closest_match_preset, "bridge: closest_match_preset not registered")
+  return handlers.closest_match_preset(name)
 end
 
 return M

@@ -40,6 +40,7 @@ describe("flemma.config — integration", function()
   before_each(function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.schema"] = nil
     package.loaded["flemma.schema.types"] = nil
@@ -965,16 +966,6 @@ describe("flemma.config — integration", function()
       assert.are.same({ "search" }, config.get(1).items)
       -- Buffer 2 (no frontmatter): full expanded list
       assert.are.same({ "bash", "ls", "search" }, config.get(2).items)
-    end)
-
-    it("frontmatter list set expands per-item at write time", function()
-      local schema = make_coerce_schema()
-      config.init(schema)
-      config.finalize(L.DEFAULTS)
-
-      -- Assign a list with a $preset reference — expanded at write time
-      config.writer(1, L.FRONTMATTER).items = { "$default" }
-      assert.are.same({ "bash", "ls" }, config.get(1).items)
     end)
   end)
 end)

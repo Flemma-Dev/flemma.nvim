@@ -277,10 +277,12 @@ function M.get_for_prompt(bufnr)
   if bufnr then
     local tools_info = config_facade.inspect(bufnr, "tools")
     local tools_list = tools_info and tools_info.value
-    if type(tools_list) == "table" and #tools_list > 0 then
-      -- Check if the list was modified by a layer above DEFAULTS
+    if type(tools_list) == "table" then
       local source = tools_info.layer
       if source and source ~= "D" then
+        if #tools_list == 0 then
+          return {}
+        end
         local all_tools = M.get_all({ include_disabled = true })
         local allowed = {}
         for _, name in ipairs(tools_list) do

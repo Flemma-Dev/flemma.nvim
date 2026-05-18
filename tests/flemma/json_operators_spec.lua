@@ -34,6 +34,7 @@ describe("config.apply_operators", function()
   before_each(function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.operators"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
     config = require("flemma.config")
@@ -272,7 +273,6 @@ describe("config.apply_operators", function()
       assert.are.same({}, failures)
       local ops = store.dump_layer(config.LAYERS.FRONTMATTER, bufnr)
 
-      -- Should have: append "slack" to tools + set auto_approve to ["bash"]
       local append_ops = vim.tbl_filter(function(op)
         return op.op == "append" and op.path == "tools"
       end, ops)
@@ -392,6 +392,7 @@ describe("codeblock.parsers.json config integration", function()
   before_each(function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.operators"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.codeblock.parsers.json"] = nil
@@ -488,6 +489,7 @@ describe("JSON frontmatter E2E", function()
     package.loaded["flemma.codeblock.parsers.json"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.operators"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
 
@@ -558,7 +560,6 @@ describe("JSON frontmatter E2E", function()
 
     assert.are.same({}, result.diagnostics)
     local resolved = config.get(bufnr).tools.auto_approve
-    -- append adds to the default (empty) list
     assert.is_true(vim.tbl_contains(resolved, "bash"))
   end)
 

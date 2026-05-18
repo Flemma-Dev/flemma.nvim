@@ -13,6 +13,7 @@
 ---@class flemma.config.proxy
 local M = {}
 
+local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
 local symbols = require("flemma.symbols")
@@ -196,23 +197,6 @@ local function is_op_chain_sentinel(value)
   return false
 end
 
---- Validate each item in a list table against the given item schema.
---- Returns true on success, false + error on the first invalid item.
----@param items any[] Sequential table of items
----@param item_schema flemma.schema.Node Schema for each item
----@param path string Canonical path (for error messages)
----@return boolean ok
----@return string? err
-local function validate_list_items(items, item_schema, path)
-  for i, item in ipairs(items) do
-    local ok, err = item_schema:validate_value(item)
-    if not ok then
-      return false, string.format("config list set error at '%s' item[%d]: %s", path, i, err or "invalid")
-    end
-  end
-  return true
-end
-
 --- Internal factory: create a read or write proxy.
 ---
 --- `layer = nil`  → read-only proxy; any write attempt errors.
@@ -339,38 +323,25 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       local ctx = store.make_coerce_context(bufnr, make_is_list_fn(root_schema))
       local unwrapped_leaf = nav.unwrap_optional(leaf)
 
-      -- List-typed fields with coerce: expand per-item so that preset references
-      -- like "$standard" are resolved into individual tool names at write time.
-      -- This applies to pure ListNodes and hybrid ObjectNodes with allow_list().
-      local is_list_set = false
-      if leaf:has_coerce() and type(value) == "table" then
-        if unwrapped_leaf:is_list() or unwrapped_leaf:has_list_part() then
-          local expanded = {}
-          for _, item in ipairs(value) do
-            local coerced = leaf:apply_coerce(item, ctx)
-            if type(coerced) == "table" then
-              vim.list_extend(expanded, coerced)
-            else
-              table.insert(expanded, coerced)
-            end
-          end
-          value = expanded
-          is_list_set = true
-        end
-      end
-      if not is_list_set then
-        value = leaf:apply_coerce(value, ctx)
-      end
+      value = leaf:apply_coerce(value, ctx)
 
       -- Object nodes: handle allow_list (hybrid) and plain object assignment.
       if leaf:is_object() then
-        -- Hybrid objects with allow_list: sequential table → list set.
-        -- Non-sequential tables fall through to normal object behavior.
+        -- Hybrid objects with allow_list: sequential table → listops when
+        -- op-prefixed, plain set otherwise.
+        if listops.try_apply(unwrapped_leaf, value, layer, bufnr, canonical) then
+          return
+        end
         if unwrapped_leaf:has_list_part() and type(value) == "table" and vim.islist(value) then
           local list_item_schema = unwrapped_leaf:get_list_item_schema() --[[@as flemma.schema.Node]]
-          local ok, err = validate_list_items(value, list_item_schema, canonical)
-          if not ok then
-            error({ type = "config", error = err })
+          for i, item in ipairs(value) do
+            local ok, err = list_item_schema:validate_value(item)
+            if not ok then
+              error({
+                type = "config",
+                error = string.format("config list set error at '%s' item[%d]: %s", canonical, i, err or "invalid"),
+              })
+            end
           end
           store.record(layer, bufnr, "set", canonical, value)
           return
@@ -392,6 +363,12 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
             canonical
           ),
         })
+      end
+
+      -- List-capable leaf (union with list branch, pure list): route through
+      -- listops so op prefixes are decomposed into native store ops.
+      if listops.try_apply(unwrapped_leaf, value, layer, bufnr, canonical) then
+        return
       end
 
       -- Validate the coerced value against the schema.

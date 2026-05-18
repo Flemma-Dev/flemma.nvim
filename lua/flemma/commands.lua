@@ -273,11 +273,12 @@ local function setup_commands()
           return
         end
 
-        -- Apply auto_approve from preset to RUNTIME layer
+        local config_facade = require("flemma.config")
+        if preset.tools then
+          config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME).tools = preset.tools
+        end
         if preset.auto_approve then
-          local config_facade = require("flemma.config")
-          local w = config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME)
-          w.tools.auto_approve = preset.auto_approve
+          config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME).tools.auto_approve = preset.auto_approve
         end
 
         local provider = preset.provider

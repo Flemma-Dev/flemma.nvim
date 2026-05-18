@@ -12,6 +12,7 @@
 ---@class flemma.config
 local M = {}
 
+local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local notify = require("flemma.notify")
 local operators = require("flemma.config.operators")
@@ -143,13 +144,12 @@ local function apply_recursive(ctx, path, value)
   end
 
   if leaf:is_object() and type(value) == "table" then
-    -- Hybrid objects with allow_list: sequential table → list set.
-    -- Non-sequential tables fall through to normal object field walking.
-    -- Note: coerce is NOT run here — it is deferred to finalize(), which
-    -- re-runs coerce on all stored ops after modules/presets are registered.
+    -- Hybrid objects with allow_list: sequential table → listops for
+    -- op-prefixed values, plain set for unprefixed lists.
     local unwrapped_leaf = nav.unwrap_optional(leaf)
-    if unwrapped_leaf:has_list_part() and vim.islist(value) then
-      -- Validate each item against the list item schema.
+    if listops.try_apply(unwrapped_leaf, value, ctx.layer, ctx.bufnr, path) then
+      return true
+    elseif unwrapped_leaf:has_list_part() and vim.islist(value) then
       local list_item_schema = unwrapped_leaf:get_list_item_schema()
       if list_item_schema then
         for i, item in ipairs(value) do
@@ -175,6 +175,10 @@ local function apply_recursive(ctx, path, value)
       end
     end
   else
+    local unwrapped_leaf = nav.unwrap_optional(leaf)
+    if listops.try_apply(unwrapped_leaf, value, ctx.layer, ctx.bufnr, path) then
+      return true
+    end
     local valid, err = leaf:validate_value(value)
     if not valid then
       return report_error(ctx, string.format("config.apply: validation error at '%s': %s", path, err or "invalid"))
@@ -491,6 +495,25 @@ end
 -- Finalization
 -- ---------------------------------------------------------------------------
 
+--- Collect all list-capable paths from the schema tree.
+---@param schema flemma.schema.Node Schema node to walk
+---@param base_path string Current dot-delimited path
+---@param out string[] Accumulator for list paths
+local function collect_list_paths(schema, base_path, out)
+  local unwrapped = nav.unwrap_optional(schema)
+  if unwrapped:is_list() or unwrapped:has_list_part() then
+    if base_path ~= "" then
+      table.insert(out, base_path)
+    end
+  end
+  if unwrapped:is_object() then
+    for k, child in unwrapped:all_known_fields() do
+      local child_path = base_path == "" and k or (base_path .. "." .. k)
+      collect_list_paths(child, child_path, out)
+    end
+  end
+end
+
 --- Walk the schema tree and re-run coerce transforms on ops in the store.
 --- For each node with a coerce function, matching ops are transformed with
 --- a populated ctx. When the hook returns a table for a non-set list op
@@ -627,6 +650,18 @@ function M.finalize(layer, deferred, bufnr)
   if deferred and #deferred > 0 then
     deferred_failures = M.apply_deferred(layer, deferred)
   end
+
+  -- Expand deferred $-prefixed preset references in list ops.
+  -- At setup time, $standard etc. are recorded as literal strings because
+  -- presets aren't registered yet. Now that presets are available, expand them.
+  -- For global layers, also expand DEFAULTS (schema defaults like
+  -- auto_approve = { "$standard" } land in L10).
+  local list_paths = {}
+  collect_list_paths(root_schema, "", list_paths)
+  if layer ~= M.LAYERS.FRONTMATTER then
+    listops.expand_deferred(M.LAYERS.DEFAULTS, nil, list_paths)
+  end
+  listops.expand_deferred(layer, bufnr, list_paths)
 
   -- Re-run coerce transforms with populated ctx
   local ctx = store.make_coerce_context(bufnr, is_list_path)

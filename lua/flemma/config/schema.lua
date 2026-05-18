@@ -125,6 +125,7 @@ return s.object({
         model = s.optional(s.string()),
         parameters = s.optional(general_parameters_schema()),
         auto_approve = s.optional(s.list(s.string())),
+        tools = s.optional(s.list(s.string())),
       })
     ),
     {}
@@ -140,21 +141,7 @@ return s.object({
       s.list(s.string(), { "$standard" }),
       s.func():type_as("flemma.tools.AutoApproveFunction"),
       s.string()
-    )
-      :type_as("flemma.tools.AutoApprove")
-      :coerce(function(value, _ctx)
-        -- Expand $-prefixed preset references to their auto_approve list.
-        -- At boot time presets may not be registered yet; finalize() re-runs
-        -- coerce after presets.setup() so deferred expansion succeeds.
-        if type(value) ~= "string" or not vim.startswith(value, "$") then
-          return value
-        end
-        local preset = require("flemma.presets").get(value)
-        if not preset or not preset.auto_approve then
-          return value
-        end
-        return preset.auto_approve
-      end),
+    ):type_as("flemma.tools.AutoApprove"),
     auto_approve_sandboxed = s.boolean(true),
     autopilot = s.object({
       enabled = s.boolean(true),

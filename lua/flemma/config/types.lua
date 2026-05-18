@@ -20,7 +20,7 @@
 ---@field lsp flemma.config.Lsp
 ---@field model? string
 ---@field parameters flemma.config.Parameters
----@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string }>
+---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string, tools: string[] }>
 ---@field provider string
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
