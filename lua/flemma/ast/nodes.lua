@@ -2,6 +2,8 @@
 ---@class flemma.ast.Nodes
 local M = {}
 
+local mime = require("flemma.mime")
+
 ---@class flemma.ast.Position
 ---@field start_line integer
 ---@field end_line? integer
@@ -289,14 +291,26 @@ function M.job_result(job_id, opts)
 end
 
 --- Convert a file part to its generic representation based on MIME type.
---- Handles image/*, application/pdf, text/*, and unsupported types.
+--- Uses mime.is_binary() as the single authority for text vs binary, then
+--- sub-classifies binary content into image, PDF, or unsupported.
 ---@param file_part table The file part with mime_type, data, filename, position fields
 ---@param accumulator table[] The parts array to append to
 ---@param diagnostics_accumulator flemma.ast.Diagnostic[] The diagnostics array to append warnings to
 ---@param source_file string Source file path for diagnostics
 local function convert_file_part(file_part, accumulator, diagnostics_accumulator, source_file)
   local mt = file_part.mime_type or ""
-  if mt:sub(1, 6) == "image/" then
+
+  if not mime.is_binary(mt) then
+    table.insert(accumulator, {
+      kind = "text_file",
+      mime_type = mt,
+      text = file_part.data,
+      filename = file_part.filename,
+    })
+    return
+  end
+
+  if mime.is_image(mt) then
     local encoded = vim.base64.encode(file_part.data or "")
     table.insert(accumulator, {
       kind = "image",
@@ -305,20 +319,13 @@ local function convert_file_part(file_part, accumulator, diagnostics_accumulator
       data_url = "data:" .. mt .. ";base64," .. encoded,
       filename = file_part.filename,
     })
-  elseif mt == "application/pdf" then
+  elseif mime.is_pdf(mt) then
     local encoded = vim.base64.encode(file_part.data or "")
     table.insert(accumulator, {
       kind = "pdf",
       mime_type = mt,
       data = encoded,
       data_url = "data:application/pdf;base64," .. encoded,
-      filename = file_part.filename,
-    })
-  elseif mt:sub(1, 5) == "text/" then
-    table.insert(accumulator, {
-      kind = "text_file",
-      mime_type = mt,
-      text = file_part.data,
       filename = file_part.filename,
     })
   else

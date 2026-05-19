@@ -164,8 +164,9 @@ function M.detect(filepath)
   return nil
 end
 
---- Set of application/* MIME types that are textual despite the prefix
-local TEXTUAL_APPLICATION_MIMES = {
+--- MIME types that are textual despite not having a text/* prefix.
+--- image/svg+xml is XML text; the remaining entries are structured-text application/* types.
+local TEXTUAL_MIMES = {
   ["application/json"] = true,
   ["application/javascript"] = true,
   ["application/typescript"] = true,
@@ -173,6 +174,7 @@ local TEXTUAL_APPLICATION_MIMES = {
   ["application/yaml"] = true,
   ["application/toml"] = true,
   ["application/sql"] = true,
+  ["image/svg+xml"] = true,
 }
 
 --- Check whether a MIME type represents binary (non-textual) content.
@@ -182,10 +184,24 @@ function M.is_binary(mime_type)
   if mime_type:match("^text/") then
     return false
   end
-  if TEXTUAL_APPLICATION_MIMES[mime_type] then
+  if TEXTUAL_MIMES[mime_type] then
     return false
   end
   return true
+end
+
+--- Check whether a MIME type represents an image.
+---@param mime_type string
+---@return boolean
+function M.is_image(mime_type)
+  return mime_type:sub(1, 6) == "image/"
+end
+
+--- Check whether a MIME type represents a PDF document.
+---@param mime_type string
+---@return boolean
+function M.is_pdf(mime_type)
+  return mime_type == "application/pdf"
 end
 
 return M
