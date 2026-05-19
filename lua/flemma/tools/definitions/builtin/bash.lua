@@ -15,7 +15,7 @@ local truncate = require("flemma.tools.truncate")
 local SCROLLBACK = 100000
 local next_terminal_id = 0
 
----Sanitize a label for use in buffer names: keep alphanumerics, dots, hyphens,
+---Sanitize a string for use in buffer names: keep alphanumerics, dots, hyphens,
 ---underscores, colons; replace everything else with hyphens, collapse runs.
 ---@param label string
 ---@return string
@@ -142,11 +142,6 @@ M.definitions = {
       local term_bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[term_bufnr].buflisted = false
       vim.bo[term_bufnr].swapfile = false
-      next_terminal_id = next_terminal_id + 1
-      vim.api.nvim_buf_set_name(
-        term_bufnr,
-        "flemma://terminal/bash/" .. sanitize_label(label) .. "#" .. next_terminal_id
-      )
 
       -- Apply bash-specific config
       -- cwd is already resolved by executor (config > urn:flemma:buffer:path > Neovim cwd)
@@ -232,9 +227,35 @@ M.definitions = {
         return nil
       end
 
-      -- Configure terminal buffer options (scrollback is only valid after termopen)
+      -- Configure terminal buffer options (scrollback is only valid after termopen).
       vim.bo[term_bufnr].scrollback = SCROLLBACK
       vim.bo[term_bufnr].bufhidden = "hide"
+
+      -- Rename from the default term://{cwd}//{pid}:{cmd} to our scheme.
+      --
+      -- nvim_buf_set_name on a buffer with a non-empty name creates a "ghost"
+      -- buffer for the old name — Neovim's rename_buffer() in ex_cmds.c calls
+      -- buflist_new(old_name) to preserve it as the alternate file (Ctrl-^).
+      -- There is no API flag to suppress this.
+      --
+      -- Cleanup: capture the old name before renaming, then find and delete
+      -- the ghost buffer that holds it. The term:// format includes the
+      -- process PID (term://{cwd}//{pid}:{cmd}), so the exact match is
+      -- globally unique — it will only ever hit the one ghost.
+      --
+      -- See: https://github.com/neovim/neovim/blob/v0.11.7/src/nvim/ex_cmds.c#L1508
+      local old_term_name = vim.api.nvim_buf_get_name(term_bufnr)
+      next_terminal_id = next_terminal_id + 1
+      vim.api.nvim_buf_set_name(
+        term_bufnr,
+        "flemma://terminal/bash/" .. sanitize_label(label) .. "#" .. next_terminal_id
+      )
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if b ~= term_bufnr and vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_name(b) == old_term_name then
+          vim.api.nvim_buf_delete(b, { force = true })
+          break
+        end
+      end
 
       -- Setup timeout
       timer = vim.uv.new_timer()

@@ -182,26 +182,25 @@ describe("Bash Tool", function()
         end
         return false
       end, 50)
+      assert.is_not_nil(term_buf, "terminal buffer was not found while command was running")
 
-      if term_buf and vim.api.nvim_buf_is_valid(term_buf) then
-        -- Display the terminal buffer in a window
-        vim.cmd("split")
-        vim.api.nvim_set_current_buf(term_buf)
+      -- Display the terminal buffer in a window
+      vim.cmd("split")
+      vim.api.nvim_set_current_buf(term_buf)
 
-        -- Wait for the command to finish
-        vim.wait(10000, function()
-          return result ~= nil
-        end, 50)
+      -- Wait for the command to finish
+      vim.wait(10000, function()
+        return result ~= nil
+      end, 50)
 
-        -- Buffer should still exist (deferred wipe via bufhidden)
-        assert.is_true(vim.api.nvim_buf_is_valid(term_buf))
-        assert.equals("wipe", vim.bo[term_buf].bufhidden)
+      -- Buffer should still exist (deferred wipe via bufhidden)
+      assert.is_true(vim.api.nvim_buf_is_valid(term_buf))
+      assert.equals("wipe", vim.bo[term_buf].bufhidden)
 
-        -- Close the window to trigger wipe
-        vim.cmd("close")
-        -- Buffer should now be gone
-        assert.is_false(vim.api.nvim_buf_is_valid(term_buf))
-      end
+      -- Close the window to trigger wipe
+      vim.cmd("close")
+      -- Buffer should now be gone
+      assert.is_false(vim.api.nvim_buf_is_valid(term_buf))
     end)
 
     it("sets scrollback to 100000 on the terminal buffer", function()
@@ -217,10 +216,8 @@ describe("Bash Tool", function()
         end
         return false
       end, 50)
-
-      if term_buf and vim.api.nvim_buf_is_valid(term_buf) then
-        assert.equals(100000, vim.bo[term_buf].scrollback)
-      end
+      assert.is_not_nil(term_buf, "terminal buffer was not found while command was running")
+      assert.equals(100000, vim.bo[term_buf].scrollback)
     end)
 
     it("uses explicit shell from list form, not user $SHELL", function()
