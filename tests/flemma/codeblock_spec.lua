@@ -216,6 +216,31 @@ describe("flemma.codeblock", function()
       assert.are.equal(3, result.items[3])
     end)
 
+    it("should preserve empty object identity through parse round-trip", function()
+      local json = require("flemma.utilities.json")
+      local json_parser = require("flemma.codeblock.parsers.json")
+      local result = json_parser.parse("{}")
+      assert.are.equal("{}", json.encode(result))
+    end)
+
+    it("should preserve empty object in tool_use input through parser", function()
+      local json = require("flemma.utilities.json")
+      local lines = {
+        "@Assistant:",
+        "",
+        "**Tool Use:** `trello:list_workspaces` (`toolu_01`)",
+        "",
+        "```json",
+        "{}",
+        "```",
+        "",
+      }
+      local doc = parser.parse_lines(lines)
+      local seg = doc.messages[1].segments[1]
+      assert.are.equal("tool_use", seg.kind)
+      assert.are.equal("{}", json.encode(seg.input))
+    end)
+
     it("should report error on non-object JSON", function()
       local lines = {
         "```json",

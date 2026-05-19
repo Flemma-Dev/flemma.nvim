@@ -614,6 +614,27 @@ describe("Anthropic Streaming Tool Use Response", function()
     assert.is_true(response_complete, "Should signal response complete")
   end)
 
+  it("encodes empty tool input as {} not []", function()
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/anthropic_empty_tool_input_streaming.txt")
+    local accumulated_content = ""
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function() end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:find("{}", 1, true) ~= nil, "Empty tool input should be {} not []")
+    assert.is_nil(accumulated_content:find("[]", 1, true), "Empty tool input must not be []")
+  end)
+
   it("parses final text response after tool result", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 

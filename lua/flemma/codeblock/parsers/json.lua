@@ -25,7 +25,7 @@ function M.parse(code, _context, bufnr)
     error({ type = "frontmatter", error = string.format("JSON parse error: %s", decoded) })
   end
 
-  if type(decoded) ~= "table" or vim.islist(decoded) then
+  if type(decoded) ~= "table" or vim.islist(decoded) or vim.tbl_isempty(decoded) then
     return decoded
   end
 
