@@ -899,8 +899,8 @@ local function format_provider_section(b, data, is_last)
       value = p.model or "(none)",
       source = p.model_source,
       put_fn = p.model and function(b_inner)
-          put_model_value(b_inner, p.model --[[@as string]])
-        end or nil,
+        put_model_value(b_inner, p.model --[[@as string]])
+      end or nil,
     },
   }
 

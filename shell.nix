@@ -1,11 +1,19 @@
 {
-  pkgs ? import <nixpkgs> { },
+  pkgs-stable ? import <nixpkgs> { },
+  pkgs-unstable ? pkgs-stable,
 }:
 let
-  nodejs_lts = pkgs.nodejs_24;
-  plenary-nvim = pkgs.vimPlugins.plenary-nvim;
+  nvim-stable = pkgs-stable.neovim;
+  nvim-unstable = pkgs-unstable.neovim;
+  plenary-nvim = pkgs-stable.vimPlugins.plenary-nvim;
+  nodejs-stable = pkgs-stable.nodejs_24;
+  mcporter = (
+    pkgs-stable.writeShellScriptBin "mcporter" ''
+      exec ${pkgs-stable.lib.getExe pkgs-stable.envchain} mcp_keys pnpm --silent --package=mcporter@latest dlx -- mcporter "$@"
+    ''
+  );
 in
-pkgs.mkShell rec {
+pkgs-stable.mkShell {
   name = "flemma-dev-shell";
 
   shellHook = ''
@@ -14,16 +22,20 @@ pkgs.mkShell rec {
 
     PLENARY_PATH=${plenary-nvim}
     export PLENARY_PATH
+
+    NVIM_VERSIONS="neovim-${nvim-stable.version}:${nvim-stable}/bin/nvim:${nvim-stable}/share/nvim/runtime:${plenary-nvim} neovim-${nvim-unstable.version}:${nvim-unstable}/bin/nvim:${nvim-unstable}/share/nvim/runtime:${plenary-nvim}"
+    export NVIM_VERSIONS
   '';
 
-  buildInputs = with pkgs; [
+  buildInputs = with pkgs-unstable; [
     actionlint
     bubblewrap
     gh
     google-cloud-sdk
     libsecret
     links2
-    nodejs_lts.pkgs.pnpm
+    mcporter
+    nodejs-stable.pkgs.pnpm
     socat
     vhs
     # Neovim plug-ins
@@ -31,13 +43,9 @@ pkgs.mkShell rec {
     # Lua tools
     lua-language-server
     lua54Packages.luacheck
-
-    (writeShellScriptBin "mcporter" ''
-      exec ${lib.getExe envchain} mcp_keys pnpm --silent --package=mcporter@latest dlx -- mcporter "$@"
-    '')
-
-    nixfmt-rfc-style
-    nodejs_lts.pkgs.prettier
+    # Formatters
+    nixfmt
+    nodejs-stable.pkgs.prettier
     shfmt
     stylua
     taplo

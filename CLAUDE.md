@@ -176,6 +176,10 @@ Production file names prefer single words; multi-word descriptive names use snak
 - **`make develop`** — launch Flemma from the working directory for manual testing.
 - **`make format`** — reformat the entire codebase via `treefmt` (stylua, shfmt, nixfmt, prettier, yamlfmt, taplo). Cached — only reformats changed files. **Run before every commit, not just at session end.**
 
+### Multi-Version Test Matrix
+
+`make qa` runs the test suite against every Neovim version listed in `$NVIM_VERSIONS` (set by the Nix dev shell). Gate names include the version — e.g., `test-neovim-0.11.7`, `test-neovim-0.12.2`. A failure in one version but not the other means a version-specific compatibility issue: check `vim.fn` signatures, API changes, and Lua runtime differences between the two.
+
 ### `make qa` Only
 
 Do not invoke `nvim` directly with Plenary commands. Only `make qa` is wired correctly for running tests.

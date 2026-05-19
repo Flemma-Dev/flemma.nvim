@@ -1,7 +1,6 @@
 .PHONY: default format qa develop screencast types
 
 SHELL := $(shell which bash)
-VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
 override PROJECT_ROOT := $(CURDIR)
 
 default:
@@ -14,14 +13,17 @@ format:
 
 # Run all quality gates — parallel, bail on first failure
 qa:
-	@d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT; \
+	@if [ -z "$$NVIM_VERSIONS" ]; then \
+		echo "qa: NVIM_VERSIONS is not set. Run from within the 'nix develop' shell."; exit 1; \
+	fi; \
+	d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT; \
 	declare -A gate; \
 	declare -A pgid; \
 	luacheck lua/ tests/ \
 		>"$$d/luacheck" 2>&1 & gate[$$!]=luacheck; \
 	actionlint \
 		>"$$d/actionlint" 2>&1 & gate[$$!]=actionlint; \
-	VIMRUNTIME=$(VIMRUNTIME_PATH) \
+	VIMRUNTIME=$$(dirname $$(dirname $$(readlink -f $$(which nvim))))/share/nvim/runtime \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua --checklevel=Warning --num_threads=4 \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
 	bash contrib/scripts/lint-inline-requires.sh \
@@ -30,9 +32,13 @@ qa:
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
 	bash contrib/scripts/lint-pcall-rethrow.sh \
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
-	setsid env PROJECT_ROOT=$(PROJECT_ROOT) nvim --headless --noplugin -u tests/minimal.vim \
-		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
-		>"$$d/test" 2>&1 & gate[$$!]=test; pgid[$$!]=1; \
+	for entry in $$NVIM_VERSIONS; do \
+		IFS=: read -r label nvim_bin vimruntime plenary_path <<< "$$entry"; \
+		setsid env PROJECT_ROOT=$(PROJECT_ROOT) PLENARY_PATH="$$plenary_path" VIMRUNTIME="$$vimruntime" \
+			"$$nvim_bin" --headless --noplugin -u tests/minimal.vim \
+			-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
+			>"$$d/test-$$label" 2>&1 & gate[$$!]="test-$$label"; pgid[$$!]=1; \
+	done; \
 	cleanup() { \
 		for p in "$${!gate[@]}"; do \
 			if [[ -n "$${pgid[$$p]}" ]]; then \
@@ -58,20 +64,32 @@ qa:
 		done; \
 		wait 2>/dev/null; \
 	}; \
+	failed_tests=(); \
 	while (( $${#gate[@]} )); do \
 		pid=0; wait -n -p pid $${!gate[@]}; rc=$$?; \
 		name=$${gate[$$pid]}; unset "gate[$$pid]"; unset "pgid[$$pid]"; \
 		if (( rc )); then \
-			cleanup; \
-			echo "qa: FAILED — $$name"; echo ""; \
-			echo "--- $$name ---"; \
-			if [ "$$name" = test ]; then \
-				grep -v '^Scheduling' "$$d/$$name" \
-					| grep -v '^Starting\.\.\.'; \
-			else cat "$$d/$$name"; fi; \
-			echo ""; exit 1; \
+			if [[ "$$name" == test-* ]]; then \
+				failed_tests+=("$$name"); \
+			else \
+				cleanup; \
+				echo "qa: FAILED — $$name"; echo ""; \
+				echo "--- $$name ---"; \
+				cat "$$d/$$name"; \
+				echo ""; exit 1; \
+			fi; \
 		fi; \
 	done; \
+	if (( $${#failed_tests[@]} )); then \
+		echo "qa: FAILED — $${failed_tests[*]}"; echo ""; \
+		for name in "$${failed_tests[@]}"; do \
+			echo "--- $$name ---"; \
+			grep -v '^Scheduling' "$$d/$$name" \
+				| grep -v '^Starting\.\.\.'; \
+			echo ""; \
+		done; \
+		exit 1; \
+	fi; \
 	sed 's/\x1b\[[0-9;]*m//g' "$$d/types" \
 		| grep -Ev '^\s*$$|^Starting|Diagnosis completed' \
 		> "$$d/types-filtered"; \
