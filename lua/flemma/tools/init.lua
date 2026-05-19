@@ -196,6 +196,21 @@ end
 -- Public API
 --------------------------------------------------------------------------------
 
+---Raise Suspense if async tool sources are still running, then load any
+---pending third-party modules. Safe to call from any pipeline stage that
+---needs tool definitions to be available.
+function M.ensure_ready()
+  if pending_sources > 0 then
+    local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
+      M.on_ready(function()
+        done({ ok = true })
+      end)
+    end)
+    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
+  end
+  ensure_modules_loaded()
+end
+
 ---Setup tool registry with built-in tools
 function M.setup()
   for _, module_name in ipairs(BUILTIN_TOOLS) do
@@ -282,15 +297,8 @@ end
 ---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(bufnr)
-  if pending_sources > 0 then
-    local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
-      M.on_ready(function()
-        done({ ok = true })
-      end)
-    end)
-    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
-  end
-  ensure_modules_loaded()
+  M.ensure_ready()
+
   if bufnr then
     local tools_info = config_facade.inspect(bufnr, "tools")
     local tools_list = tools_info and tools_info.value

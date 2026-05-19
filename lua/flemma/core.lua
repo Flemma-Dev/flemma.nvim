@@ -33,6 +33,7 @@ local query = require("flemma.ast.query")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
+local tools = require("flemma.tools")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local cursor = require("flemma.cursor")
@@ -587,6 +588,9 @@ local function advance_phase2(opts)
 
   -- Process approved → execute tool
   local approved = tool_blocks["approved"] or {}
+  if #approved > 0 then
+    tools.ensure_ready()
+  end
   local config = config_facade.get(bufnr)
   local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
   local executed_count = 0
