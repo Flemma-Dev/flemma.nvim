@@ -281,15 +281,37 @@ function Bar:dismiss()
   -- suppressed), or :tabclose's cascade close firing WinClosed only for the
   -- tab's current window. Clearing the namespace is redundant: buf_delete
   -- discards extmarks with the buffer.
-  for _, scratch_bufnr in ipairs({ self._float_bufnr, self._gutter_bufnr }) do
-    if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
-      pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
-    end
-  end
+  --
+  -- E11: nvim_buf_delete fails inside the command-line window (q:, q/, q?).
+  -- Capture the bufnr values and defer deletion to CmdwinLeave, mirroring the
+  -- pattern in bash tool's destroy_terminal_buffer.
+  local float_bufnr = self._float_bufnr
+  local gutter_bufnr = self._gutter_bufnr
   self._float_bufnr = nil
   self._gutter_bufnr = nil
   self._float_winid = nil
   self._gutter_winid = nil
+
+  if vim.fn.getcmdwintype() ~= "" then
+    vim.api.nvim_create_autocmd("CmdwinLeave", {
+      once = true,
+      callback = function()
+        vim.schedule(function()
+          for _, scratch_bufnr in ipairs({ float_bufnr, gutter_bufnr }) do
+            if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
+              pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
+            end
+          end
+        end)
+      end,
+    })
+  else
+    for _, scratch_bufnr in ipairs({ float_bufnr, gutter_bufnr }) do
+      if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
+        pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
+      end
+    end
+  end
 
   if bars[self.bufnr] and bars[self.bufnr][self.position] == self then
     bars[self.bufnr][self.position] = nil
