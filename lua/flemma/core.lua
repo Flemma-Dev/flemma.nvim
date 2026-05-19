@@ -589,6 +589,9 @@ local function advance_phase2(opts)
   -- Process approved → execute tool
   local approved = tool_blocks["approved"] or {}
   if #approved > 0 then
+    -- Block until all tool sources have resolved — a tool_use from a previous
+    -- response may reference a tool that is still loading (e.g. an MCPorter tool).
+    -- Executing before sources finish would produce a false "tool not found" error.
     tools.ensure_ready()
   end
   local config = config_facade.get(bufnr)

@@ -224,4 +224,88 @@ describe("core.send_to_provider suspense handling", function()
 
     approval.unregister("test:auto-approve-all")
   end)
+
+  -- Regression: without ensure_ready() in advance_phase2, tools provided
+  -- exclusively by an async source get "Unknown tool" because tools.get()
+  -- returns nil while sources are pending.
+  it("waits for async source before executing tools only available from that source", function()
+    local tools_mod = require("flemma.tools")
+    local approval = require("flemma.tools.approval")
+
+    approval.register("test:auto-approve-all", {
+      priority = 200,
+      resolve = function()
+        return "approve"
+      end,
+    })
+
+    local async_register, async_done
+    tools_mod.register_async(function(register, done)
+      async_register = register
+      async_done = done
+    end, { timeout = 2 })
+
+    local error_messages = {}
+    notify._set_impl(function(msg)
+      table.insert(error_messages, msg)
+    end)
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      "Run the async tool please.",
+      "",
+      "@Assistant:",
+      "",
+      "**Tool Use:** `async_only_tool` (`toolu_async_1`)",
+      "",
+      "```json",
+      '{"input":"hello"}',
+      "```",
+      "",
+      "@You:",
+      "",
+      "**Tool Result:** `toolu_async_1` (approved)",
+      "",
+      "```",
+      "```",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    require("flemma.core").send_or_execute({ bufnr = bufnr })
+
+    -- Register the tool and resolve the async source immediately after.
+    -- With the fix: Phase 2 suspenses via ensure_ready(), queues behind
+    -- tools:loaded, then retries and executes successfully.
+    -- Without the fix: Phase 2 already fired "Unknown tool" synchronously
+    -- before we get here.
+    async_register("async_only_tool", {
+      name = "async_only_tool",
+      description = "Only available after async resolution",
+      input_schema = { type = "object", properties = { input = { type = "string" } } },
+      execute = function()
+        return { success = true, output = "async tool result" }
+      end,
+    })
+    async_done()
+
+    -- Let scheduled callbacks fire (suspense retry, notify dispatch)
+    vim.wait(1000, function()
+      return #error_messages > 0
+        or table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n"):match("async tool result") ~= nil
+    end)
+
+    -- Phase 2 should NOT have produced "Unknown tool" — ensure_ready() gates it
+    local has_unknown_tool = false
+    for _, msg in ipairs(error_messages) do
+      local text = type(msg) == "table" and msg.message or tostring(msg)
+      if text:match("Unknown tool") then
+        has_unknown_tool = true
+      end
+    end
+    assert.is_false(has_unknown_tool, "should not get 'Unknown tool' error while async sources are pending")
+
+    approval.unregister("test:auto-approve-all")
+  end)
 end)

@@ -297,6 +297,12 @@ end
 ---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(bufnr)
+  -- Block until every async tool source (e.g. MCPorter) has finished registering.
+  -- The full tool set goes into the provider request as part of the cache prefix.
+  -- If we allowed a request to go out before all sources resolve, the first request
+  -- would establish a prefix with a partial tool list. Once the remaining sources
+  -- finish, subsequent requests would include the full list, breaking the prefix
+  -- and invalidating the cache for the entire conversation from that point on.
   M.ensure_ready()
 
   if bufnr then
