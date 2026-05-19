@@ -3,6 +3,7 @@ package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 
 local tools = require("flemma.tools")
+local tools_registry = require("flemma.tools.registry")
 local loader = require("flemma.loader")
 
 -- Register a fixture tool module via package.preload
@@ -72,6 +73,128 @@ describe("tools.modules config", function()
     assert.equals(1, load_count)
 
     cleanup_fixture("test.fixture.counted")
+  end)
+end)
+
+describe("async tool source with module schema", function()
+  local s = require("flemma.schema")
+  local config_facade = require("flemma.config")
+  local schema
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+    config_facade.init(schema)
+
+    tools = require("flemma.tools")
+    tools_registry = require("flemma.tools.registry")
+    tools.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    package.preload["test.fixture.async_with_schema"] = nil
+    package.loaded["test.fixture.async_with_schema"] = nil
+  end)
+
+  it("registers module-level config schema for DISCOVER resolution", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+            endpoint = s.optional(s.string()),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+
+    local found = tools.get_config_schema("my_async_source")
+    assert.is_not_nil(found, "module schema should be discoverable via get_config_schema")
+  end)
+
+  it("module schema is accessible from the registry directly", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+
+    assert.is_not_nil(tools_registry.get_module_schema("my_async_source"))
+    assert.is_nil(tools_registry.get_module_schema("nonexistent"))
+  end)
+
+  it("module schema defaults materialize into config store", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+            timeout = s.integer(42),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+
+    local cfg = config_facade.get()
+    assert.is_not_nil(cfg.tools.my_async_source)
+    assert.equals(false, cfg.tools.my_async_source.enabled)
+    assert.equals(42, cfg.tools.my_async_source.timeout)
+  end)
+
+  it("clear() removes module schemas", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+    assert.is_not_nil(tools_registry.get_module_schema("my_async_source"))
+
+    tools.clear()
+    assert.is_nil(tools_registry.get_module_schema("my_async_source"))
   end)
 end)
 

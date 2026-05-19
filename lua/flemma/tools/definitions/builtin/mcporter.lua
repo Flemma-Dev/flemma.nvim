@@ -10,10 +10,30 @@ local M = {}
 local config_facade = require("flemma.config")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
 
 local SEPARATOR = tool_names.INTERNAL_SEPARATOR
+
+---@class flemma.tools.definitions.builtin.MCPorter.Metadata
+---@field name string
+---@field config_schema flemma.schema.ObjectNode
+
+---@type flemma.tools.definitions.builtin.MCPorter.Metadata
+M.metadata = {
+  name = "mcporter",
+  config_schema = s.object({
+    enabled = s.boolean(false),
+    path = s.string("mcporter"),
+    timeout = s.integer(60),
+    startup = s.object({
+      concurrency = s.integer(4),
+    }),
+    include = s.list(s.string(), {}),
+    exclude = s.list(s.string(), {}),
+  }),
+}
 
 --------------------------------------------------------------------------------
 -- Internal helpers

@@ -102,6 +102,10 @@ end
 --- and all_known_fields() will include DISCOVER-cached entries.
 ---@param schema flemma.schema.ObjectNode Root config schema
 local function boot_registries(schema)
+  -- Presets must be loaded before config.init() because list-op resolution
+  -- calls bridge.get_preset() to expand $ref values in default lists.
+  require("flemma.presets")
+
   -- The config store must be initialized before registries can register
   -- their module defaults. init() materializes schema defaults into L10.
   require("flemma.config").init(schema)

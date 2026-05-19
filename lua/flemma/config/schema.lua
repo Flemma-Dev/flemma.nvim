@@ -158,16 +158,6 @@ return s.object({
     show_spinner = s.boolean(true),
     cursor_after_result = s.enum({ "result", "stay", "next" }, "result"),
     modules = s.list(s.loadable(), {}),
-    mcporter = s.object({
-      enabled = s.boolean(false),
-      path = s.string("mcporter"),
-      timeout = s.integer(60),
-      startup = s.object({
-        concurrency = s.integer(4),
-      }),
-      include = s.list(s.string(), {}),
-      exclude = s.list(s.string(), {}),
-    }),
     truncate = s.object({
       output_path_format = s.string("${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"),
     }),

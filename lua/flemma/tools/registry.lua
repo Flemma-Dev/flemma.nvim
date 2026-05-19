@@ -72,6 +72,9 @@ local string_utils = require("flemma.utilities.string")
 ---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
 
+---@type table<string, flemma.schema.ObjectNode>
+local module_schemas = {}
+
 ---Store a single tool definition
 ---@param name string The tool name
 ---@param definition flemma.tools.ToolDefinition The tool definition
@@ -85,6 +88,28 @@ end
 
 --- Deprecated alias for register()
 M.define = M.register
+
+---Store a module-level config schema for DISCOVER resolution.
+---Used by async tool sources (e.g., mcporter) whose config lives under
+---`tools.<module_name>` but whose individual tools have different names.
+---@param name string Module name (becomes the config key under `tools`)
+---@param config_schema flemma.schema.ObjectNode
+function M.register_module_schema(name, config_schema)
+  module_schemas[name] = config_schema
+end
+
+---Get a module-level config schema by name.
+---@param name string
+---@return flemma.schema.ObjectNode|nil
+function M.get_module_schema(name)
+  return module_schemas[name]
+end
+
+---Get all registered module-level config schemas.
+---@return table<string, flemma.schema.ObjectNode>
+function M.get_all_module_schemas()
+  return module_schemas
+end
 
 ---Check if a tool exists by name
 ---@param name string The tool name
@@ -167,9 +192,10 @@ function M.unregister(name)
   return false
 end
 
----Clear all registered tools
+---Clear all registered tools and module schemas
 function M.clear()
   tools = {}
+  module_schemas = {}
 end
 
 ---Get the count of registered tools

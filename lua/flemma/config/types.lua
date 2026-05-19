@@ -137,7 +137,7 @@
 ---@field grep? flemma.config.ToolsGrep
 ---@field ls? flemma.config.ToolsLs
 ---@field max_concurrent integer
----@field mcporter flemma.config.ToolsMcporter
+---@field mcporter? flemma.config.ToolsMcporter
 ---@field modules string[]
 ---@field require_approval boolean
 ---@field show_spinner boolean

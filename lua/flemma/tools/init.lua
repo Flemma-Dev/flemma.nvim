@@ -336,6 +336,10 @@ function M.register(source, definition)
       -- register("module.name") — load module
       local mod = loader.load(source)
       if type(mod.resolve) == "function" then
+        if mod.metadata and mod.metadata.config_schema then
+          registry.register_module_schema(mod.metadata.name, mod.metadata.config_schema)
+          config_facade.register_module_defaults("tools", mod.metadata.name, mod.metadata.config_schema)
+        end
         M.register_async(mod.resolve, { timeout = mod.timeout })
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
@@ -387,10 +391,10 @@ end
 ---@return flemma.schema.ObjectNode|nil config_schema Tool config schema, or nil if not found
 function M.get_config_schema(name)
   local tool = M.get(name)
-  if not tool then
-    return nil
+  if tool then
+    return tool.metadata and tool.metadata.config_schema
   end
-  return tool.metadata and tool.metadata.config_schema
+  return registry.get_module_schema(name)
 end
 
 M.count = registry.count
