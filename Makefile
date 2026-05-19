@@ -16,6 +16,7 @@ format:
 qa:
 	@d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT; \
 	declare -A gate; \
+	declare -A pgid; \
 	luacheck lua/ tests/ \
 		>"$$d/luacheck" 2>&1 & gate[$$!]=luacheck; \
 	actionlint \
@@ -29,14 +30,39 @@ qa:
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
 	bash contrib/scripts/lint-pcall-rethrow.sh \
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
-	PROJECT_ROOT=$(PROJECT_ROOT) nvim --headless --noplugin -u tests/minimal.vim \
+	setsid env PROJECT_ROOT=$(PROJECT_ROOT) nvim --headless --noplugin -u tests/minimal.vim \
 		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
-		>"$$d/test" 2>&1 & gate[$$!]=test; \
+		>"$$d/test" 2>&1 & gate[$$!]=test; pgid[$$!]=1; \
+	cleanup() { \
+		for p in "$${!gate[@]}"; do \
+			if [[ -n "$${pgid[$$p]}" ]]; then \
+				kill -- -$$p 2>/dev/null; \
+			else \
+				kill $$p 2>/dev/null; \
+			fi; \
+		done; \
+		for _ in $$(seq 1 60); do \
+			alive=0; \
+			for p in "$${!gate[@]}"; do \
+				kill -0 $$p 2>/dev/null && alive=1 && break; \
+			done; \
+			(( alive )) || break; \
+			sleep 0.05; \
+		done; \
+		for p in "$${!gate[@]}"; do \
+			if [[ -n "$${pgid[$$p]}" ]]; then \
+				kill -9 -- -$$p 2>/dev/null; \
+			else \
+				kill -9 $$p 2>/dev/null; \
+			fi; \
+		done; \
+		wait 2>/dev/null; \
+	}; \
 	while (( $${#gate[@]} )); do \
 		pid=0; wait -n -p pid $${!gate[@]}; rc=$$?; \
-		name=$${gate[$$pid]}; unset "gate[$$pid]"; \
+		name=$${gate[$$pid]}; unset "gate[$$pid]"; unset "pgid[$$pid]"; \
 		if (( rc )); then \
-			kill $${!gate[@]} 2>/dev/null; wait 2>/dev/null; \
+			cleanup; \
 			echo "qa: FAILED — $$name"; echo ""; \
 			echo "--- $$name ---"; \
 			if [ "$$name" = test ]; then \
