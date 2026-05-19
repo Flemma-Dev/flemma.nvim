@@ -8,6 +8,8 @@ local executor = require("flemma.tools.executor")
 local bash_module = require("flemma.tools.definitions.builtin.bash")
 local truncate = require("flemma.utilities.truncate")
 
+local HAS_TERMINAL_PTY_FIX = vim.fn.has("nvim-0.12") == 1
+
 describe("Bash Tool", function()
   local bash_def, bufnr, ctx
 
@@ -126,6 +128,8 @@ describe("Bash Tool", function()
     end)
   end)
 
+  -- Terminal buffer tests only apply on 0.12+ where the termopen backend is used.
+  -- On 0.11.x, the jobstart+sink backend has no terminal buffer to inspect.
   describe("terminal buffer", function()
     ---@param input table<string, any>
     ---@param execution_ctx flemma.tools.ExecutionContext
@@ -158,6 +162,10 @@ describe("Bash Tool", function()
     end
 
     it("cleans up terminal buffer after completion", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
       local before = find_terminal_buffers()
       run_bash({ label = "test", command = "echo cleanup" }, ctx)
       local after = find_terminal_buffers()
@@ -165,6 +173,10 @@ describe("Bash Tool", function()
     end)
 
     it("defers cleanup when terminal buffer is visible in a window", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
       local term_buf = nil
       local result = nil
 
@@ -204,6 +216,10 @@ describe("Bash Tool", function()
     end)
 
     it("sets scrollback to 100000 on the terminal buffer", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
       local term_buf = nil
 
       bash_def.execute({ label = "scrollback", command = "sleep 2" }, ctx, function() end)
@@ -221,12 +237,20 @@ describe("Bash Tool", function()
     end)
 
     it("uses explicit shell from list form, not user $SHELL", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
       local result = run_bash({ label = "test", command = "echo $0" }, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("bash"))
     end)
 
     it("does not block on interactive stdin (read gets immediate EOF)", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
       local short_ctx = executor.build_execution_context({
         bufnr = bufnr,
         cwd = vim.fn.getcwd(),
