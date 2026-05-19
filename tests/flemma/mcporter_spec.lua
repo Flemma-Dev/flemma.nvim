@@ -419,6 +419,82 @@ describe("mcporter", function()
       assert.is_string(result.output)
     end)
 
+    it("omits --args for empty input", function()
+      local echo_path = vim.fn.fnamemodify("tests/fixtures/mcporter/echo-args.sh", ":p")
+
+      local def = mcporter._build_tool_definition("trello", {
+        name = "list_workspaces",
+        description = "List workspaces",
+        inputSchema = { type = "object", properties = {} },
+      }, { path = echo_path, timeout = 10 })
+
+      local result = nil
+      local ctx = {
+        cwd = vim.fn.getcwd(),
+        timeout = 10,
+        get_config = function()
+          return nil
+        end,
+        truncate = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = 0
+            return tools_truncate.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = tools_truncate }),
+      }
+
+      def.execute({}, ctx, function(r)
+        result = r
+      end)
+
+      vim.wait(5000, function()
+        return result ~= nil
+      end)
+      assert.is_not_nil(result)
+      assert.is_true(result.success)
+      assert.is_not_nil(result.output:find("--output"))
+      assert.is_nil(result.output:find("--args"))
+    end)
+
+    it("includes --args for non-empty input", function()
+      local echo_path = vim.fn.fnamemodify("tests/fixtures/mcporter/echo-args.sh", ":p")
+
+      local def = mcporter._build_tool_definition("slack", {
+        name = "channels_list",
+        description = "List channels",
+        inputSchema = {
+          type = "object",
+          properties = { channel_types = { type = "string" } },
+        },
+      }, { path = echo_path, timeout = 10 })
+
+      local result = nil
+      local ctx = {
+        cwd = vim.fn.getcwd(),
+        timeout = 10,
+        get_config = function()
+          return nil
+        end,
+        truncate = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = 0
+            return tools_truncate.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = tools_truncate }),
+      }
+
+      def.execute({ channel_types = "public_channel" }, ctx, function(r)
+        result = r
+      end)
+
+      vim.wait(5000, function()
+        return result ~= nil
+      end)
+      assert.is_not_nil(result)
+      assert.is_true(result.success)
+      assert.is_not_nil(result.output:find("--args"))
+    end)
+
     it("handles non-zero exit from mock", function()
       local mock_path = vim.fn.fnamemodify("tests/fixtures/mcporter/mock-mcporter.sh", ":p")
 

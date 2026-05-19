@@ -206,8 +206,15 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
     async = true,
     execute = function(input, ctx, callback)
       ---@cast callback -nil
+      local cmd = { mcporter_path, "call", selector }
       local args_json = json.encode(input)
-      local cmd = { mcporter_path, "call", selector, "--args", args_json, "--output", "json" }
+      if args_json ~= "{}" and args_json ~= "[]" then
+        table.insert(cmd, "--args")
+        table.insert(cmd, args_json)
+      end
+      table.insert(cmd, "--output")
+      table.insert(cmd, "json")
+      log.debug("mcporter: call " .. selector .. " → " .. table.concat(cmd, " "))
 
       local output_sink = sink_module.create({
         name = "mcporter/" .. tool_name,
@@ -255,6 +262,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
 
             if code ~= 0 then
               local err_msg = stderr_text or ("mcporter call failed with exit code " .. code)
+              log.warn("mcporter: call " .. selector .. " failed (exit " .. code .. "): " .. err_msg)
               callback({ success = false, error = err_msg })
               return
             end
@@ -265,6 +273,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
               if stderr_text then
                 diagnostic = diagnostic .. "\nstderr: " .. stderr_text
               end
+              log.warn("mcporter: call " .. selector .. " parse error: " .. diagnostic)
               callback({ success = false, error = diagnostic })
               return
             end
