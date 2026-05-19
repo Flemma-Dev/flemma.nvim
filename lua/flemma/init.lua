@@ -140,6 +140,10 @@ M.setup = function(user_opts)
   -- config for provider init.
   config = config_facade.materialize()
 
+  -- Start async tool sources now that config is complete. Deferred during
+  -- Phase 2 so resolvers see finalized config (e.g., tools.mcporter.enabled).
+  tools.start_pending_sources()
+
   -- Phase 4: Provider initialization (needs complete config)
 
   -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")

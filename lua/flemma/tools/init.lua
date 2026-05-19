@@ -35,6 +35,9 @@ local ready_callbacks = {}
 local active_timers = {}
 local generation = 0
 
+---@type { resolve_fn: fun(register: fun(name: string, def: flemma.tools.ToolDefinition), done: fun(err?: string)), opts: { timeout?: integer } }[]|nil
+local deferred_async_sources = {}
+
 ---Fire all ready callbacks, clear the list, and emit the boot-complete autocmd
 local function fire_ready_callbacks()
   local callbacks = ready_callbacks
@@ -138,6 +141,20 @@ function M.on_ready(callback)
     return
   end
   table.insert(ready_callbacks, callback)
+end
+
+---Start async tool sources that were deferred during module registration.
+---Called after config finalization so DISCOVER-backed config values (e.g.,
+---tools.mcporter.enabled) are available when resolvers read config.
+function M.start_pending_sources()
+  local sources = deferred_async_sources or {}
+  deferred_async_sources = nil
+  for _, entry in ipairs(sources) do
+    M.register_async(entry.resolve_fn, entry.opts)
+  end
+  if #sources == 0 and pending_sources == 0 then
+    vim.schedule(fire_ready_callbacks)
+  end
 end
 
 --------------------------------------------------------------------------------
@@ -340,7 +357,11 @@ function M.register(source, definition)
           registry.register_module_schema(mod.metadata.name, mod.metadata.config_schema)
           config_facade.register_module_defaults("tools", mod.metadata.name, mod.metadata.config_schema)
         end
-        M.register_async(mod.resolve, { timeout = mod.timeout })
+        if deferred_async_sources then
+          table.insert(deferred_async_sources, { resolve_fn = mod.resolve, opts = { timeout = mod.timeout } })
+        else
+          M.register_async(mod.resolve, { timeout = mod.timeout })
+        end
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
           register_tool(def.name, def)
@@ -374,6 +395,7 @@ function M.clear()
     close_fn()
   end
   active_timers = {}
+  deferred_async_sources = {}
   pending_modules = {}
   loaded_modules = {}
 end

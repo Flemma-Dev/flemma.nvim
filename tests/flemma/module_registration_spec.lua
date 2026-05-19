@@ -198,6 +198,146 @@ describe("async tool source with module schema", function()
   end)
 end)
 
+-- Regression: DISCOVER-backed tool config (e.g., tools.mcporter) is deferred
+-- during config.apply(SETUP, ..., {defer_discover=true}). The async resolver
+-- must not fire until after finalize() replays the deferred writes, otherwise
+-- it sees the schema default (enabled=false) instead of the user's value.
+describe("async tool source reads deferred config after finalize", function()
+  local s = require("flemma.schema")
+  local config_facade = require("flemma.config")
+  local schema
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+    config_facade.init(schema)
+
+    tools = require("flemma.tools")
+    tools_registry = require("flemma.tools.registry")
+    tools.clear()
+  end)
+
+  after_each(function()
+    package.preload["test.fixture.gated_async"] = nil
+    package.loaded["test.fixture.gated_async"] = nil
+  end)
+
+  ---Build a fixture module whose resolver captures the config it sees.
+  ---@param capture table Table to write resolve_saw_enabled into
+  ---@return table module The preloadable module table
+  local function make_gated_fixture(capture)
+    return {
+      metadata = {
+        name = "gated_source",
+        config_schema = s.object({
+          enabled = s.boolean(false),
+          path = s.string("default-path"),
+        }),
+      },
+      resolve = function(register, done)
+        local cfg = config_facade.get()
+        local source_cfg = cfg.tools and cfg.tools.gated_source or {}
+        capture.enabled = source_cfg.enabled
+        if not source_cfg.enabled then
+          done()
+          return
+        end
+        register("gated_tool", {
+          name = "gated_tool",
+          description = "Registered because enabled=true",
+          input_schema = { type = "object", properties = {} },
+        })
+        done()
+      end,
+      timeout = 5,
+    }
+  end
+
+  -- The core invariant: after the full boot sequence, the resolver must see
+  -- the user's DISCOVER-backed config, not the schema default.
+  it("resolver sees user-provided enabled=true after deferred replay", function()
+    local capture = {}
+    package.preload["test.fixture.gated_async"] = function()
+      return make_gated_fixture(capture)
+    end
+
+    -- 1. Apply user config with defer_discover
+    local _, _, deferred = config_facade.apply(
+      config_facade.LAYERS.SETUP,
+      { tools = { gated_source = { enabled = true, path = "/usr/bin/test" } } },
+      { defer_discover = true }
+    )
+
+    -- 2. Module registration (registers schema + defers async start)
+    tools.setup()
+    tools.register("test.fixture.gated_async")
+
+    -- 3. Finalize replays deferred writes (enabled=true lands in L20)
+    config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+
+    -- 4. Start deferred async sources (resolver runs with finalized config)
+    tools.start_pending_sources()
+
+    assert.is_true(capture.enabled, "resolver should see enabled=true from deferred config")
+    local all = tools.get_all({ include_disabled = true })
+    assert.is_not_nil(all.gated_tool, "tool should be registered when enabled=true")
+  end)
+
+  it("resolver sees default enabled=false when user does not enable", function()
+    local capture = {}
+    package.preload["test.fixture.gated_async"] = function()
+      return make_gated_fixture(capture)
+    end
+
+    local _, _, deferred = config_facade.apply(config_facade.LAYERS.SETUP, {}, { defer_discover = true })
+
+    tools.setup()
+    tools.register("test.fixture.gated_async")
+    config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+    tools.start_pending_sources()
+
+    assert.is_false(capture.enabled, "resolver should see enabled=false (default)")
+  end)
+
+  -- Verify the mechanism: register() defers async sources, not fires them
+  -- immediately. Without deferral, the resolver would run before finalize().
+  it("register() does not fire async resolver immediately", function()
+    local resolve_called = false
+    package.preload["test.fixture.gated_async"] = function()
+      return {
+        metadata = {
+          name = "gated_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+          }),
+        },
+        resolve = function(_register, done)
+          resolve_called = true
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.setup()
+    tools.register("test.fixture.gated_async")
+
+    -- Resolver should NOT have fired yet — it's deferred
+    assert.is_false(resolve_called, "resolver should be deferred, not immediate")
+
+    -- After start_pending_sources, it fires
+    tools.start_pending_sources()
+    assert.is_true(resolve_called, "resolver should fire after start_pending_sources")
+  end)
+end)
+
 describe("provider module resolution", function()
   local provider_registry
 
