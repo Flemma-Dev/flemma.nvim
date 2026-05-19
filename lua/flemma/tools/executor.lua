@@ -3,7 +3,6 @@
 ---@class flemma.tools.Executor
 local M = {}
 
-local registry = require("flemma.tools.registry")
 local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local config_facade = require("flemma.config")
@@ -589,16 +588,16 @@ function M.execute(bufnr, context)
     return false, "Tool " .. tool_id .. " is already executing"
   end
 
-  -- Validate tool exists and is executable
-  if not registry.is_executable(tool_name) then
-    local tool = registry.get(tool_name)
-    if not tool then
-      return false, "Unknown tool: " .. tool_name
-    end
+  -- Validate tool exists and is executable.
+  -- Use tools_module.get() so pending third-party modules are loaded first.
+  if not tools_module.get(tool_name) then
+    return false, "Unknown tool: " .. tool_name
+  end
+  if not tools_module.is_executable(tool_name) then
     return false, "Tool '" .. tool_name .. "' is not executable"
   end
 
-  local executor_fn, is_async = registry.get_executor(tool_name)
+  local executor_fn, is_async = tools_module.get_executor(tool_name)
   if not executor_fn then
     return false, "No executor found for tool: " .. tool_name
   end
