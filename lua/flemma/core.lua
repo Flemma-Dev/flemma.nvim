@@ -28,6 +28,7 @@ local executor = require("flemma.tools.executor")
 local indicators = require("flemma.ui.indicators")
 local injector = require("flemma.tools.injector")
 local path_util = require("flemma.utilities.path")
+local tool_names = require("flemma.utilities.tools")
 local parser = require("flemma.parser")
 local query = require("flemma.ast.query")
 local pipeline = require("flemma.pipeline")
@@ -1460,7 +1461,7 @@ function M._run_send_pipeline(bufnr, opts)
 
     on_tool_call_start = function(name)
       vim.schedule(function()
-        buffer_state.progress_tool_name = name
+        buffer_state.progress_tool_name = tool_names.decode_tool_name(name)
       end)
     end,
 
