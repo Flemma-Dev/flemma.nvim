@@ -499,6 +499,226 @@ describe("flemma.config — deferred validation", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- Glob expansion in tools list
+  -- ---------------------------------------------------------------------------
+
+  describe("tools glob expansion", function()
+    local registry
+
+    before_each(function()
+      package.loaded["flemma.tools.registry"] = nil
+      package.loaded["flemma.utilities.string"] = nil
+      registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("github.create_issue", {
+        name = "github.create_issue",
+        description = "Create a GitHub issue",
+        input_schema = { type = "object" },
+        enabled = false,
+      })
+      registry.register("github.list_repos", {
+        name = "github.list_repos",
+        description = "List GitHub repos",
+        input_schema = { type = "object" },
+        enabled = false,
+      })
+      registry.register("slack.post_message", {
+        name = "slack.post_message",
+        description = "Post a Slack message",
+        input_schema = { type = "object" },
+        enabled = false,
+      })
+      registry.register("read", {
+        name = "read",
+        description = "Read files",
+        input_schema = { type = "object" },
+      })
+
+      package.loaded["flemma.config.schema"] = nil
+      local schema = require("flemma.config.schema")
+      config.init(schema)
+    end)
+
+    it("expands a glob append into matching tool names", function()
+      store.record(L.FRONTMATTER, 1, "append", "tools", "github.*")
+
+      config.finalize(L.FRONTMATTER, nil, 1)
+
+      local resolved = store.resolve("tools", 1, { is_list = true })
+      assert.truthy(vim.tbl_contains(resolved, "github.create_issue"))
+      assert.truthy(vim.tbl_contains(resolved, "github.list_repos"))
+      assert.falsy(vim.tbl_contains(resolved, "slack.post_message"))
+    end)
+
+    it("expands a glob in a set list", function()
+      store.record(L.FRONTMATTER, 1, "set", "tools", { "read", "github.*" })
+
+      config.finalize(L.FRONTMATTER, nil, 1)
+
+      local resolved = store.resolve("tools", 1)
+      assert.truthy(vim.tbl_contains(resolved, "read"))
+      assert.truthy(vim.tbl_contains(resolved, "github.create_issue"))
+      assert.truthy(vim.tbl_contains(resolved, "github.list_repos"))
+    end)
+
+    it("leaves unmatched glob for validation to catch", function()
+      store.record(L.FRONTMATTER, 1, "append", "tools", "nonexistent.*")
+
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
+
+      assert.equals(1, #validation_failures)
+      assert.matches("matched no tools", validation_failures[1].message)
+    end)
+
+    it("passes validation after successful expansion", function()
+      store.record(L.FRONTMATTER, 1, "append", "tools", "github.*")
+
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
+
+      assert.equals(0, #validation_failures)
+    end)
+
+    it("mixes exact names and globs", function()
+      store.record(L.FRONTMATTER, 1, "set", "tools", { "read", "github.*", "slack.*" })
+
+      config.finalize(L.FRONTMATTER, nil, 1)
+
+      local resolved = store.resolve("tools", 1)
+      assert.truthy(vim.tbl_contains(resolved, "read"))
+      assert.truthy(vim.tbl_contains(resolved, "github.create_issue"))
+      assert.truthy(vim.tbl_contains(resolved, "github.list_repos"))
+      assert.truthy(vim.tbl_contains(resolved, "slack.post_message"))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- E2E: async tool source + Lua frontmatter glob → get_for_prompt
+  -- ---------------------------------------------------------------------------
+
+  describe("tools glob E2E: async source + frontmatter", function()
+    local tools_mod
+    local processor_mod
+    local config_mod
+
+    local function register_mcp_tools()
+      tools_mod.register_async(function(register, done)
+        for _, entry in ipairs({
+          { "github.create_issue", "Create a GitHub issue" },
+          { "github.list_repos", "List repositories" },
+          { "github.search_code", "Search code" },
+          { "slack.post_message", "Post a Slack message" },
+          { "slack.list_channels", "List Slack channels" },
+        }) do
+          register(entry[1], {
+            name = entry[1],
+            description = entry[2],
+            input_schema = { type = "object", properties = {} },
+            enabled = false,
+          })
+        end
+        done()
+      end)
+      require("flemma.tools.registry").register("read", {
+        name = "read",
+        description = "Read files",
+        input_schema = { type = "object", properties = {} },
+      })
+    end
+
+    before_each(function()
+      -- Reset everything in one shot — order matters: processor/tools require config
+      -- internally, so config must be fresh before they load.
+      for _, mod in ipairs({
+        "flemma.config",
+        "flemma.config.proxy",
+        "flemma.config.store",
+        "flemma.config.listops",
+        "flemma.config.schema",
+        "flemma.schema",
+        "flemma.schema.types",
+        "flemma.schema.navigation",
+        "flemma.presets",
+        "flemma.loader",
+        "flemma.tools",
+        "flemma.tools.approval",
+        "flemma.tools.registry",
+        "flemma.tools.executor",
+        "flemma.tools.injector",
+        "flemma.processor",
+        "flemma.parser",
+        "flemma.state",
+        "flemma.codeblock",
+        "flemma.codeblock.parsers.lua",
+      }) do
+        package.loaded[mod] = nil
+      end
+
+      config_mod = require("flemma.config")
+      config_mod.init(require("flemma.config.schema"))
+      require("flemma.presets").setup({})
+
+      tools_mod = require("flemma.tools")
+      tools_mod.clear()
+      register_mcp_tools()
+
+      processor_mod = require("flemma.processor")
+
+      config = config_mod
+      s = require("flemma.schema")
+      store = require("flemma.config.store")
+      L = config.LAYERS
+    end)
+
+    after_each(function()
+      vim.cmd("silent! %bdelete!")
+    end)
+
+    it("frontmatter globs and exact names select matching async tools for the prompt", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "```lua",
+        'flemma.opt.tools:append({ "read", "github.*", "slack.*" })',
+        "```",
+        "",
+        "@You:",
+        "Hello",
+      })
+
+      local result = processor_mod.evaluate_buffer_frontmatter(bufnr)
+      assert.are.same({}, result.diagnostics)
+
+      local prompt_tools = tools_mod.get_for_prompt(bufnr)
+      -- Exact name survives alongside expanded globs
+      assert.is_not_nil(prompt_tools["read"])
+      -- github.* expanded
+      assert.is_not_nil(prompt_tools["github.create_issue"])
+      assert.is_not_nil(prompt_tools["github.list_repos"])
+      assert.is_not_nil(prompt_tools["github.search_code"])
+      -- slack.* expanded
+      assert.is_not_nil(prompt_tools["slack.post_message"])
+      assert.is_not_nil(prompt_tools["slack.list_channels"])
+    end)
+
+    it("unmatched glob in frontmatter produces validation diagnostic", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "```lua",
+        'flemma.opt.tools:append({ "nonexistent.*" })',
+        "```",
+        "",
+        "@You:",
+        "Hello",
+      })
+
+      local result = processor_mod.evaluate_buffer_frontmatter(bufnr)
+      assert.equals(1, #result.diagnostics)
+      assert.matches("matched no tools", result.diagnostics[1].error)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- Map key validation
   -- ---------------------------------------------------------------------------
 

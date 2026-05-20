@@ -168,18 +168,44 @@ return s.object({
     [symbols.ALIASES] = {
       approve = "auto_approve",
     },
-  }):allow_list(s.string():validate(function(name)
-    local tool_registry = require("flemma.tools.registry")
-    if not tool_registry.has(name) then
-      local suggestion = tool_registry.closest_match(name)
-      local message = ("Unknown tool '%s'"):format(name)
-      if suggestion then
-        message = message .. (" -- did you mean '%s'?"):format(suggestion)
+  })
+    :allow_list(s.string():validate(function(name)
+      local glob = require("flemma.utilities.glob")
+      if glob.is_glob(name) then
+        return false, ("Glob pattern '%s' matched no tools"):format(name)
       end
-      return false, message
-    end
-    return true
-  end)),
+      local tool_registry = require("flemma.tools.registry")
+      if not tool_registry.has(name) then
+        local suggestion = tool_registry.closest_match(name)
+        local message = ("Unknown tool '%s'"):format(name)
+        if suggestion then
+          message = message .. (" -- did you mean '%s'?"):format(suggestion)
+        end
+        return false, message
+      end
+      return true
+    end))
+    :coerce(function(value, _ctx)
+      if type(value) ~= "string" then
+        return value
+      end
+      local glob = require("flemma.utilities.glob")
+      if not glob.is_glob(value) then
+        return value
+      end
+      local tool_registry = require("flemma.tools.registry")
+      local expanded = {}
+      for tool_name, _ in pairs(tool_registry.get_all({ include_disabled = true })) do
+        if glob.match(tool_name, value) then
+          table.insert(expanded, tool_name)
+        end
+      end
+      table.sort(expanded)
+      if #expanded == 0 then
+        return value
+      end
+      return expanded
+    end),
 
   templating = s.object({
     modules = s.list(s.loadable(), {}),
