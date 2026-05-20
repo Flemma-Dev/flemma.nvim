@@ -561,9 +561,9 @@ describe("Tool Indicator Extmark Placement", function()
 
       indicators.show_tool_indicator(bufnr, "toolu_01", 2)
       indicators.update_tool_indicator(bufnr, "toolu_01", true)
-      indicators.schedule_tool_indicator_clear(bufnr, "toolu_01", 10)
+      indicators.schedule_tool_indicator_clear(bufnr, "toolu_01", 50)
 
-      vim.wait(100, function()
+      vim.wait(200, function()
         return not indicators.has_indicator(bufnr, "toolu_01")
       end, 10)
 
@@ -670,9 +670,9 @@ describe("Tool Indicator Extmark Placement", function()
       })
 
       indicators.show_job_result_indicator(bufnr, "job_abc12", 2, true)
-      indicators.schedule_tool_indicator_clear(bufnr, "job_abc12", 10)
+      indicators.schedule_tool_indicator_clear(bufnr, "job_abc12", 50)
 
-      vim.wait(100, function()
+      vim.wait(200, function()
         return not indicators.has_indicator(bufnr, "job_abc12")
       end, 10)
 

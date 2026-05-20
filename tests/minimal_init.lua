@@ -1,8 +1,9 @@
 -- Add the project root to the runtime path to find the 'lua' directory
 vim.opt.rtp:prepend(os.getenv("PROJECT_ROOT"))
 
--- Turn off swapfile during tests
+-- Turn off swapfile and ShaDa during tests
 vim.opt.swapfile = false
+vim.opt.shadafile = "NONE"
 
 -- === Test output filtering ===
 -- Each spec file runs in its own child nvim process. We buffer all stdout,
