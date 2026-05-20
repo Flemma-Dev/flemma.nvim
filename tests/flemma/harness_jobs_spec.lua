@@ -19,7 +19,7 @@ local function make_ctx(bufnr)
   }
 end
 
-describe("flemma:jobs:status", function()
+describe("flemma.jobs.status", function()
   local jobs_module
   local execute
 
@@ -33,7 +33,7 @@ describe("flemma:jobs:status", function()
 
   it("exports a single definition with correct name", function()
     assert.equals(1, #jobs_module.definitions)
-    assert.equals("flemma:jobs:status", jobs_module.definitions[1].name)
+    assert.equals("flemma.jobs.status", jobs_module.definitions[1].name)
   end)
 
   it("is synchronous and not backgroundable", function()

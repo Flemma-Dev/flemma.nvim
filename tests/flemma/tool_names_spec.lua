@@ -8,15 +8,15 @@ describe("utilities.tools", function()
   end)
 
   describe("encode_tool_name", function()
-    it("replaces colon with wire separator", function()
-      assert.equals("slack__channels_list", tool_names.encode_tool_name("slack:channels_list"))
+    it("replaces dot with wire separator", function()
+      assert.equals("slack__channels_list", tool_names.encode_tool_name("slack.channels_list"))
     end)
 
-    it("handles multiple colons", function()
-      assert.equals("server__group__tool", tool_names.encode_tool_name("server:group:tool"))
+    it("handles multiple dots", function()
+      assert.equals("server__group__tool", tool_names.encode_tool_name("server.group.tool"))
     end)
 
-    it("passes through names without colons", function()
+    it("passes through names without dots", function()
       assert.equals("bash", tool_names.encode_tool_name("bash"))
     end)
 
@@ -26,12 +26,12 @@ describe("utilities.tools", function()
   end)
 
   describe("decode_tool_name", function()
-    it("replaces wire separator with colon", function()
-      assert.equals("slack:channels_list", tool_names.decode_tool_name("slack__channels_list"))
+    it("replaces wire separator with dot", function()
+      assert.equals("slack.channels_list", tool_names.decode_tool_name("slack__channels_list"))
     end)
 
     it("handles multiple wire separators", function()
-      assert.equals("server:group:tool", tool_names.decode_tool_name("server__group__tool"))
+      assert.equals("server.group.tool", tool_names.decode_tool_name("server__group__tool"))
     end)
 
     it("passes through names without wire separator", function()
@@ -45,7 +45,7 @@ describe("utilities.tools", function()
 
   describe("round-trip", function()
     it("encode then decode returns original", function()
-      local original = "slack:channels_list"
+      local original = "slack.channels_list"
       assert.equals(original, tool_names.decode_tool_name(tool_names.encode_tool_name(original)))
     end)
 

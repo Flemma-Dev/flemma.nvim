@@ -574,7 +574,7 @@ function M.execute(bufnr, context)
         log.warn("executor: failed to set re-adopt header for " .. tool_id .. ": " .. (header_err or "unknown"))
       end
       local placeholder_text
-      if is_tool_available("flemma:jobs:status", bufnr) then
+      if is_tool_available("flemma.jobs.status", bufnr) then
         placeholder_text = messages.render("job-executing--tracked", { job_id = existing_entry.job_id })
       else
         placeholder_text = messages.render("job-executing--untracked")
@@ -604,7 +604,7 @@ function M.execute(bufnr, context)
 
   local job_status_tool_available = false
   if is_background then
-    job_status_tool_available = is_tool_available("flemma:jobs:status", bufnr)
+    job_status_tool_available = is_tool_available("flemma.jobs.status", bufnr)
   end
 
   -- Create pending entry
@@ -953,7 +953,7 @@ function M.background_at_cursor(bufnr)
   end
 
   local job_placeholder_text
-  if is_tool_available("flemma:jobs:status", bufnr) then
+  if is_tool_available("flemma.jobs.status", bufnr) then
     job_placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
   else
     job_placeholder_text = messages.render("job-executing--untracked")

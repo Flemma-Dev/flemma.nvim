@@ -39,14 +39,6 @@ M.metadata = {
 -- Internal helpers
 --------------------------------------------------------------------------------
 
----Replace dots with hyphens in server names (dots are not allowed in tool names).
----@param name string
----@return string
-local function sanitize_server_name(name)
-  local sanitized = name:gsub("%.", "-")
-  return sanitized
-end
-
 ---Convert a glob pattern (with `*` wildcards) to a Lua pattern.
 ---@param glob string
 ---@return string
@@ -70,13 +62,13 @@ end
 
 ---Check whether all possible tools from a server would be excluded.
 ---Used to skip the schema fetch entirely for fully-excluded servers.
----Only triggers for whole-server wildcard patterns (e.g., `slack:*`).
----Narrower patterns like `slack:a*` are not treated as full-server excludes.
+---Only triggers for whole-server wildcard patterns (e.g., `slack.*`).
+---Narrower patterns like `slack.a*` are not treated as full-server excludes.
 ---@param server_name string
 ---@param exclude string[]
 ---@return boolean
 local function server_fully_excluded(server_name, exclude)
-  local prefix = sanitize_server_name(server_name) .. SEPARATOR
+  local prefix = server_name .. SEPARATOR
   for _, pattern in ipairs(exclude) do
     if pattern == prefix .. "*" then
       return true
@@ -192,7 +184,7 @@ end
 ---@param exec_opts { path: string, timeout: integer }
 ---@return flemma.tools.ToolDefinition
 function M._build_tool_definition(server_name, tool_data, exec_opts)
-  local safe_server = sanitize_server_name(server_name)
+  local safe_server = server_name
   local tool_name = safe_server .. SEPARATOR .. tool_data.name
   local selector = server_name .. "." .. tool_data.name
   local mcporter_path = exec_opts.path
@@ -563,7 +555,7 @@ function M._resolve_with_config(cfg, register, done)
           -- Build and register tools for this server
           local tool_stubs = {}
           for _, tool_data in ipairs(tool_defs) do
-            local safe_server = sanitize_server_name(server_name)
+            local safe_server = server_name
             local tool_name = safe_server .. SEPARATOR .. tool_data.name
             table.insert(tool_stubs, { name = tool_name })
           end

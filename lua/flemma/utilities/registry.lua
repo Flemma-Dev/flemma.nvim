@@ -5,8 +5,6 @@
 ---@class flemma.utilities.Registry
 local M = {}
 
-local loader = require("flemma.loader")
-
 --- Canonical registry contract.
 --- Every registry in Flemma should implement this interface. The type parameter T
 --- represents the stored value type (e.g., ToolDefinition, BackendEntry).
@@ -21,14 +19,23 @@ local loader = require("flemma.loader")
 ---@field clear fun() Remove all entries
 ---@field count fun(): integer Get the number of entries
 
---- Validate a registry entry name: must not contain dots (which indicate module paths).
+--- Valid registry name pattern: alphanumeric, underscore, dot, hyphen.
+--- Must survive wire encoding (dot → __) and be accepted by all LLM API
+--- providers (Vertex restricts to [a-zA-Z0-9_.-]+).
+local VALID_NAME_PATTERN = "^[a-zA-Z0-9_.%-]+$"
+
+--- Validate a registry entry name: must contain only safe characters.
 --- Throws with a descriptive error on failure.
 ---@param name string The name to validate
 ---@param registry_label string Human-readable label for error messages (e.g., "tool", "sandbox backend")
 function M.validate_name(name, registry_label)
-  if loader.is_module_path(name) then
+  if not name:match(VALID_NAME_PATTERN) then
     error(
-      string.format("flemma: %s name '%s' must not contain dots (dots indicate module paths)", registry_label, name),
+      string.format(
+        "flemma: %s name '%s' contains invalid characters (allowed: alphanumeric, underscore, dot, hyphen)",
+        registry_label,
+        name
+      ),
       3
     )
   end

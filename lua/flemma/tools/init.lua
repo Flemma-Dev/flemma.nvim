@@ -3,6 +3,7 @@
 ---@class flemma.Tools
 local M = {}
 
+local approval = require("flemma.tools.approval")
 local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
@@ -380,6 +381,13 @@ function M.register(source, definition)
         for _, def in ipairs(mod.definitions) do
           register_tool(def.name, def)
         end
+      end
+      if mod.approval and type(mod.approval.resolve) == "function" then
+        approval.register(source, {
+          resolve = mod.approval.resolve,
+          priority = mod.approval.priority,
+          description = mod.approval.description or ("Module approval resolver from " .. source),
+        })
       end
     end
   elseif type(source) == "function" then

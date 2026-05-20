@@ -130,7 +130,7 @@ describe("core.send_to_provider suspense handling", function()
     local registry = require("flemma.tools.registry")
     local approval = require("flemma.tools.approval")
 
-    approval.register("test:auto-approve-all", {
+    approval.register("test-auto-approve-all", {
       priority = 200,
       resolve = function()
         return "approve"
@@ -222,7 +222,7 @@ describe("core.send_to_provider suspense handling", function()
     assert.truthy(joined:match("%*%*Tool Result:%*%* `toolu_count_lua_modules` %(job=job_"))
     assert.truthy(joined:match("Running as a background job"))
 
-    approval.unregister("test:auto-approve-all")
+    approval.unregister("test-auto-approve-all")
   end)
 
   -- Regression: without ensure_ready() in advance_phase2, tools provided
@@ -232,7 +232,7 @@ describe("core.send_to_provider suspense handling", function()
     local tools_mod = require("flemma.tools")
     local approval = require("flemma.tools.approval")
 
-    approval.register("test:auto-approve-all", {
+    approval.register("test-auto-approve-all", {
       priority = 200,
       resolve = function()
         return "approve"
@@ -306,6 +306,6 @@ describe("core.send_to_provider suspense handling", function()
     end
     assert.is_false(has_unknown_tool, "should not get 'Unknown tool' error while async sources are pending")
 
-    approval.unregister("test:auto-approve-all")
+    approval.unregister("test-auto-approve-all")
   end)
 end)

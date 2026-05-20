@@ -60,7 +60,7 @@ require("flemma").setup({
   tools = {
     mcporter = {
       enabled = true,
-      include = { "slack:*", "linear:*" },
+      include = { "slack.*", "linear.*" },
     },
   },
 })
@@ -99,8 +99,8 @@ Glob patterns use `*` as a wildcard. Both match against the full tool name (`ser
 
 | Goal                                | Config                                       |
 | ----------------------------------- | -------------------------------------------- |
-| Enable all Slack tools              | `include = { "slack:*" }`                    |
-| Enable Slack + Linear search        | `include = { "slack:*", "linear:search_*" }` |
+| Enable all Slack tools              | `include = { "slack.*" }`                    |
+| Enable Slack + Linear search        | `include = { "slack.*", "linear.search_*" }` |
 | Enable everything                   | `include = { "*" }`                          |
 | Discover everything, enable nothing | `include = {}` (default)                     |
 | Skip GitHub entirely                | `exclude = { "github:*" }`                   |
@@ -111,7 +111,7 @@ Tools registered with `enabled = false` (discovered but not included) can be ena
 
 ````markdown
 ```lua
-flemma.opt.tools:append({"slack:channels_list", "slack:conversations_unreads"})
+flemma.opt.tools:append({"slack.channels_list", "slack.conversations_unreads"})
 ```
 
 @System:
@@ -143,7 +143,7 @@ Each discovered tool is named `server:tool_name` using a colon separator. Dots i
 
 | MCPorter server + tool          | Flemma tool name            |
 | ------------------------------- | --------------------------- |
-| `slack` + `channels_list`       | `slack:channels_list`       |
+| `slack` + `channels_list`       | `slack.channels_list`       |
 | `github` + `search_code`        | `github:search_code`        |
 | `my.custom.server` + `do_thing` | `my-custom-server:do_thing` |
 

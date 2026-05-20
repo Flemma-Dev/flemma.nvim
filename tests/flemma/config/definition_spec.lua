@@ -106,7 +106,7 @@ describe("config.schema.definition", function()
 
     it("materializes tools auto_approve default from $standard preset", function()
       local cfg = config_facade.get()
-      assert.same({ "read", "write", "edit", "find", "grep", "ls", "flemma:*" }, cfg.tools.auto_approve)
+      assert.same({ "read", "write", "edit", "find", "grep", "ls", "flemma.*" }, cfg.tools.auto_approve)
     end)
 
     it("materializes tools defaults", function()

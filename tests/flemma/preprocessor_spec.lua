@@ -137,10 +137,10 @@ describe("flemma.preprocessor", function()
       assert.is_false(preprocessor.unregister("ghost"))
     end)
 
-    it("rejects dotted names (module paths) as direct names", function()
+    it("rejects colons in direct names", function()
       local rewriter = preprocessor.create_rewriter("bad")
       assert.has_error(function()
-        preprocessor.register("flemma.bad.name", rewriter)
+        preprocessor.register("bad:name", rewriter)
       end)
     end)
 

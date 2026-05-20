@@ -24,7 +24,7 @@ local tools_registry = require("flemma.tools.registry")
 local BUILTIN = {
   ["$standard"] = {
     parameters = {},
-    auto_approve = { "read", "write", "edit", "find", "grep", "ls", "flemma:*" },
+    auto_approve = { "read", "write", "edit", "find", "grep", "ls", "flemma.*" },
   },
   ["$readonly"] = { parameters = {}, auto_approve = { "read", "find", "grep", "ls" } },
 }

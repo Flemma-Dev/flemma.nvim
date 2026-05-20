@@ -90,7 +90,7 @@ tools = {
 }
 ```
 
-Entries containing `*` are treated as glob patterns — `"flemma:*"` matches any tool whose name starts with `flemma:`. This is how the built-in `$standard` preset auto-approves all harness tools.
+Entries containing `*` are treated as glob patterns — `"flemma.*"` matches any tool whose name starts with `flemma.`. This is how the built-in `$standard` preset auto-approves all harness tools.
 
 ### Approval presets
 
@@ -101,7 +101,7 @@ Presets are named collections of tool approval rules referenced with a `$` prefi
 | Preset      | Approves                                                  | Description                                                           |
 | ----------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
 | `$readonly` | `read`, `find`, `grep`, `ls`                              | Read-only access – safe for exploration buffers                       |
-| `$standard` | `read`, `write`, `edit`, `find`, `grep`, `ls`, `flemma:*` | File operations and harness tools, without shell access (the default) |
+| `$standard` | `read`, `write`, `edit`, `find`, `grep`, `ls`, `flemma.*` | File operations and harness tools, without shell access (the default) |
 
 **User-defined presets** override built-ins by name. Define them in `presets`:
 
@@ -209,7 +209,7 @@ Results appear as `` **Job Result:** `job_xxx` `` blocks inside `@You` messages.
 
 When autopilot is enabled and background jobs complete at idle, Flemma schedules a debounced auto-continue after `tools.autopilot.resume_delay` milliseconds (default `2000`). This gives you time to review the result before the model sees it. Press <kbd>Ctrl-C</kbd> during the delay to cancel. Entering insert mode during the delay also cancels auto-continue. When completions arrive during an active autopilot loop (not at idle), the delay is skipped and the conversation continues immediately.
 
-### `flemma:jobs:status` tool
+### `flemma.jobs.status` tool
 
 A built-in harness tool that lets the model query the status of a background job by its `job_id`. Returns one of:
 
@@ -235,7 +235,7 @@ When `experimental.lsp` is enabled, job-related blocks gain hover and go-to-defi
 
 ### Opting out
 
-Set `backgroundable = false` on a tool definition to prevent the `background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma:jobs:status` harness tool is also not backgroundable.
+Set `backgroundable = false` on a tool definition to prevent the `background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool is also not backgroundable.
 
 ---
 
@@ -724,7 +724,7 @@ The sandbox resolver (priority 25) auto-approves tools that declare `"can_auto_a
 ```lua
 local approval = require("flemma.tools.approval")
 
-approval.register("my_plugin:security_policy", {
+approval.register("my_plugin.security_policy", {
   description = "Block dangerous bash commands",
   resolve = function(tool_name, input, context)
     if tool_name == "bash" and input.command:match("rm %-rf") then
@@ -755,7 +755,7 @@ If a resolver throws an error, it is logged and skipped (treated as `nil`).
 ### Unregistering a resolver
 
 ```lua
-approval.unregister("my_plugin:security_policy")  -- returns true if found
+approval.unregister("my_plugin.security_policy")  -- returns true if found
 ```
 
 Re-registering with the same name replaces the existing resolver.

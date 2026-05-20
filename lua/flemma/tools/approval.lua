@@ -7,7 +7,6 @@
 local M = {}
 
 local config_facade = require("flemma.config")
-local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local registry_utils = require("flemma.utilities.registry")
 local sandbox = require("flemma.sandbox")
@@ -185,34 +184,6 @@ function M.resolve_with_source(tool_name, input, context)
   return "require_approval", "default"
 end
 
----Build a lazy-loading resolve function for a single module path.
----Validates existence eagerly but defers require() until first call.
----@param module_path string Dot-notation Lua module path
----@return fun(tool_name: string, input: table, context: flemma.tools.AutoApproveContext): flemma.tools.ApprovalResult|nil
-local function build_module_resolver(module_path)
-  loader.assert_exists(module_path)
-  ---@type { resolve: fun(tool_name: string, input: table, context: flemma.tools.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
-  local loaded_resolver = nil
-  return function(tool_name, input, context)
-    if not loaded_resolver then
-      local mod = loader.load(module_path)
-      if type(mod.resolve) == "function" then
-        loaded_resolver = mod
-      elseif type(mod) == "function" then
-        loaded_resolver = { resolve = mod }
-      else
-        log.warn("approval: module '" .. module_path .. "' does not export 'resolve' function")
-        loaded_resolver = {
-          resolve = function()
-            return nil
-          end,
-        }
-      end
-    end
-    return loaded_resolver.resolve(tool_name, input, context)
-  end
-end
-
 ---Resolve an auto_approve policy (string[] or function) against a tool call.
 ---The string[] path does a simple membership check — presets are already expanded
 ---by the config store's coerce function.
@@ -227,17 +198,7 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
     for _, entry in
       ipairs(policy --[[@as string[] ]])
     do
-      if loader.is_module_path(entry) then
-        local ok, resolver = pcall(build_module_resolver, entry)
-        if ok then
-          local result = resolver(tool_name, input, context)
-          if result ~= nil then
-            return result
-          end
-        else
-          log.warn("approval: failed to load module resolver '" .. entry .. "': " .. tostring(resolver))
-        end
-      elseif entry:find("*", 1, true) then
+      if entry:find("*", 1, true) then
         local escaped = entry:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1")
         local pattern = "^" .. escaped:gsub("%*", ".*") .. "$"
         if tool_name:find(pattern) then
@@ -279,20 +240,6 @@ end
 function M.setup()
   local config = config_facade.get()
   local tools_config = config.tools
-
-  -- Module-path auto_approve: user set auto_approve to a single module path string.
-  -- Schema default is a list, so this only fires for explicit string values.
-  local auto_approve = tools_config.auto_approve
-  if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
-    local module_resolve = build_module_resolver(auto_approve)
-    register_entry(auto_approve, {
-      priority = 100,
-      description = "Built-in resolver from module " .. auto_approve,
-      resolve = function(tool_name, input, context)
-        return module_resolve(tool_name, input, context)
-      end,
-    })
-  end
 
   -- Unified auto_approve resolver: reads the resolved auto_approve from the
   -- config store at resolve time. This single resolver replaces the old

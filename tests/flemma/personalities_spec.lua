@@ -32,8 +32,8 @@ describe("flemma.personalities", function()
       assert.is_nil(personalities.get("nonexistent"))
     end)
 
-    it("rejects names with dots", function()
-      assert.has_error(function()
+    it("accepts names with dots", function()
+      assert.has_no.errors(function()
         personalities.register("my.personality", {
           render = function()
             return ""

@@ -248,4 +248,12 @@ function M.format_elapsed(seconds)
   return minutes .. "m " .. remaining_seconds .. "s"
 end
 
+---Escape Lua pattern magic characters in a string so it can be used as a
+---literal match in `string.find`, `string.gsub`, etc.
+---@param str string
+---@return string
+function M.escape_pattern(str)
+  return (str:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1"))
+end
+
 return M

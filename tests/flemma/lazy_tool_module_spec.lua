@@ -38,6 +38,36 @@ describe("lazy tool module loading", function()
     vim.cmd("silent! %bdelete!")
   end)
 
+  it("registers approval resolver from module with .approval export", function()
+    package.loaded["test_approval"] = nil
+    local tools = require("flemma.tools")
+    local approval = require("flemma.tools.approval")
+
+    tools.register("test_approval")
+
+    assert.is_true(approval.has("test_approval"))
+    local entry = approval.get("test_approval")
+    assert.equals(75, entry.priority)
+    assert.equals("approve", entry.resolve("test_tool", {}, { bufnr = 1, tool_id = "t1" }))
+    assert.is_nil(entry.resolve("other_tool", {}, { bufnr = 1, tool_id = "t2" }))
+  end)
+
+  it("registers both definitions and approval from combined module", function()
+    package.loaded["test_combined"] = nil
+    local tools = require("flemma.tools")
+    local approval = require("flemma.tools.approval")
+
+    tools.register("test_combined")
+
+    local all = tools.get_all()
+    assert.is_not_nil(all["combo_tool"])
+
+    assert.is_true(approval.has("test_combined"))
+    local entry = approval.get("test_combined")
+    assert.equals(60, entry.priority)
+    assert.equals("approve", entry.resolve("combo_tool", {}, { bufnr = 1, tool_id = "t1" }))
+  end)
+
   it("executor finds a tool from a lazy-loaded module", function()
     -- After setup, the module is registered but not yet loaded
     assert.is_false(registry.has("fixture_search"), "tool should NOT be in registry before first access")

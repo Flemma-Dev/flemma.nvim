@@ -36,7 +36,7 @@ describe("flemma.presets", function()
       local preset = presets.get("$standard")
       local approve = vim.deepcopy(preset.auto_approve)
       table.sort(approve)
-      assert.are.same({ "edit", "find", "flemma:*", "grep", "ls", "read", "write" }, approve)
+      assert.are.same({ "edit", "find", "flemma.*", "grep", "ls", "read", "write" }, approve)
     end)
 
     it("built-in $readonly approves read, find, grep, ls", function()
