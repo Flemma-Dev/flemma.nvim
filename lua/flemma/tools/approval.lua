@@ -7,6 +7,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local glob = require("flemma.utilities.glob")
 local log = require("flemma.logging")
 local registry_utils = require("flemma.utilities.registry")
 local sandbox = require("flemma.sandbox")
@@ -198,13 +199,7 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
     for _, entry in
       ipairs(policy --[[@as string[] ]])
     do
-      if entry:find("*", 1, true) then
-        local escaped = entry:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1")
-        local pattern = "^" .. escaped:gsub("%*", ".*") .. "$"
-        if tool_name:find(pattern) then
-          return "approve"
-        end
-      elseif entry == tool_name then
+      if glob.match(tool_name, entry) then
         return "approve"
       end
     end

@@ -9,32 +9,6 @@ describe("mcporter", function()
     mcporter = require("flemma.tools.definitions.builtin.mcporter")
   end)
 
-  describe("_glob_match", function()
-    it("matches exact names", function()
-      assert.is_true(mcporter._glob_match("slack.channels_list", "slack.channels_list"))
-    end)
-
-    it("matches wildcard suffix", function()
-      assert.is_true(mcporter._glob_match("slack.channels_list", "slack.*"))
-    end)
-
-    it("matches wildcard prefix", function()
-      assert.is_true(mcporter._glob_match("slack.channels_list", "*.channels_list"))
-    end)
-
-    it("matches standalone wildcard", function()
-      assert.is_true(mcporter._glob_match("anything", "*"))
-    end)
-
-    it("rejects non-matching pattern", function()
-      assert.is_false(mcporter._glob_match("slack.channels_list", "github.*"))
-    end)
-
-    it("rejects partial mismatch", function()
-      assert.is_false(mcporter._glob_match("slack.channels_list", "slack.users_*"))
-    end)
-  end)
-
   describe("_filter_tools", function()
     local tools = {
       { name = "slack.channels_list" },

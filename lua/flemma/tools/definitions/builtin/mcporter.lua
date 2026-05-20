@@ -8,6 +8,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local glob = require("flemma.utilities.glob")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local s = require("flemma.schema")
@@ -39,27 +40,6 @@ M.metadata = {
 -- Internal helpers
 --------------------------------------------------------------------------------
 
----Convert a glob pattern (with `*` wildcards) to a Lua pattern.
----@param glob string
----@return string
-local function glob_to_pattern(glob)
-  local escaped = glob:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1")
-  return "^" .. escaped:gsub("%*", ".*") .. "$"
-end
-
----Test whether a name matches any pattern in a list.
----@param name string
----@param patterns string[]
----@return boolean
-local function matches_any(name, patterns)
-  for _, pattern in ipairs(patterns) do
-    if M._glob_match(name, pattern) then
-      return true
-    end
-  end
-  return false
-end
-
 ---Check whether all possible tools from a server would be excluded.
 ---Used to skip the schema fetch entirely for fully-excluded servers.
 ---Only triggers for whole-server wildcard patterns (e.g., `slack.*`).
@@ -81,15 +61,6 @@ end
 -- Exported test helpers (prefixed with _ for test access)
 --------------------------------------------------------------------------------
 
----Test whether a name matches a single glob pattern.
----@param name string
----@param glob string
----@return boolean
-function M._glob_match(name, glob)
-  local pattern = glob_to_pattern(glob)
-  return name:find(pattern) ~= nil
-end
-
 ---Apply include/exclude filtering to a list of tool stubs.
 ---
 ---Semantics:
@@ -103,8 +74,8 @@ end
 function M._filter_tools(tools, include, exclude)
   local result = {}
   for _, tool in ipairs(tools) do
-    if not matches_any(tool.name, exclude) then
-      local enabled = matches_any(tool.name, include)
+    if not glob.matches_any(tool.name, exclude) then
+      local enabled = glob.matches_any(tool.name, include)
       table.insert(result, { name = tool.name, enabled = enabled })
     end
   end
