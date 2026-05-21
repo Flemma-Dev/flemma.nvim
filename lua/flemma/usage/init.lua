@@ -334,14 +334,16 @@ function M.cleanup_buffer(bufnr)
   end
 end
 
-hooks.on("buffer:destroyed", function(data)
-  M.cleanup_buffer(data.bufnr)
-end)
+function M.setup()
+  hooks.on("buffer:destroyed", function(data)
+    M.cleanup_buffer(data.bufnr)
+  end)
 
-hooks.on("request:finished", function(data)
-  if data.request then
-    M.show(data.bufnr, data.request)
-  end
-end)
+  hooks.on("request:finished", function(data)
+    if data.request then
+      M.show(data.bufnr, data.request)
+    end
+  end)
+end
 
 return M

@@ -319,6 +319,7 @@ describe("flemma.usage driver", function()
     hooks = require("flemma.hooks")
     bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
     usage = require("flemma.usage")
+    usage.setup()
   end)
 
   after_each(function()

@@ -27,6 +27,7 @@ local preprocessor = require("flemma.preprocessor")
 local templating = require("flemma.templating")
 local tools_approval = require("flemma.tools.approval")
 local diagnostic_format = require("flemma.utilities.diagnostic")
+local usage = require("flemma.usage")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
@@ -190,6 +191,7 @@ M.setup = function(user_opts)
 
   -- Set up UI module
   ui.setup()
+  usage.setup()
 
   -- Set up cursor engine
   cursor.setup()
