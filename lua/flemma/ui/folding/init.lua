@@ -782,18 +782,16 @@ function M.invalidate_folds(bufnr)
   if winid == -1 then
     return
   end
-  local tick = vim.api.nvim_buf_get_changedtick(bufnr)
   local foldmethod_ok = vim.wo[winid].foldmethod == "expr"
-  -- Path 1: fold map already current — only fix foldmethod if overridden.
-  if fold_map_cache.bufnr == bufnr and fold_map_cache.changedtick == tick then
-    if not foldmethod_ok then
-      vim.fn.win_execute(winid, "set foldmethod=expr")
-    end
-    return
-  end
-  -- Paths 2 & 3: rebuild fold map, conditionally re-assert foldmethod.
-  local doc = parser.get_parsed_document(bufnr)
-  fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
+  -- Invalidate the cache unconditionally. Neovim's incremental fold updater
+  -- (foldUpdateIEMS, triggered by nvim_buf_set_lines) may have already called
+  -- get_fold_level for the modified line range, warming the cache with the
+  -- current tick. But that incremental update only covers modified lines —
+  -- unmodified lines whose fold level changed indirectly (e.g. a tool_use
+  -- block becoming foldable because its result was injected elsewhere) are
+  -- not revisited. Invalidating the cache ensures the next full fold
+  -- evaluation (triggered by `set foldmethod=expr`) rebuilds from scratch.
+  invalidate_cache()
   local mode = vim.api.nvim_get_mode().mode
   if
     not foldmethod_ok
