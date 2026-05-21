@@ -51,6 +51,23 @@ describe("flemma.hooks", function()
   end)
 
   describe("dispatch()", function()
+    it("defers subscribers to the next event loop iteration by default", function()
+      hooks._force_sync(false)
+      local received = nil
+      hooks.on("request:sending", function(data)
+        received = data
+      end)
+
+      hooks.dispatch("request:sending", { bufnr = 42 })
+      assert.is_nil(received)
+
+      assert.is_true(vim.wait(200, function()
+        return received ~= nil
+      end))
+      assert.equals(42, received.bufnr)
+      hooks._force_sync(true)
+    end)
+
     it("fires User autocmd with correct pattern and data", function()
       local received = nil
       track_autocmd("FlemmaRequestSending", function(ev)

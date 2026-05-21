@@ -116,6 +116,10 @@ local notify = require("flemma.notify")
 ---@type table<string, {callback: fun(data: table)}[]>
 local subscribers = {}
 
+---Survives module re-requires so test harness can set-and-forget.
+---@type boolean
+local force_sync = rawget(_G, "_flemma_hooks_force_sync") or false
+
 local PREFIX = "Flemma"
 
 ---TitleCase a single word: "sending" -> "Sending"
@@ -192,34 +196,13 @@ function M.on(name, callback)
   }
 end
 
----Dispatch a hook, firing internal subscribers then a User autocmd.
----
----The name is transformed from "domain:action" format to a
----"Flemma<Domain><Action>" autocmd pattern. Errors in individual
----handlers are caught and surfaced via log + flemma.notify but
----do not prevent subsequent handlers from firing.
----@overload fun(name: "request:sending", data: flemma.hooks.RequestSendingData)
----@overload fun(name: "request:finished", data: flemma.hooks.RequestFinishedData)
----@overload fun(name: "tool:executing", data: flemma.hooks.ToolExecutingData)
----@overload fun(name: "tool:completed", data: flemma.hooks.ToolCompletedData)
----@overload fun(name: "tool:approval-required", data: flemma.hooks.ToolApprovalRequiredData)
----@overload fun(name: "boot:complete", data?: flemma.hooks.BootCompleteData)
----@overload fun(name: "sink:created", data: flemma.hooks.SinkCreatedData)
----@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData)
----@overload fun(name: "config:updated", data?: flemma.hooks.ConfigUpdatedData)
----@overload fun(name: "usage:estimated", data: flemma.hooks.UsageEstimatedData)
----@overload fun(name: "conversation:idle", data: flemma.hooks.ConversationIdleData)
----@overload fun(name: "job:submitted", data: flemma.hooks.JobSubmittedData)
----@overload fun(name: "job:completed", data: flemma.hooks.JobCompletedData)
----@overload fun(name: "autopilot:resume-scheduled", data: flemma.hooks.AutopilotResumeScheduledData)
----@overload fun(name: "autopilot:resume-cancelled", data: flemma.hooks.AutopilotResumeCancelledData)
----@overload fun(name: "autopilot:resumed", data: flemma.hooks.AutopilotResumedData)
----@overload fun(name: "buffer:created", data: flemma.hooks.BufferCreatedData)
----@overload fun(name: "buffer:destroyed", data: flemma.hooks.BufferDestroyedData)
----@param name flemma.hooks.Name Hook name in "domain:action" format
----@param data? table Payload passed to handlers
-function M.dispatch(name, data)
-  local payload = data or {}
+---@class flemma.hooks.DispatchOpts
+---@field sync? boolean Fire subscribers synchronously instead of deferring via vim.schedule (default: false)
+
+---Fire internal subscribers and the User autocmd for a hook.
+---@param name string
+---@param payload table
+local function fire(name, payload)
   local list = subscribers[name]
   if list then
     for _, entry in ipairs(list) do
@@ -243,11 +226,62 @@ function M.dispatch(name, data)
   end
 end
 
+---Dispatch a hook, firing internal subscribers then a User autocmd.
+---
+---By default, dispatch is asynchronous — subscribers run on the next
+---event loop iteration via vim.schedule. Pass `{ sync = true }` when
+---the dispatch site needs subscribers to complete before continuing
+---(e.g., buffer:destroyed cleanup that precedes state teardown).
+---
+---The name is transformed from "domain:action" format to a
+---"Flemma<Domain><Action>" autocmd pattern. Errors in individual
+---handlers are caught and surfaced via log + flemma.notify but
+---do not prevent subsequent handlers from firing.
+---@overload fun(name: "request:sending", data: flemma.hooks.RequestSendingData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "request:finished", data: flemma.hooks.RequestFinishedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "tool:executing", data: flemma.hooks.ToolExecutingData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "tool:completed", data: flemma.hooks.ToolCompletedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "tool:approval-required", data: flemma.hooks.ToolApprovalRequiredData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "boot:complete", data?: flemma.hooks.BootCompleteData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "sink:created", data: flemma.hooks.SinkCreatedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "config:updated", data?: flemma.hooks.ConfigUpdatedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "usage:estimated", data: flemma.hooks.UsageEstimatedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "conversation:idle", data: flemma.hooks.ConversationIdleData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "job:submitted", data: flemma.hooks.JobSubmittedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "job:completed", data: flemma.hooks.JobCompletedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "autopilot:resume-scheduled", data: flemma.hooks.AutopilotResumeScheduledData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "autopilot:resume-cancelled", data: flemma.hooks.AutopilotResumeCancelledData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "autopilot:resumed", data: flemma.hooks.AutopilotResumedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "buffer:created", data: flemma.hooks.BufferCreatedData, opts?: flemma.hooks.DispatchOpts)
+---@overload fun(name: "buffer:destroyed", data: flemma.hooks.BufferDestroyedData, opts?: flemma.hooks.DispatchOpts)
+---@param name flemma.hooks.Name Hook name in "domain:action" format
+---@param data? table Payload passed to handlers
+---@param opts? flemma.hooks.DispatchOpts
+function M.dispatch(name, data, opts)
+  local payload = data or {}
+  if force_sync or (opts and opts.sync) then
+    fire(name, payload)
+  else
+    vim.schedule(function()
+      fire(name, payload)
+    end)
+  end
+end
+
 ---Exposed for testing only. Do not use in production code.
 ---@param name string
 ---@return string
 function M._name_to_pattern(name)
   return name_to_pattern(name)
+end
+
+---Force all dispatches to be synchronous. Exposed for testing only.
+---Persists across module re-requires via a global sentinel.
+---@param enabled boolean
+function M._force_sync(enabled)
+  force_sync = enabled
+  rawset(_G, "_flemma_hooks_force_sync", enabled)
 end
 
 ---Clear all internal subscribers. Exposed for testing only.

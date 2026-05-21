@@ -157,7 +157,7 @@ function M.cleanup_buffer_state(bufnr)
       vim.fn.timer_stop(st.progress_timer)
     end
   end
-  hooks.dispatch("buffer:destroyed", { bufnr = bufnr })
+  hooks.dispatch("buffer:destroyed", { bufnr = bufnr }, { sync = true })
   buffer_states[bufnr] = nil
   writequeue.clear(bufnr)
 end
