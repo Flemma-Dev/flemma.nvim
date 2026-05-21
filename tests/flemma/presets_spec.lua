@@ -560,6 +560,7 @@ describe(":Flemma switch completion ordering", function()
       initialize_provider = function() end,
       send_to_provider = function() end,
       cancel_request = function() end,
+      setup = function() end,
     }
 
     package.preload["flemma.core"] = function()
@@ -644,6 +645,7 @@ describe(":Flemma switch with presets", function()
       initialize_provider = function() end,
       send_to_provider = function() end,
       cancel_request = function() end,
+      setup = function() end,
     }
     function stub_core.switch_provider(provider, model, parameters)
       stub_core.last_switch = {

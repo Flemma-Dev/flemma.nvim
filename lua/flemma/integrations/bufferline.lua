@@ -1,6 +1,11 @@
 --- Optional bufferline.nvim integration — shows a busy icon on .chat tabs
 --- while a request or tool execution is in-flight.
 ---
+--- USER-ACTIVATED MODULE — loaded by the user's bufferline config, not by
+--- Flemma's init. Hook registrations at module scope are intentional: they
+--- fire on require(), which only happens when the user wires this into their
+--- bufferline get_element_icon callback.
+---
 --- Usage (one line in bufferline config):
 ---   get_element_icon = require("flemma.integrations.bufferline").get_element_icon
 ---

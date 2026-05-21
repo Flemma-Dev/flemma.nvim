@@ -1,5 +1,11 @@
 --- Debounced per-buffer input-token estimate prefetch.
 ---
+--- USER-ACTIVATED MODULE — loaded by lua/lualine/components/flemma.lua, not
+--- by Flemma's init. Hook registrations at module scope are intentional: they
+--- fire on require(), which only happens when the user's lualine config
+--- references the Flemma component. No traffic fires unless the
+--- #{buffer.tokens.input} variable is in the statusline format.
+---
 --- Activation is resolver-driven: the lualine resolver for
 --- `buffer.tokens.input` calls `start_tracking(bufnr)` idempotently on
 --- first access. That installs per-buffer TextChanged autocmds and registers

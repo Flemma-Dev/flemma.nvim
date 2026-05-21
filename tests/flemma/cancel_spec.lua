@@ -320,6 +320,7 @@ describe("RAGE cancel (double-tap Ctrl+C)", function()
     })
 
     state = require("flemma.state")
+    require("flemma.core").setup()
     keymaps = require("flemma.keymaps")
   end)
 

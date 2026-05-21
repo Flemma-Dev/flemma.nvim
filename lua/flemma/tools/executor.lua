@@ -1267,9 +1267,11 @@ function M.cleanup_buffer(bufnr)
   buffer_state.pending_executions = nil
 end
 
-hooks.on("buffer:destroyed", function(data)
-  M.cleanup_buffer(data.bufnr)
-end)
+function M.setup()
+  hooks.on("buffer:destroyed", function(data)
+    M.cleanup_buffer(data.bufnr)
+  end)
+end
 
 ---@private
 ---@param bufnr integer

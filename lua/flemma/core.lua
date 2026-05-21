@@ -1761,34 +1761,34 @@ function M.drain_job_completions(bufnr)
   end
 end
 
--- Register core functions with the bridge so modules that cannot
--- require core directly (due to circular dependencies) can dispatch to them.
-bridge.register("send_or_execute", M.send_or_execute)
-bridge.register("cancel_request", M.cancel_request)
-bridge.register("update_ui", M.update_ui)
-bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
-bridge.register("drain_job_completions", M.drain_job_completions)
+function M.setup()
+  bridge.register("send_or_execute", M.send_or_execute)
+  bridge.register("cancel_request", M.cancel_request)
+  bridge.register("update_ui", M.update_ui)
+  bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
+  bridge.register("drain_job_completions", M.drain_job_completions)
 
-hooks.on("buffer:destroyed", function(data)
-  jobs_bar.cleanup(data.bufnr)
-end)
+  hooks.on("buffer:destroyed", function(data)
+    jobs_bar.cleanup(data.bufnr)
+  end)
 
-hooks.on("buffer:destroyed", function(data)
-  local bs = state.get_buffer_state(data.bufnr)
-  if bs.pending_send then
-    bs.pending_send.subscription:cancel()
-    bs.pending_send = nil
-  end
-end)
+  hooks.on("buffer:destroyed", function(data)
+    local bs = state.get_buffer_state(data.bufnr)
+    if bs.pending_send then
+      bs.pending_send.subscription:cancel()
+      bs.pending_send = nil
+    end
+  end)
 
-hooks.on("buffer:destroyed", function(data)
-  local bs = state.get_buffer_state(data.bufnr)
-  if bs.resume_delay_timer then
-    bs.resume_delay_timer:stop()
-    bs.resume_delay_timer:close()
-    bs.resume_delay_timer = nil
-    hooks.dispatch("autopilot:resume-cancelled", { bufnr = data.bufnr })
-  end
-end)
+  hooks.on("buffer:destroyed", function(data)
+    local bs = state.get_buffer_state(data.bufnr)
+    if bs.resume_delay_timer then
+      bs.resume_delay_timer:stop()
+      bs.resume_delay_timer:close()
+      bs.resume_delay_timer = nil
+      hooks.dispatch("autopilot:resume-cancelled", { bufnr = data.bufnr })
+    end
+  end)
+end
 
 return M

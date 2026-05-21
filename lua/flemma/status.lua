@@ -1825,7 +1825,9 @@ function M.collect(bufnr)
     -- evaluate_frontmatter_internal, no separate normalization needed)
     for _, diagnostic in ipairs(fm_result.diagnostics) do
       if diagnostic.severity == "error" or diagnostic.severity == "warning" then
-        collected_diagnostics = collected_diagnostics or {}
+        if not collected_diagnostics then
+          collected_diagnostics = {}
+        end
         table.insert(collected_diagnostics, diagnostic)
       end
     end

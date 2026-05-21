@@ -460,10 +460,6 @@ function M.cleanup(bufnr)
   turn_caches[bufnr] = nil
 end
 
-hooks.on("buffer:destroyed", function(data)
-  M.cleanup(data.bufnr)
-end)
-
 ---Get the detected turn ranges for a buffer.
 ---@param bufnr integer
 ---@return flemma.ui.TurnRange[]
@@ -482,6 +478,12 @@ end
 ---@return flemma.ui.TurnBufferCache|nil
 function M._get_turn_cache(bufnr)
   return turn_caches[bufnr]
+end
+
+function M.setup()
+  hooks.on("buffer:destroyed", function(data)
+    M.cleanup(data.bufnr)
+  end)
 end
 
 return M

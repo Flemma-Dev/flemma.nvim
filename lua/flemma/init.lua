@@ -28,6 +28,8 @@ local templating = require("flemma.templating")
 local tools_approval = require("flemma.tools.approval")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local usage = require("flemma.usage")
+local jobs = require("flemma.ui.jobs")
+local turns = require("flemma.ui.turns")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
@@ -192,6 +194,12 @@ M.setup = function(user_opts)
   -- Set up UI module
   ui.setup()
   usage.setup()
+  jobs.setup()
+  turns.setup()
+
+  -- Set up core and executor hook subscribers
+  core.setup()
+  executor.setup()
 
   -- Set up cursor engine
   cursor.setup()

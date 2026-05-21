@@ -28,6 +28,7 @@ describe("flemma.ui.jobs", function()
     package.loaded["flemma.ui.bar.layout"] = nil
     hooks = require("flemma.hooks")
     jobs = require("flemma.ui.jobs")
+    jobs.setup()
     bufnr = make_visible_buf()
   end)
 

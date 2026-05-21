@@ -78,7 +78,7 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 - `schema/` — general-purpose schema DSL engine: `init.lua` (factory: `s.string()`, `s.object()`, etc.), `types.lua` (node classes), `navigation.lua` (tree traversal)
 - `secrets/` — credential resolution with async resolvers; `resolvers/` contains built-in resolver implementations
 - `templating/` — Lua template engine; `builtins/` for built-in template functions
-- `hooks.lua` + `emittable.lua` — event system with internal subscribers (graduated alongside background jobs)
+- `hooks.lua` + `emittable.lua` — event system with internal subscribers (graduated alongside background jobs). Hooks dispatch asynchronously by default (`vim.schedule`); pass `{ sync = true }` as the third argument to `hooks.dispatch()` when the caller needs subscribers to complete before continuing (currently only `buffer:destroyed` in `state.lua`)
 - `migration.lua` — centralized load-time buffer mutations
 - `utilities/` — stateless shared infrastructure: `json.lua`, `path.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `registry.lua`, `buffer.lua`
 - `loader.lua` — dynamic module loading (Flemma's extensibility contract for user-provided module paths in config)
@@ -248,6 +248,8 @@ Fixed parser edge case with nested thinking blocks
 - **Provider `new()` metatable chain.** Each provider owns its constructor with the full chain set atomically in the `setmetatable` literal before `self:_new_response_buffer()`. The chain is typically `self → M → base`, but intermediate bases exist (e.g., `moonshot → openai_chat → base`). This makes metatable ordering bugs structurally impossible.
 
 - **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
+
+- **Never dismiss a `make qa` failure as "pre-existing".** If `make qa` fails, it's your problem. Fix it before committing — even if the failure looks unrelated to your change. The only way to prove a failure is pre-existing is to stash your changes and confirm it fails on the clean parent commit. Assuming without checking leads to shipping broken code.
 
 ## Session Closure Checklist
 

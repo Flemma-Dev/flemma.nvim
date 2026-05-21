@@ -181,36 +181,36 @@ local function refresh(bufnr)
   end
 end
 
--- Hook subscriptions
+function M.setup()
+  hooks.on("job:submitted", function(data)
+    local s = get_state(data.bufnr)
+    s.count = data.active_count
+    refresh(data.bufnr)
+  end)
 
-hooks.on("job:submitted", function(data)
-  local s = get_state(data.bufnr)
-  s.count = data.active_count
-  refresh(data.bufnr)
-end)
+  hooks.on("job:completed", function(data)
+    local s = get_state(data.bufnr)
+    s.count = data.active_count
+    refresh(data.bufnr)
+  end)
 
-hooks.on("job:completed", function(data)
-  local s = get_state(data.bufnr)
-  s.count = data.active_count
-  refresh(data.bufnr)
-end)
+  hooks.on("autopilot:resume-scheduled", function(data)
+    local s = get_state(data.bufnr)
+    s.resume_delay_ms = data.delay_ms
+    s.resume_started_at = vim.uv.hrtime()
+    refresh(data.bufnr)
+  end)
 
-hooks.on("autopilot:resume-scheduled", function(data)
-  local s = get_state(data.bufnr)
-  s.resume_delay_ms = data.delay_ms
-  s.resume_started_at = vim.uv.hrtime()
-  refresh(data.bufnr)
-end)
+  hooks.on("autopilot:resume-cancelled", function(data)
+    clear_resume(data.bufnr)
+    refresh(data.bufnr)
+  end)
 
-hooks.on("autopilot:resume-cancelled", function(data)
-  clear_resume(data.bufnr)
-  refresh(data.bufnr)
-end)
-
-hooks.on("autopilot:resumed", function(data)
-  clear_resume(data.bufnr)
-  refresh(data.bufnr)
-end)
+  hooks.on("autopilot:resumed", function(data)
+    clear_resume(data.bufnr)
+    refresh(data.bufnr)
+  end)
+end
 
 ---Clean up all state for a buffer. Called from the buffer:destroyed hook.
 ---@param bufnr integer
