@@ -19,7 +19,8 @@ local HAS_TERMINAL_PTY_FIX = vim.fn.has("nvim-0.12") == 1
 
 -- Terminal backend helpers (0.12+ only) --
 
-local SCROLLBACK = 100000
+-- -1 on a terminal buffer = Neovim's compiled maximum (SB_MAX: 100K on 0.11, 1M on 0.12+).
+local SCROLLBACK = -1
 local next_terminal_id = 0
 
 ---Sanitize a string for use in buffer names: keep alphanumerics, dots, hyphens,

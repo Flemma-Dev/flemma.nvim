@@ -215,7 +215,7 @@ describe("Bash Tool", function()
       assert.is_false(vim.api.nvim_buf_is_valid(term_buf))
     end)
 
-    it("sets scrollback to 100000 on the terminal buffer", function()
+    it("sets scrollback to the Neovim maximum on the terminal buffer", function()
       if not HAS_TERMINAL_PTY_FIX then
         pending("requires Neovim 0.12+ (termopen backend)")
         return
@@ -233,7 +233,9 @@ describe("Bash Tool", function()
         return false
       end, 50)
       assert.is_not_nil(term_buf, "terminal buffer was not found while command was running")
-      assert.equals(100000, vim.bo[term_buf].scrollback)
+      -- -1 resolves to SB_MAX (100K on 0.11, 1M on 0.12+); assert it expanded.
+      local sb = vim.bo[term_buf].scrollback
+      assert.is_true(sb >= 100000, "scrollback should be at least 100000, got " .. tostring(sb))
     end)
 
     it("uses explicit shell from list form, not user $SHELL", function()
