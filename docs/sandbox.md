@@ -18,14 +18,14 @@ Flemma's sandbox has two layers:
 1. **Policy layer** (`sandbox/init.lua`) – defines _what_ is allowed: which paths are writable, whether network access is permitted, whether the agent can use `sudo`. Tools call this layer's API; they never talk to backends directly.
 2. **Backend layer** (e.g., `sandbox/backends/bwrap.lua`) – translates the policy into enforcement. The first backend is [Bubblewrap](https://github.com/containers/bubblewrap) (Linux). The abstraction boundary makes it straightforward to add backends for other platforms without changing the policy schema or tool integration.
 
-When a tool executes a shell command, the sandbox wraps it:
+When a tool executes a shell command, the sandbox wraps the argv before it is handed to Neovim's job machinery:
 
 ```
-vim.fn.jobstart(cmd)            -- without sandbox
-vim.fn.jobstart(bwrap ... cmd)  -- with sandbox
+spawn(cmd)              -- without sandbox
+spawn(bwrap ... cmd)    -- with sandbox
 ```
 
-If sandboxing is disabled or no backend is available, the command runs unchanged.
+On Neovim 0.12+ the `bash` tool runs commands inside a hidden terminal buffer (`termopen`/`jobstart({term=true})`); on 0.11 it uses raw `jobstart`. Either way, the sandbox layer prepends backend arguments to the same argv. If sandboxing is disabled or no backend is available, the command runs unchanged.
 
 ---
 
@@ -171,7 +171,7 @@ The boolean shorthand (`flemma.opt.sandbox = true`) expands to `{ enabled = true
 
 When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"can_auto_approve_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
 
-The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below config (100), frontmatter (90), and the community default (50). Explicit user preferences always win.
+The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below the unified config resolver (100) and the community default (50). Explicit user preferences — global or per-buffer via frontmatter — always win, because the config resolver reads the merged value from all layers before the sandbox resolver gets a chance to run.
 
 ### Opting out
 
@@ -196,12 +196,15 @@ flemma.opt.tools.auto_approve:remove("bash")
 
 ### Requirements
 
-All three conditions must be met for sandbox auto-approval to activate:
+The following conditions must all hold for sandbox auto-approval to activate:
 
-1. **`tools.auto_approve` is configured** — the user has opted into some form of auto-approval
-2. **Sandbox is enabled and available** — `sandbox.enabled = true`, no runtime disable override, and a backend (e.g., `bwrap`) is installed and functional
+1. **`tools.auto_approve_sandboxed` is not `false`** — the user hasn't globally opted out of sandbox auto-approval.
+2. **The tool declares `can_auto_approve_if_sandboxed`** in its capabilities array. Currently only `bash` ships this capability.
+3. **Frontmatter hasn't excluded the tool.** A `remove` op for the tool (e.g., `flemma.opt.tools.auto_approve:remove("bash")`) opts this buffer out without changing global config.
+4. **Frontmatter hasn't set a full policy** for `tools.auto_approve`. A `set` op signals the user is taking complete ownership of approval for this buffer — sandbox auto-approval steps aside.
+5. **Sandbox is enabled and available** — `sandbox.enabled = true`, no runtime disable override (`:Flemma sandbox:disable`), and a backend (e.g., `bwrap`) validates successfully.
 
-If any condition is unmet, the resolver yields (`nil`) and the chain continues to the next resolver.
+If any condition fails, the resolver yields (`nil`) and the chain continues to the next resolver.
 
 ---
 

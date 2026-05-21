@@ -16,9 +16,12 @@ Flemma emits [User autocmds](https://neovim.io/doc/user/autocmd.html#User) at li
 | `request:finished`           | `FlemmaRequestFinished`          | `bufnr`, `status` (`"completed"`, `"cancelled"`, or `"errored"`), `request?` (`flemma.session.Request` — present on completed status with pricing info) | After an API request completes (any outcome)         |
 | `tool:executing`             | `FlemmaToolExecuting`            | `bufnr`, `tool_name`, `tool_id`                                                                                                                         | When a tool invocation starts execution              |
 | `tool:completed`             | `FlemmaToolCompleted`            | `bufnr`, `tool_name`, `tool_id`, `status` (`"success"` or `"error"`)                                                                                    | When a tool invocation completes                     |
+| `tool:approval-required`     | `FlemmaToolApprovalRequired`     | `bufnr`, `tools` (array of `{ tool_id, tool_name, input }`)                                                                                             | When one or more tool calls land on `(pending)`      |
 | `usage:estimated`            | `FlemmaUsageEstimated`           | `bufnr`                                                                                                                                                 | When a buffer's token estimate cache changes         |
 | `config:updated`             | `FlemmaConfigUpdated`            | _(none)_                                                                                                                                                | After runtime configuration changes (see note below) |
 | `boot:complete`              | `FlemmaBootComplete`             | _(none)_                                                                                                                                                | After all async tool sources finish loading          |
+| `buffer:created`             | `FlemmaBufferCreated`            | `bufnr`                                                                                                                                                 | After Flemma initializes a `.chat` buffer            |
+| `buffer:destroyed`           | `FlemmaBufferDestroyed`          | `bufnr`                                                                                                                                                 | When a `.chat` buffer is wiped or deleted            |
 | `sink:created`               | `FlemmaSinkCreated`              | `bufnr`, `name`                                                                                                                                         | When a new output buffer (sink) is created           |
 | `sink:destroyed`             | `FlemmaSinkDestroyed`            | `bufnr`, `name`                                                                                                                                         | When an output buffer (sink) is destroyed            |
 | `conversation:idle`          | `FlemmaConversationIdle`         | `bufnr`                                                                                                                                                 | When the conversation reaches idle after a response  |
@@ -71,22 +74,57 @@ vim.api.nvim_create_autocmd("User", {
 
 ### Lua subscribers
 
-In addition to User autocmds, hooks support direct Lua callbacks via `hooks.on()`. Internal subscribers fire synchronously before the autocmd, in registration order, with per-subscriber error isolation.
+In addition to User autocmds, hooks support direct Lua callbacks via `hooks.on()`. Internal subscribers fire synchronously before the autocmd, in registration order, with per-subscriber error isolation — one buggy listener never blocks another.
 
 ```lua
 local hooks = require("flemma.hooks")
 
-local handle = hooks.on("job:completed", function(data)
+local subscription = hooks.on("job:completed", function(data)
   if data.active_count == 0 then
     vim.notify("All background jobs finished")
   end
 end)
 
 -- Later: unsubscribe
-handle:off()
+subscription:off()
 ```
 
-`hooks.on(name, callback)` returns a handle with an `:off()` method. Prefer autocmds for external plugins; prefer `hooks.on()` when you need guaranteed ordering relative to other subscribers or want to avoid the `ev.data` unwrapping overhead.
+`hooks.on(name, callback)` returns a `flemma.hooks.Subscription` with an `:off()` method. Prefer autocmds for external plugins; prefer `hooks.on()` when you need guaranteed ordering relative to other subscribers or want to avoid the `ev.data` unwrapping overhead.
+
+---
+
+## Programmatic tool approval
+
+The `tool:approval-required` hook pairs with a small public API for resolving approvals outside the buffer. This is how you replace the inline `(pending)` flow with a confirmation dialog, a statusline picker, or any other UI:
+
+```lua
+local hooks = require("flemma.hooks")
+local tools = require("flemma.tools")
+
+hooks.on("tool:approval-required", function(data)
+  for _, call in ipairs(data.tools) do
+    local choice = vim.fn.confirm(
+      string.format("Approve %s?\n%s", call.tool_name, vim.inspect(call.input)),
+      "&Approve\n&Reject",
+      2
+    )
+    if choice == 1 then
+      tools.approve(data.bufnr, call.tool_id)
+    else
+      tools.reject(data.bufnr, call.tool_id, "Denied via confirmation dialog")
+    end
+  end
+end)
+```
+
+| Function                                 | Effect                                                                                                      |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `tools.approve(bufnr, tool_id)`          | Sets the tool_result header to `(approved)`. The next phase advance executes it.                            |
+| `tools.reject(bufnr, tool_id, message?)` | Sets the header to `(rejected)`. Optional `message` is written into the fence body as the rejection reason. |
+
+Both functions guard against approving/rejecting tools that no longer exist or have already resolved. They nudge autopilot via `autopilot.nudge()` so an in-flight loop picks up your decision without an extra <kbd>Ctrl-]</kbd>. See `contrib/extras/approval_dialog.lua` for a working example using `vim.fn.confirm()`.
+
+The hook fires once per Phase 1 with **all** pending tools batched into a single `tools` array — pick the ones you care about and ignore the rest, or process them all in one prompt.
 
 ---
 
@@ -198,14 +236,14 @@ secrets.invalidate_all()                    -- clear the entire cache
 
 These extension points have full documentation in their respective pages:
 
-| Extension point       | What it does                                          | Documentation                                                                                         |
-| --------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Custom tools          | Register tools the model can call                     | [docs/tools.md – Registering custom tools](tools.md#registering-custom-tools)                         |
-| Async tool sources    | Resolve tool definitions from external processes/APIs | [docs/tools.md – Async tool definitions](tools.md#async-tool-definitions)                             |
-| Approval resolvers    | Priority-based chain for tool approval decisions      | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                                     |
-| Sandbox backends      | Platform-specific sandbox enforcement                 | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                                       |
-| Personalities         | Dynamic system prompt generators                      | [docs/personalities.md](personalities.md)                                                             |
-| Template populators   | Custom globals for `{{ }}` and `{% %}` expressions    | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)               |
-| Frontmatter parsers   | Custom frontmatter languages (e.g., YAML)             | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers)             |
-| Frontmatter operators | JSON config operators (`$set`, `$append`, etc.)       | [docs/templates.md – JSON frontmatter operators](templates.md#json-frontmatter-with-config-operators) |
-| Preview formatters    | Custom tool preview rendering in pending placeholders | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)                       |
+| Extension point     | What it does                                                                  | Documentation                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Custom tools        | Register tools the model can call                                             | [docs/tools.md – Registering custom tools](tools.md#registering-custom-tools)                         |
+| Async tool sources  | Resolve tool definitions from external processes/APIs                         | [docs/tools.md – Async tool definitions](tools.md#async-tool-definitions)                             |
+| Approval resolvers  | Priority-based chain for tool approval decisions                              | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                                     |
+| Sandbox backends    | Platform-specific sandbox enforcement                                         | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                                       |
+| Personalities       | Dynamic system prompt generators                                              | [docs/personalities.md](personalities.md)                                                             |
+| Template populators | Custom globals for `{{ }}` and `{% %}` expressions                            | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)               |
+| Frontmatter parsers | Custom frontmatter languages (e.g., YAML)                                     | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers)             |
+| List op-prefixes    | Compose append/prepend/remove/preset spread on list config in any frontmatter | [docs/templates.md – Op-prefix syntax for list values](templates.md#op-prefix-syntax-for-list-values) |
+| Preview formatters  | Custom tool preview rendering in pending placeholders                         | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)                       |

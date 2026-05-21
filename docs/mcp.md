@@ -91,7 +91,7 @@ tools = {
 
 ### Include / exclude
 
-Glob patterns use `*` as a wildcard. Both match against the full tool name (`server:tool_name`).
+Glob patterns use `*` as a wildcard. Both match against the full tool name (`server.tool_name`).
 
 1. **Exclude** runs first -- matching tools are not registered at all.
 2. **Include** runs second -- matching tools are marked `enabled = true`.
@@ -103,7 +103,7 @@ Glob patterns use `*` as a wildcard. Both match against the full tool name (`ser
 | Enable Slack + Linear search        | `include = { "slack.*", "linear.search_*" }` |
 | Enable everything                   | `include = { "*" }`                          |
 | Discover everything, enable nothing | `include = {}` (default)                     |
-| Skip GitHub entirely                | `exclude = { "github:*" }`                   |
+| Skip GitHub entirely                | `exclude = { "github.*" }`                   |
 
 ### Per-file opt-in
 
@@ -139,15 +139,18 @@ Tools from fast servers become available immediately -- you don't have to wait f
 
 ### Tool naming
 
-Each discovered tool is named `server:tool_name` using a colon separator. Dots in server names are replaced with hyphens (dots are reserved for Lua module paths in Flemma).
+Each discovered tool is named `server.tool_name` using a dot separator. Dots in server names themselves are replaced with hyphens to keep the separator unambiguous.
 
 | MCPorter server + tool          | Flemma tool name            |
 | ------------------------------- | --------------------------- |
 | `slack` + `channels_list`       | `slack.channels_list`       |
-| `github` + `search_code`        | `github:search_code`        |
-| `my.custom.server` + `do_thing` | `my-custom-server:do_thing` |
+| `github` + `search_code`        | `github.search_code`        |
+| `my.custom.server` + `do_thing` | `my-custom-server.do_thing` |
 
-On the wire (in API requests to LLM providers), the colon is encoded to `__` to satisfy provider name constraints (`[a-zA-Z0-9_-]+`). This encoding is transparent -- you always use colons in config and frontmatter.
+On the wire (in API requests to LLM providers), the dot is encoded to `__` to satisfy provider name constraints (`[a-zA-Z0-9_-]+`). This encoding is transparent — you always use dots in config and frontmatter, and the progress bar and other UI surfaces decode `__` back to `.` for display.
+
+> [!NOTE]
+> The tool name separator changed from `:` to `.` in v0.12. Older configs using `"server:tool"` patterns will no longer match — update them to `"server.tool"`.
 
 ### Execution
 

@@ -33,6 +33,8 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
 | `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
 | `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
+| `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)        |
+| `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)           |
 | `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
@@ -230,6 +232,17 @@ The initial fold level is controlled by `editing.fold.level` (default: `1`, whic
 
 When `editing.fold.gap` is `true`, folded messages leave one trailing blank line visible between them for visual separation. This only applies to message-level folds — tool block folds always collapse fully. Disabled by default.
 
+### Folding a turn
+
+A **turn** is one round-trip in the conversation: an `@You` message and every `@Assistant` reply and tool exchange that answers it, up to the next `@You`. Two keybindings collapse turns to their endpoints so you can scan a long conversation as a clean question/answer dialogue:
+
+| Key  | Action                                                                    | Config                      |
+| ---- | ------------------------------------------------------------------------- | --------------------------- |
+| `zy` | Fold every message in the turn under the cursor except the first and last | `keymaps.normal.fold_turn`  |
+| `zY` | Apply the same fold to every turn in the buffer                           | `keymaps.normal.fold_turns` |
+
+The first and last messages stay open so the question and final answer remain visible — intermediate assistant responses, tool calls, and tool results collapse. A turn with only a question and a single response folds nothing (there's nothing intermediate to hide).
+
 ### Fold text
 
 Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:
@@ -239,6 +252,21 @@ Collapsed folds show a preview of their content with per-segment syntax highligh
 - **Tool Result:** `⬢ Tool Result: name: detail — label (N lines)` – same structure as tool use but with a filled hexagon icon and `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
 - **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
 - **Frontmatter:** ` ```language preview... ``` (N lines) ` – uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
+
+## Fence overlays
+
+When `experimental.patch_markdown_conceal` is enabled (the default), fenced code block delimiters are replaced with styled overlay extmarks instead of being hidden via treesitter `conceal_lines`. This eliminates significant per-keystroke overhead on large buffers while keeping the visual appearance clean.
+
+Two highlight groups control the overlay appearance:
+
+| Group              | Default                     | Applies to                                          |
+| ------------------ | --------------------------- | --------------------------------------------------- |
+| `FlemmaFenceLabel` | theme-aware `Comment`       | Language tag on the opening delimiter (e.g., `lua`) |
+| `FlemmaFenceBar`   | links to `FlemmaFenceLabel` | Delimiter bar character                             |
+
+When the cursor line overlaps with a fence overlay, the highlights are automatically contrast-adjusted against `CursorLine` to ensure readability. This uses pre-computed highlight variants that blend the fence colours with the `CursorLine` background.
+
+Fence overlays are only shown when `conceallevel >= 2`. Toggling conceal off (`[oe` or `yoe`) reveals the raw ` ``` ` delimiters. See [docs/conceal.md](conceal.md) for the full interaction between conceallevel and fence rendering.
 
 ## Usage bar
 

@@ -25,6 +25,19 @@ Flemma's chat buffer already carries a lot of signal — role markers, tool-use 
 
 If you prefer raw Markdown always, `editing.conceal = false` restores the pre-v0.11 behaviour.
 
+## Fence overlay system
+
+Neovim's bundled Markdown treesitter queries use `conceal_lines` to hide fenced code block delimiters (` ``` `). At `conceallevel >= 2` this interacts poorly with treesitter highlighting, adding ~36ms of per-keystroke overhead on large buffers. Flemma replaces this mechanism with styled overlay extmarks — configurable via `highlights.fence_label` (the language tag) and `highlights.fence_bar` (the delimiter bar). This brings typing latency down to ~4ms per keystroke.
+
+The overlay system is controlled by `experimental.patch_markdown_conceal` (default `true`). When enabled:
+
+- Fence delimiters are hidden and replaced with overlay extmarks showing the language label
+- Overlays are only active when `conceallevel >= 2`; toggling conceal off reveals raw delimiters
+- Overlays gain contrast-adjusted highlights when overlapping with `CursorLine`
+- Markdown buffers in the same session regain native fence concealing via automatic highlighter restoration
+
+Set `experimental.patch_markdown_conceal = false` to restore the standard Neovim conceal behaviour for fences.
+
 ## Toggling conceal at runtime
 
 The default keymaps follow Neovim's `yo`/`[o`/`]o` option-toggle convention:
@@ -75,7 +88,7 @@ We investigated:
 - Emitting a `virt_lines_above` banner on the first non-concealed line below the frontmatter — works, but introduces a new navigation surface area (the banner can't be cursor-landed on) and duplicates the existing fold-preview affordance.
 - Shipping a `queries/chat/highlights.scm` override that inherits markdown without `conceal_lines` — restores the fence lines globally in `.chat`, which defeats the point of `editing.conceal = "2nv"` (the fences are the noise you wanted hidden).
 
-**What we ship:** at `conceallevel >= 1`, the frontmatter fold rule (`lua/flemma/ui/folding/rules/frontmatter.lua`) returns no fold entries. The frontmatter body renders inline with its `@Lua`/`@JSON` treesitter highlighting, the two delimiter lines stay concealed as intended, and there is no collapsed placeholder to disappear. At `conceallevel = 0` the fold is emitted as before. The window's live `vim.wo.conceallevel` is also part of the fold map cache key, so toggling it at runtime re-evaluates without a manual `:edit`.
+**What we ship:** Flemma replaces the `conceal_lines` mechanism entirely when `experimental.patch_markdown_conceal` is enabled (the default). Fenced code block delimiters are styled with overlay extmarks (`FlemmaFenceLabel`, `FlemmaFenceBar`) instead of being hidden via treesitter, eliminating the per-keystroke overhead and the fold placeholder interaction. At `conceallevel >= 1`, the frontmatter fold rule (`lua/flemma/ui/folding/rules/frontmatter.lua`) returns no fold entries. The frontmatter body renders inline with its `@Lua`/`@JSON` treesitter highlighting, and there is no collapsed placeholder to disappear. At `conceallevel = 0` the fold is emitted as before. The window's live `vim.wo.conceallevel` is also part of the fold map cache key, so toggling it at runtime re-evaluates without a manual `:edit`. Markdown buffers in the same session regain native fence concealing via automatic highlighter restoration.
 
 Upstream this is an unfortunate layering between `conceal_lines` and fold placeholders — not special-cased because `conceal_lines` was added for the "hide a blank JSX attribute line" shape of problem, not for rows that were structurally load-bearing. A `neovim/neovim` feature request ("fold placeholder should fall back to the first non-`conceal_lines` row in range") would be the durable fix.
 

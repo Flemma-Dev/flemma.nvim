@@ -123,7 +123,7 @@ Each preset is a table with an `auto_approve` array — the tool names to auto-a
 
 ### Per-buffer approval
 
-Override approval on a per-buffer basis using `flemma.opt.tools.auto_approve` in Lua frontmatter. This works alongside the global `tools.auto_approve` config – global config is checked first (priority 100), then per-buffer frontmatter (priority 90):
+Override approval on a per-buffer basis using `flemma.opt.tools.auto_approve` in Lua frontmatter. The unified config resolver reads the merged value from all layers, so frontmatter values take precedence over global config automatically — there's no separate resolver to coordinate:
 
 ````lua
 ```lua
@@ -173,6 +173,12 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
 - **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to a temporary file.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
+
+### Bash execution backend
+
+On Neovim 0.12+ the `bash` tool executes commands inside a hidden terminal buffer rather than a raw `jobstart` process. This gives the command a real TTY so colour codes, progress bars, and curses-style tools render as the model would see them in a normal shell. Output is captured up to Neovim's compiled maximum scrollback (1M lines on 0.12+) before truncation kicks in. On Neovim 0.11 the tool falls back to `jobstart` since terminal buffers were not safe to drive from background contexts in that release.
+
+This is transparent to your config — there's nothing to opt into. The terminal buffer is hidden, named after the tool invocation, and deleted once the command exits.
 
 ### Parallel tool use
 
@@ -410,6 +416,33 @@ flemma.opt.tools = flemma.opt.tools + "read"    -- operator overloads work too
 
 Each evaluation starts from defaults (all enabled tools). Misspelled tool names produce an error with a "did you mean" suggestion.
 
+### Glob patterns in tool lists
+
+Entries containing `*` are treated as glob patterns and expanded against the registered tools. This is the natural way to bulk-enable namespaced tools (MCP servers, custom harness tools):
+
+````lua
+```lua
+-- Enable every Slack tool that the MCPorter discovery surfaced
+flemma.opt.tools:append("slack.*")
+
+-- Replace defaults with just GitHub + Linear search tools
+flemma.opt.tools = { "github.search_*", "linear.search_*" }
+
+-- Drop a noisy MCP server's tools from this buffer
+flemma.opt.tools:remove("linear.*")
+```
+````
+
+Globs work with all list operations (`set`, `append`, `prepend`, `remove`). Expansion runs in two passes:
+
+1. **Write-time** (best-effort) — when you assign or `:append`/`:remove` a glob, the schema coerce tries to substitute matching tool names immediately. If the tool registry is still loading (e.g. MCPorter discovery hasn't returned), the glob is stored verbatim for now.
+2. **Finalize-time** (authoritative) — after setup completes and all async tool sources have resolved, every stored op is re-run through the coerce so verbatim globs get their second chance. Then the deferred validator runs: a pattern that still matches **no** registered tools at this point fails with `"Glob pattern 'x' matched no tools"`.
+
+This is why typos in `flemma.opt.tools` surface as errors rather than silent no-ops — the finalize pass guarantees the tool registry is fully populated before validation decides anything.
+
+> [!NOTE]
+> **`tools.auto_approve` uses a different mechanism.** Globs in the auto-approval list (and in `$standard`'s `"flemma.*"` entry) are stored verbatim, never expanded by the config layer, and matched against incoming tool calls at **approval time** in the resolver chain (`lua/flemma/tools/approval.lua:202`). The end result is similar — `{ "flemma.*" }` approves every harness tool — but no deferred validator runs over the list, so a typo in `auto_approve` (e.g. `"flmma.*"`) silently approves nothing instead of erroring. Use `:Flemma status verbose` to see the resolved list and confirm your pattern is reaching the resolver.
+
 ### Per-buffer parameter overrides
 
 General and provider-specific parameters can be overridden per-buffer using `flemma.opt` in Lua frontmatter:
@@ -467,7 +500,7 @@ tools.register("my_plugin.tools.search")
 ```
 
 > [!NOTE]
-> Built-in tool modules moved from `flemma.tools.definitions.*` to `flemma.tools.definitions.builtin.*` in v0.11. If you `require()` a built-in tool module by path, update the import.
+> Built-in tool modules moved from `flemma.tools.definitions.*` to `flemma.tools.definitions.builtin.*` in v0.12. If you `require()` a built-in tool module by path, update the import.
 
 **Batch** – pass an array of definition tables:
 
@@ -707,17 +740,18 @@ Flemma uses a priority-based resolver chain to decide whether a tool call should
 
 Built-in resolvers are registered during `setup()`:
 
-| Priority | Name                              | Source                                                                                                   |
-| -------- | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 100      | `urn:flemma:approval:config`      | Global `tools.auto_approve` from config (list or function)                                               |
-| 100      | `<module.path>`                   | Per-module resolver from `tools.auto_approve` module path                                                |
-| 90       | `urn:flemma:approval:frontmatter` | Per-buffer `flemma.opt.tools.auto_approve` from frontmatter                                              |
-| 25       | `urn:flemma:approval:sandbox`     | Auto-approve tools with `can_auto_approve_if_sandboxed` capability when sandbox is enabled and available |
-| 0        | `urn:flemma:approval:catch-all`   | Only when `tools.require_approval = false`                                                               |
+| Priority | Name                            | Source                                                                                                                                                                                                        |
+| -------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 100      | `urn:flemma:approval:config`    | Unified resolver — reads the merged `tools.auto_approve` value from all config layers (DEFAULTS → SETUP → RUNTIME → FRONTMATTER), evaluates a list, function, or `$preset` reference, and returns a decision. |
+| 25       | `urn:flemma:approval:sandbox`   | Auto-approve tools with `can_auto_approve_if_sandboxed` capability when sandbox is enabled and available                                                                                                      |
+| 0        | `urn:flemma:approval:catch-all` | Only when `tools.require_approval = false`                                                                                                                                                                    |
 
 Third-party plugins register at the default priority of 50. Set `priority` higher to run before built-in resolvers (e.g., 200 to override config), or lower to act as a fallback.
 
-The sandbox resolver (priority 25) auto-approves tools that declare `"can_auto_approve_if_sandboxed"` in their `capabilities` array when three conditions are met: `tools.auto_approve` is configured, the sandbox is enabled, and a backend is available. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, or exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter.
+> [!NOTE]
+> Earlier releases used separate `config` and `frontmatter` resolvers. The unified resolver at priority 100 now consults the merged config store directly, so frontmatter overrides take effect through layer precedence rather than a separate resolver entry. Per-buffer `flemma.opt.tools.auto_approve` writes still beat global config — the merge happens before the resolver runs.
+
+The sandbox resolver (priority 25) auto-approves tools that declare `"can_auto_approve_if_sandboxed"` in their `capabilities` array when the sandbox is enabled with an available backend and the user hasn't opted out per-tool or globally. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter, or take ownership of the policy with `auto_approve:set(...)` in frontmatter (a `set` op signals you're handling approval entirely for that buffer). See [docs/sandbox.md](sandbox.md#requirements) for the full list of conditions.
 
 ### Registering a resolver
 
@@ -751,6 +785,40 @@ Return values:
 | `nil`                | Pass; let the next resolver in the chain decide     |
 
 If a resolver throws an error, it is logged and skipped (treated as `nil`).
+
+### Bundling a resolver with a tool module
+
+A module loaded via `tools.modules` can also register an approval resolver by exporting an `approval` table alongside its tool definitions. This is the idiomatic way to ship security policy alongside the tools it governs — one entry in the user's config wires up both:
+
+```lua
+-- In lua/my_plugin/tools.lua
+return {
+  definitions = {
+    { name = "deploy", description = "...", input_schema = { ... }, execute = ... },
+    { name = "rollback", description = "...", input_schema = { ... }, execute = ... },
+  },
+  approval = {
+    priority = 75,  -- optional, defaults to 50
+    description = "Gate deploy/rollback on git branch",
+    resolve = function(tool_name, input, context)
+      if tool_name == "deploy" and vim.fn.system("git branch --show-current"):match("^main") then
+        return "require_approval"
+      end
+      return nil
+    end,
+  },
+}
+```
+
+Wire it up once:
+
+```lua
+require("flemma").setup({
+  tools = { modules = { "my_plugin.tools" } },
+})
+```
+
+The resolver is registered under the module path (e.g. `my_plugin.tools`), which becomes its name in the resolver chain. Use this pattern when the resolver and the tools it governs ship together; use the direct `approval.register()` API for plugins that only contribute policy.
 
 ### Unregistering a resolver
 

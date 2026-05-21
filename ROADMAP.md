@@ -2,7 +2,7 @@
 
 What's coming in the next milestone. Items are listed in no particular order — priorities shift as the project evolves.
 
-## v0.9.0+
+## Next milestone
 
 ### Personalities as `.chat` templates
 
@@ -22,11 +22,11 @@ A full slash-command engine for `.chat` buffers. The scope includes:
 - **Personality wiring** — activating a personality via slash command (e.g., `/coding-assistant language=php`), with promotion from `@You` to `@System` so users don't have to manage role placement manually.
 - **Completion** — a completion source that triggers on `/` at line start and enumerates available commands and their arguments.
 
-### Customisable buffer messages
+### User-overridable buffer messages
 
-Flemma injects short text fragments into the conversation buffer — tool result placeholders, abort notices, job status text. These are currently hard-coded in `.chat` template files under `lua/flemma/messages/` and rendered through the templating engine (`{{ expression }}` syntax).
+Flemma injects short text fragments into the conversation buffer — tool result placeholders, abort notices, job status text. These messages already live as standalone `.chat` template files under `lua/flemma/messages/` (externalised in v0.12) and render through the templating engine.
 
-The plan is to let users override individual messages via config or by placing replacement `.chat` files in a known location (e.g., `~/.config/flemma/messages/`). This would allow customising the text the model sees when a tool is denied, a request is aborted, or a background job is lost — without forking the plugin.
+What's still missing is the override surface: letting users replace individual messages via config or by dropping replacement `.chat` files in a known location (e.g., `~/.config/flemma/messages/`). This would allow customising the text the model sees when a tool is denied, a request is aborted, or a background job is lost — without forking the plugin.
 
 ---
 

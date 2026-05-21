@@ -7,12 +7,14 @@ Flemma supports prompt caching across all supported providers. Each provider imp
 |               | Anthropic             | OpenAI                | Vertex AI       | Moonshot           |
 | ------------- | --------------------- | --------------------- | --------------- | ------------------ |
 | Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       | Automatic          |
-| Min. tokens   | 1,024–4,096           | 1,024                 | 1,024–2,048     | —                  |
+| Min. tokens   | 2,048–4,096\*         | 1,024                 | 1,024–2,048     | —                  |
 | Read discount | 90% (0.1x)            | 50% (0.5x)            | 90% (0.1x)      | 80% (0.2x)         |
 | Write cost    | 1.25x–2.0x            | Free                  | Free            | Free               |
 | Control       | `cache_retention`     | `cache_retention`     | None (implicit) | `prompt_cache_key` |
 
 When caching is active, the usage bar includes cache percentage and token counts. Costs are adjusted to reflect each provider's discount on cached input.
+
+_\*The legacy Haiku 3 model uses a 1,024-token threshold. All current 4.x Anthropic models require at least 2,048 (Opus/Sonnet) or 4,096 (Haiku 4.5) tokens before caching activates._
 
 ---
 
@@ -31,7 +33,7 @@ The `cache_retention` parameter controls the caching strategy[^anthropic-cache-p
 When caching is active, the usage bar includes cache percentage and read/write token counts. Costs are adjusted accordingly – cache reads are 90% cheaper than regular input tokens.
 
 > [!NOTE]
-> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4096 tokens** for Opus 4.6, Opus 4.5, and Haiku 4.5; **1024 tokens** for Sonnet 4.6, Sonnet 4.5, Opus 4.1, Opus 4, and Sonnet 4. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected – caching benefits grow with longer conversations and system prompts.
+> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4,096 tokens** for Haiku 4.5; **2,048 tokens** for every current Opus and Sonnet (4.7, 4.6, 4.5, 4.1, 4, and the matching Sonnet 4.x family); **1,024 tokens** only on the legacy Haiku 3. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected — caching benefits grow with longer conversations and system prompts. The authoritative per-model values live in `lua/flemma/models/anthropic.lua` (`min_cache_tokens`).
 
 ---
 

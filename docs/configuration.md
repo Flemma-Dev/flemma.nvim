@@ -68,7 +68,7 @@ require("flemma").setup({
       startup = {
         concurrency = 4,                     -- Max parallel schema fetches at startup
       },
-      include = {},                          -- Glob patterns: matching tools enabled (e.g., { "slack:*" })
+      include = {},                          -- Glob patterns: matching tools enabled (e.g., { "slack.*" })
       exclude = {},                          -- Glob patterns: matching tools skipped entirely
     },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
@@ -103,6 +103,9 @@ require("flemma").setup({
     tool_result_aborted  = "DiagnosticError", -- concise `(aborted)` suffix
     tool_preview = "Comment",
     tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
+    fence_label = { dark = "Comment-fg:#303030",    -- Fence code block language label
+                    light = "Comment+fg:#303030" },
+    fence_bar = "FlemmaFenceLabel",                 -- Fence code block delimiter bar
     fold_preview = "Comment",
     fold_meta = "Comment",
     busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
@@ -207,6 +210,8 @@ require("flemma").setup({
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
+      fold_turn = "zy",                      -- Fold intermediate messages in current turn
+      fold_turns = "zY",                     -- Fold intermediate messages in every turn
       conceal_toggle = "yoe",                -- Toggle conceal level; false to disable
       conceal_on = "]oe",                    -- Enable conceal; false to disable
       conceal_off = "[oe",                   -- Disable conceal; false to disable
@@ -219,6 +224,7 @@ require("flemma").setup({
   experimental = {
     lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)
     tools = false,                          -- Enable exploration tools (grep, find, ls) — see docs/tools.md
+    patch_markdown_conceal = true,          -- Replace markdown conceal_lines with fence overlay extmarks (see docs/conceal.md)
   },
 })
 ```
@@ -357,9 +363,15 @@ Autopilot turns Flemma into an autonomous agent. After each LLM response contain
 
 When a tool requires user approval, autopilot injects a tool_result placeholder with a `(pending)` header suffix and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `(pending)` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `(pending)` suffix is cleared from the header and your content is sent to the model. If you edit the content of an `(approved)` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
 
-Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop. If nothing is active, a second <kbd>Ctrl-C</kbd> within 500ms cancels all background jobs in the buffer.
+Press <kbd>Ctrl-C</kbd> at any point to cancel. The behaviour is cursor-aware:
 
-When background jobs complete while the conversation is idle, autopilot schedules a debounced auto-continue after `resume_delay` milliseconds. The delay gives you time to review the result or press <kbd>Ctrl-C</kbd> to cancel. If you enter insert mode during the delay, auto-continue is also cancelled. During an active autopilot loop (tools still executing in the foreground), background completions are drained immediately without the delay.
+- **Cursor on a tool** (foreground or background) — cancels that specific tool.
+- **Cursor elsewhere** with an active request or tool — cancels the active request/tool.
+- **Cursor elsewhere** with nothing active — the first press shows `Nothing to cancel (press again to cancel all)` and starts a 500ms timer. A second <kbd>Ctrl-C</kbd> within that window triggers a **RAGE cancel** that kills every pending tool (foreground + background) and any in-flight API request.
+
+Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop. The 500ms timer resets on any successful cancellation, so intermediate cancels (e.g., killing an active request) don't accidentally trigger RAGE on the next miss — clearing a request + background jobs may take three presses (kill request → miss → rage).
+
+When background jobs complete while the conversation is idle, autopilot schedules a debounced auto-continue after `resume_delay` milliseconds. The delay gives you time to review the result or press <kbd>Ctrl-C</kbd> to cancel the pending resume specifically. If you enter insert mode during the delay, auto-continue is also cancelled. During an active autopilot loop (tools still executing in the foreground), background completions are drained immediately without the delay.
 
 Toggle autopilot at runtime without changing your config:
 
@@ -482,6 +494,16 @@ Three additional built-in tools (`grep`, `find`, `ls`) are available for codebas
 | `experimental.tools` | `false` | Enable `grep`, `find`, and `ls` tools. See [docs/tools.md](tools.md#experimental-exploration-tools) for the full reference. |
 
 Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
+
+### Experimental Markdown conceal patch
+
+| Key                                   | Default | Effect                                                                                                                                                                            |
+| ------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `experimental.patch_markdown_conceal` | `true`  | Replace Neovim's `conceal_lines` directives on fenced code block delimiters with configurable fence overlay extmarks. See [docs/conceal.md](conceal.md) for the full explanation. |
+
+When enabled, fenced code block delimiters (` ``` `) are styled with overlay extmarks (`FlemmaFenceLabel` for the language tag, `FlemmaFenceBar` for the delimiter bar) instead of being hidden via treesitter `conceal_lines`. This eliminates a ~88% per-keystroke overhead caused by the interaction between `conceallevel >= 2` and treesitter highlighting on large buffers. Typing latency drops from ~36ms to ~4ms per keystroke. The fence overlays also gain contrast-adjusted highlights when overlapping with `CursorLine`, ensuring readability across colorschemes.
+
+Set `false` to restore the standard Neovim conceal behaviour for fenced code blocks.
 
 ### Config aliases
 
