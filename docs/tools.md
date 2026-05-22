@@ -236,7 +236,7 @@ When reopening a `.chat` file that contains `tool_result` placeholders with a `j
 
 When `lsp.enabled` is set (defaults to `true` whenever `vim.lsp` is available), job-related blocks gain hover and go-to-definition support:
 
-- **Hover** on a `tool_result` with a `job=` modeline shows the job's current status (`pending`, `completed`, or `error`) instead of the raw AST dump.
+- **Hover** on a `tool_result` with a `job=` modeline shows the job's current status (`pending`, `completed`, or `error`) above the standard AST dump.
 - **Go-to-definition** (`gd`) on a `tool_result` with a `job=` modeline jumps to the corresponding `**Job Result:**` block. On a `**Job Result:**` block, `gd` jumps back to the originating `tool_result`.
 
 ### Opting out

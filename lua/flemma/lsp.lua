@@ -100,6 +100,8 @@ local function handle_hover(params)
 
     log.debug("lsp hover: matched " .. seg_detail .. " in @" .. msg.role .. " message")
 
+    local markdown = node_to_markdown(seg)
+
     if seg.kind == "tool_result" then
       ---@cast seg flemma.ast.ToolResultSegment
       if seg.meta and seg.meta.job then
@@ -108,15 +110,13 @@ local function handle_hover(params)
         if job_seg then
           local status = job_seg.status == "error" and "error" or "completed"
           log.debug("lsp hover: tool_result has job=" .. job_id .. " status=" .. status)
-          return hover_response("**Job** `" .. job_id .. "` — " .. status)
+          markdown = "**Job** `" .. job_id .. "` — " .. status .. "\n\n" .. markdown
         else
           log.debug("lsp hover: tool_result has job=" .. job_id .. " (pending)")
-          return hover_response("**Job** `" .. job_id .. "` — pending")
+          markdown = "**Job** `" .. job_id .. "` — pending\n\n" .. markdown
         end
       end
     end
-
-    local markdown = node_to_markdown(seg)
     log.trace("lsp hover: response markdown (" .. #markdown .. " bytes):\n" .. markdown)
     return hover_response(markdown)
   end
