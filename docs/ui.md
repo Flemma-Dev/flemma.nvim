@@ -215,7 +215,7 @@ vim.api.nvim_set_hl(0, "FlemmaToolIconError",   { link = "DiagnosticError" })
 
 When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
 
-Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **label** (the LLM's stated intent, shown italic) and **detail** (the raw command or path, shown dimmer), separated by an em-dash: `bash: running tests — $ make test`. When width is limited, detail truncates first to preserve the label. Custom tools can provide their own via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
+Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **detail** (the raw command or path) and a **label** (the LLM's stated intent), separated by an em-dash and rendered detail-first: `bash: $ make test — running tests`. When width is limited, detail truncates first to preserve the label. The italic-label/dim-detail split is only visible in folded message previews, where each chunk gets its own highlight; the virt-line preview shown over pending placeholders uses a single combined `FlemmaToolPreview` highlight. Custom tools can provide their own previews via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
 
 Preview lines use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). See [docs/tools.md](tools.md#tool-previews) for the full reference on built-in formatters, the generic fallback, and writing custom preview functions.
 
@@ -302,7 +302,7 @@ Before sending, preview the cost of the next request with `:Flemma usage:estimat
 
 For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they reference `buffer.tokens.input`. Estimates are deduped and suppressed while a chat request is already in flight.
 
-See `lua/flemma/usage.lua` for the driver and `lua/flemma/ui/bar/` for the shared Bar rendering class.
+See `lua/flemma/usage/` for the driver and prefetch logic, and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 
 ## Extmark priority
 
@@ -352,7 +352,16 @@ When autopilot schedules a debounced auto-continue after a background job comple
 
 ### Hover
 
-When `experimental.lsp` is enabled, hovering over any element in a `.chat` buffer shows a compact AST node dump in a fenced `flemma-ast` code block. The dump shows the node's kind, position, and key fields at depth 1 — container nodes (messages, documents) show a child summary instead of recursing.
+When `lsp.enabled` is set (the default whenever `vim.lsp` is available), hovering over any element in a `.chat` buffer shows a compact AST node dump in a fenced `flemma-ast` code block. The dump shows the node's kind, position, and key fields at depth 1 — container nodes (messages, documents) show a child summary instead of recursing.
+
+### Go-to-definition
+
+Press `gd` (or use your LSP go-to-definition keymap) on:
+
+- A `tool_result` carrying a `job=` modeline → jumps to the matching `**Job Result:**` block.
+- A `**Job Result:**` header → jumps back to the originating `tool_result` placeholder.
+- An `include("...")` expression → opens the included file.
+- A `@./path` file reference → opens the referenced file.
 
 ### AST diff
 

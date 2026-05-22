@@ -34,7 +34,7 @@ require("flemma").setup({
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
   tools = {
     require_approval = true,                 -- When false, auto-approves all tools
-    auto_approve = { "$standard" },          -- $standard approves read, write, edit, find, grep, ls
+    auto_approve = { "$standard" },          -- List, glob patterns, presets ($name), or a function — see docs/tools.md#configuring-approval
     auto_approve_sandboxed = true,           -- Auto-approve sandboxed tools (set false to require manual approval)
     max_concurrent = 2,                      -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30,                    -- Async tool timeout (seconds)
@@ -50,16 +50,19 @@ require("flemma").setup({
       cwd = "urn:flemma:buffer:path",        -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
-    grep = {                                 -- [experimental.tools] Grep tool configuration
+    grep = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for searches
       exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
     },
-    find = {                                 -- [experimental.tools] Find tool configuration
+    find = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for file searches
       exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
     },
-    ls = {                                   -- [experimental.tools] Ls tool configuration
+    ls = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
+    },
+    truncate = {
+      output_path_format = "${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt",  -- Where overflow files are written
     },
     mcporter = {
       enabled = false,                       -- Discover MCP servers via mcporter CLI (see docs/mcp.md)
@@ -89,8 +92,8 @@ require("flemma").setup({
     lua_delimiter = "FlemmaLuaExpression",   -- {{ }} and {% %} delimiters
     user_file_reference = "Include",
     thinking_tag = "Comment",
-    thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
-                       light = "Comment-bg:#102020+fg:#111111" },
+    thinking_block = { dark = "Comment+bg:#000000-fg:#333333",
+                       light = "Comment-bg:#000000+fg:#333333" },
     tool_icon = "FlemmaToolUseTitle",
     tool_name = "Function",
     tool_use_title = "Function",
@@ -123,10 +126,10 @@ require("flemma").setup({
   },
   line_highlights = {
     enabled = true,
-    frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
-    system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
-    user = { dark = "Normal", light = "Normal" },
-    assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
+    frontmatter = { dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" },
+    system = { dark = "Normal+bg:#101112", light = "Normal-bg:#101112" },
+    user = { dark = "Normal+bg:#202122", light = "Normal-bg:#202122" },
+    assistant = { dark = "Normal", light = "Normal" },
   },
   ui = {
     usage = {
@@ -142,7 +145,10 @@ require("flemma").setup({
     jobs = {
       position = "bottom right",               -- Background jobs bar position
     },
-    pricing = { enabled = true },
+    pricing = {
+      enabled = true,                          -- Show cost-per-request annotations
+      high_cost_threshold = 30,                -- Cents — requests above this get a high-cost highlight
+    },
     statusline = {
       format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
     },
@@ -172,6 +178,15 @@ require("flemma").setup({
   },
   diagnostics = {
     enabled = false,                         -- Enable request diagnostics for debugging prompt caching issues
+  },
+  integrations = {
+    devicons = {
+      enabled = true,                        -- Register a `.chat` filetype icon with nvim-web-devicons when installed
+      icon = "∴",                            -- Glyph used for the icon
+    },
+  },
+  lsp = {
+    enabled = vim.lsp ~= nil,                -- In-process LSP for .chat buffers (hover, go-to-definition)
   },
   secrets = {
     gcloud = {
@@ -222,8 +237,6 @@ require("flemma").setup({
     text_object = "m",                       -- "m" or false to disable
   },
   experimental = {
-    lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)
-    tools = false,                          -- Enable exploration tools (grep, find, ls) — see docs/tools.md
     patch_markdown_conceal = true,          -- Replace markdown conceal_lines with fence overlay extmarks (see docs/conceal.md)
   },
 })
@@ -475,25 +488,15 @@ Enable request diagnostics to inspect what Flemma sends to and receives from the
 
 Toggle at runtime with `:Flemma diagnostics:enable` / `:Flemma diagnostics:disable`.
 
-### Experimental LSP
+### LSP
 
-Flemma includes an in-process LSP server for `.chat` buffers. It provides hover information (AST node details, segment types, message positions) and basic go-to-definition for `include()` expressions and `@./path` file references.
+Flemma includes an in-process LSP server for `.chat` buffers. It provides hover information (AST node details, segment types, message positions) and go-to-definition that follows `include()` expressions, `@./path` file references, and the `tool_result` ↔ `**Job Result:**` linkage for background jobs.
 
-| Key                | Default          | Effect                                                           |
-| ------------------ | ---------------- | ---------------------------------------------------------------- |
-| `experimental.lsp` | `vim.lsp ~= nil` | Enable the LSP server. Auto-enabled when `vim.lsp` is available. |
+| Key           | Default          | Effect                                                           |
+| ------------- | ---------------- | ---------------------------------------------------------------- |
+| `lsp.enabled` | `vim.lsp ~= nil` | Enable the LSP server. Auto-enabled when `vim.lsp` is available. |
 
-The LSP attaches automatically to `.chat` buffers. Use your usual LSP keybindings (e.g., `K` for hover) to inspect buffer structure.
-
-### Experimental exploration tools
-
-Three additional built-in tools (`grep`, `find`, `ls`) are available for codebase exploration. They are disabled by default and must be opted into explicitly.
-
-| Key                  | Default | Effect                                                                                                                      |
-| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `experimental.tools` | `false` | Enable `grep`, `find`, and `ls` tools. See [docs/tools.md](tools.md#experimental-exploration-tools) for the full reference. |
-
-Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
+The LSP attaches automatically to `.chat` buffers. Use your usual LSP keybindings (e.g., `K` for hover, `gd` for go-to-definition) to inspect buffer structure.
 
 ### Experimental Markdown conceal patch
 

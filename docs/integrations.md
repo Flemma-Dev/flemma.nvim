@@ -224,3 +224,26 @@ require("treesitter-context").setup({
 ```
 
 The helper keys off `vim.bo[bufnr].filetype == "chat"` — it has no dependency on treesitter-context itself and is inert unless you wire it up.
+
+## Auto-wired integrations
+
+Two integrations need no setup beyond installing the upstream plugin:
+
+### nvim-notify
+
+[rcarriga/nvim-notify](https://github.com/rcarriga/nvim-notify) — when installed, Flemma routes its notifications through nvim-notify automatically (transient cost/usage messages, error banners, etc.). No config; the integration module in `lua/flemma/integrations/nvim-notify.lua` is loaded by `flemma.notify` when the upstream plugin is present.
+
+### nvim-web-devicons
+
+[nvim-tree/nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) — when installed, Flemma registers a `.chat` filetype icon so file pickers, bufferline tabs, and statusline components show the icon next to chat buffers. Override the glyph via the `integrations.devicons` config block (see [configuration.md](configuration.md) for the full schema):
+
+```lua
+require("flemma").setup({
+  integrations = {
+    devicons = {
+      enabled = true,                  -- set false to skip registration entirely
+      icon = "∴",                      -- default glyph; pick whatever fits your nerd font
+    },
+  },
+})
+```

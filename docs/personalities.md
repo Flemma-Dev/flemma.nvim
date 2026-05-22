@@ -75,7 +75,7 @@ The `opts` table is pre-built before `render()` is called. The personality does 
 
 #### Tools
 
-All enabled tools (respecting frontmatter opts), sorted alphabetically. Each entry has:
+The tools resolved for the current buffer's prompt, sorted alphabetically. By default this is the set of enabled tools, but `flemma.opt.tools` in frontmatter may explicitly list disabled tools — those are also included here (disabled tools that aren't explicitly listed are excluded). Each entry has:
 
 ```lua
 ---@class flemma.personalities.ToolEntry

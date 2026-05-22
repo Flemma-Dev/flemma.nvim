@@ -230,11 +230,11 @@ The tool cross-checks in-memory state against the buffer AST, so even if the pro
 
 ### Orphan recovery
 
-When reopening a `.chat` file that contains `tool_result` placeholders with a `job=job_xxx` modeline but no matching `**Job Result:**` block (e.g., after a crash or forced quit), Flemma detects these orphans on `BufReadPost` and injects error results so the model knows the job was lost. A notification reports how many orphans were resolved.
+When reopening a `.chat` file that contains `tool_result` placeholders with a `job=job_xxx` modeline but no matching `**Job Result:**` block (e.g., after a crash or forced quit), Flemma detects these orphans on buffer load (`BufRead`/`BufNewFile`) and injects error results so the model knows the job was lost. A notification reports how many orphans were resolved.
 
 ### LSP integration
 
-When `experimental.lsp` is enabled, job-related blocks gain hover and go-to-definition support:
+When `lsp.enabled` is set (defaults to `true` whenever `vim.lsp` is available), job-related blocks gain hover and go-to-definition support:
 
 - **Hover** on a `tool_result` with a `job=` modeline shows the job's current status (`pending`, `completed`, or `error`) instead of the raw AST dump.
 - **Go-to-definition** (`gd`) on a `tool_result` with a `job=` modeline jumps to the corresponding `**Job Result:**` block. On a `**Job Result:**` block, `gd` jumps back to the originating `tool_result`.
@@ -252,74 +252,75 @@ When a tool call is pending approval, its tool_result placeholder fence is empty
 For example, a pending `read` tool might show:
 
 ```
-read: checking config — src/config.lua  +0,50
+read: src/config.lua  +0,50 — checking config
 ```
 
 And a pending `bash` tool:
 
 ```
-bash: running tests — $ make test
+bash: $ make test — running tests
 ```
 
-Each preview has two parts: a **label** (the LLM's stated intent, shown italic) and a **detail** (the raw technical summary, shown dimmer), separated by an em-dash (`—`). When the available width is limited, detail is truncated first (with `…`), preserving the human-readable label. Previews are non-editable virtual text (extmarks) that disappear once the tool executes and its result replaces the placeholder.
+Each preview has two parts: a **detail** (the raw technical summary — path, command, pattern) and a **label** (the LLM's stated intent, taken from the tool call's `label` field), separated by `—`. Detail leads because it is the part you scan for to identify the call; label trails as human-readable context. When the available width is limited, detail is truncated first (with `…`), preserving the label. Previews are non-editable virtual text (extmarks) that disappear once the tool executes and its result replaces the placeholder.
+
+Folded message previews use the same `detail — label` layout but render label and detail as separate highlight chunks. The virt-line placeholder preview is a single string with one combined highlight — see [Styling](#styling).
 
 ### Built-in preview formatters
 
-Every built-in tool ships with a tailored `format_preview` function that returns structured `{ label, detail }` previews:
+Every built-in tool ships with a tailored `format_preview` function that returns a structured `{ label, detail }` preview:
 
-| Tool    | Label source                   | Detail format                       | Example                                     |
-| ------- | ------------------------------ | ----------------------------------- | ------------------------------------------- |
-| `bash`  | LLM's intent (from the prompt) | `$ command`                         | `bash: checking repo — $ git status`        |
-| `read`  | LLM's intent                   | Path with optional `+offset,limit`  | `read: reading tail — config.lua  +100,50`  |
-| `edit`  | LLM's intent                   | Path                                | `edit: fixing typo — config.lua`            |
-| `write` | LLM's intent                   | Path with content size              | `write: saving log — output.txt  (2.3KB)`   |
-| `grep`  | LLM's intent                   | `/pattern/` with optional path/glob | `grep: finding TODOs — /TODO/  *.lua`       |
-| `find`  | LLM's intent                   | Pattern with optional search path   | `find: finding tests — *.test.lua  in src/` |
-| `ls`    | LLM's intent                   | Path with optional depth            | `ls: exploring structure — src/  depth=3`   |
+| Tool    | Label source  | Detail format                        | Example                                     |
+| ------- | ------------- | ------------------------------------ | ------------------------------------------- |
+| `bash`  | `input.label` | `$ command`                          | `bash: $ git status — checking repo`        |
+| `read`  | `input.label` | Path with optional `+offset[,limit]` | `read: config.lua  +100,50 — reading tail`  |
+| `edit`  | `input.label` | Path                                 | `edit: config.lua — fixing typo`            |
+| `write` | `input.label` | Path with content size               | `write: output.txt  (2.3KB) — saving log`   |
+| `grep`  | `input.label` | `/pattern/` with optional path/glob  | `grep: /TODO/  *.lua — finding TODOs`       |
+| `find`  | `input.label` | Pattern with optional search path    | `find: *.test.lua  in src/ — finding tests` |
+| `ls`    | `input.label` | Path with optional depth             | `ls: src/  depth=3 — exploring structure`   |
+
+Every built-in tool's `input_schema` includes a required `label` field — the LLM is prompted to supply a short intent string when it makes the call. The double-space gap in the `read`/`write`/`grep`/`find`/`ls` examples comes from joining the detail array (see [return shapes](#return-shapes) below).
 
 ### Generic fallback
 
-Tools without a `format_preview` function get a generic key-value summary: `tool_name: key1="val1", key2="val2"`. Scalar values appear first (sorted alphabetically), followed by table values shown as `{key1, key2}` or `[N items]`.
+Tools without a `format_preview` function get a generic key-value summary: `tool_name: key1="val1", key2="val2"`. Scalar values appear first (sorted alphabetically), followed by table values shown as `{key1, key2}` (≤ 2 keys), `{key1, key2, +N more}`, or `[N items]` for arrays. If the input table contains a string `label` field, it is auto-promoted to the label slot and the rendering becomes `tool_name: kv_body — label`. This auto-promotion only applies to the generic fallback — when a tool ships its own `format_preview`, that function controls label entirely.
 
 ### Custom preview formatters
 
-Register a `format_preview` function on your tool definition to control how it appears in pending placeholders. The function can return either a plain string (backward-compatible) or a structured `{ label?, detail? }` table:
+Register a `format_preview` function on your tool definition to control how it appears in pending placeholders. The function returns a `flemma.tools.ToolPreview`, which is either a structured `{ label?, detail? }` table or a plain string:
 
 ```lua
+local s = require("flemma.schema")
+local tools = require("flemma.tools")
+
 tools.register("my_search", {
   name = "my_search",
   description = "Search a knowledge base",
-  input_schema = {
-    type = "object",
-    properties = {
-      query = { type = "string", description = "Search query" },
-      limit = { type = { "number", "null" }, description = "Max results" },
-    },
-    required = { "query", "limit" },
-    additionalProperties = false,
-  },
-  format_preview = function(input, max_length)
-    -- Structured return: label + detail shown as "label — detail"
+  strict = true,
+  input_schema = s.object({
+    label = s.string():describe("A short human-readable label for this operation"),
+    query = s.string():describe("Search query"),
+    limit = s.number():nullable():describe("Max results (default 10)"),
+  }):strict(),
+  format_preview = function(input)
     return {
-      label = input.query,
+      label = input.label,
       detail = input.limit and ("limit " .. input.limit) or nil,
     }
-    -- Plain string return also works (backward-compatible):
-    -- return '"' .. input.query .. '"'
   end,
-  execute = function(input, context, callback) --[[ ... ]] end,
+  execute = function(input, ctx) --[[ ... ]] end,
 })
 ```
 
-The function receives the input table and the available character width (the total preview width minus the `"name: "` prefix).
+The full type signature is `fun(input: table, max_length: integer): flemma.tools.ToolPreview`. `max_length` is the available width after the `"name: "` prefix is rendered — but the surrounding code already truncates the returned strings to fit, so built-in tools all ignore the argument and simply do `function(input)`.
 
-**Return values:**
+#### Return shapes
 
-| Return type                    | Behaviour                                                             |
-| ------------------------------ | --------------------------------------------------------------------- |
-| `string`                       | Shown as-is (backward-compatible). No label/detail separation.        |
-| `{ label?, detail? }`          | `label` is shown italic, `detail` is dimmer. Separated by an em-dash. |
-| `{ label?, detail: string[] }` | `detail` array is joined with double-space before display.            |
+| Return type                     | Behaviour                                                                                                                                                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `string`                        | Treated as `{ detail = the_string }`. Label is **never** auto-promoted from `input.label` for explicit returns — only the [generic fallback](#generic-fallback) does that. |
+| `{ label?, detail? }`           | Rendered as `detail — label` when both are present; otherwise just whichever is given.                                                                                     |
+| `{ label?, detail = string[] }` | The `detail` array is joined with a **double space** before display.                                                                                                       |
 
 Newlines in either field are collapsed to the `eol` character from `listchars` (or `↵` by default) and the result is truncated to fit the editor width.
 
@@ -327,28 +328,21 @@ Newlines in either field are collapsed to the `eol` character from `listchars` (
 
 Tool previews use three highlight groups:
 
-| Group               | Default   | Applies to                     |
-| ------------------- | --------- | ------------------------------ |
-| `FlemmaToolPreview` | `Comment` | Entire preview line (fallback) |
-| `FlemmaToolLabel`   | italic    | Human-readable label portion   |
-| `FlemmaToolDetail`  | `Comment` | Raw technical detail portion   |
+| Group               | Default                     | Applies to                                                          |
+| ------------------- | --------------------------- | ------------------------------------------------------------------- |
+| `FlemmaToolPreview` | `Comment`                   | The whole virt-line placeholder preview (single combined highlight) |
+| `FlemmaToolLabel`   | `italic` (`default = true`) | The label chunk inside folded message previews                      |
+| `FlemmaToolDetail`  | `Comment`                   | The detail chunk inside folded message previews                     |
+
+The virt-line placeholder preview is rendered as a single string with `FlemmaToolPreview` blended over the role's line background — so label and detail share one highlight and there is no italic distinction in that view. The label/detail split (italic + dimmer) is only visible in folded message previews, where each chunk gets its own highlight.
 
 Customise `FlemmaToolDetail` via `highlights.tool_detail` in your config. `FlemmaToolLabel` applies italic styling unconditionally and is not configurable through the highlights table. See [docs/ui.md](ui.md#highlights-and-styles) for details.
 
 ---
 
-## Experimental: Exploration tools
+## Exploration tools
 
-> [!CAUTION]
-> **Experimental and untested.** These tools are gated behind `experimental.tools = true` and are not enabled by default. They have not been tested in real-world usage and their interface, behaviour, and configuration may change without notice in any release. Enable them if you want to try them out, but expect rough edges.
-
-Flemma ships three additional built-in tools for codebase exploration. Enable them by setting `experimental.tools = true` in your config:
-
-```lua
-require("flemma").setup({
-  experimental = { tools = true },
-})
-```
+Three of Flemma's built-in tools — `grep`, `find`, and `ls` — handle codebase exploration alongside `read`, `edit`, `write`, and `bash`:
 
 | Tool   | Type  | Description                                                                                                                   |
 | ------ | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -356,7 +350,7 @@ require("flemma").setup({
 | `find` | async | Find files by glob pattern using `fd`, `git ls-files`, or GNU `find` – whichever is available.                                |
 | `ls`   | sync  | List directory contents with configurable recursion depth and entry limit. Directories appear first (suffixed with `/`).      |
 
-All three tools are included in the `$standard` and `$readonly` approval presets, so they are auto-approved by default when using either preset.
+All three are included in the `$standard` and `$readonly` approval presets, so they are auto-approved by default when using either preset.
 
 ### Configuration
 
@@ -390,14 +384,6 @@ tools = {
 | `find` | `fd` / `fdfind`           | `git ls-files`                 | GNU `find`            |
 
 When using the `grep -E` fallback, Perl-style shorthand classes (`\d`, `\w`, `\s`) are automatically translated to POSIX equivalents.
-
-### Preview formatters
-
-| Tool   | Label source | Detail format                           | Example                                     |
-| ------ | ------------ | --------------------------------------- | ------------------------------------------- |
-| `grep` | LLM's intent | `/pattern/` with optional path and glob | `grep: finding TODOs — /TODO/  *.lua`       |
-| `find` | LLM's intent | Pattern with optional search path       | `find: finding tests — *.test.lua  in src/` |
-| `ls`   | LLM's intent | Path with optional depth                | `ls: exploring structure — src/  depth=3`   |
 
 ---
 
@@ -473,25 +459,27 @@ When both general and provider-specific parameters are set, provider-specific va
 **Single definition** – pass a name and definition table:
 
 ```lua
+local s = require("flemma.schema")
 local tools = require("flemma.tools")
+
 tools.register("my_tool", {
   name = "my_tool",
   description = "Does something useful",
-  input_schema = {
-    type = "object",
-    properties = {
-      query = { type = "string", description = "The input query" },
-    },
-    required = { "query" },
-  },
-  format_preview = function(input, max_length)
-    return '"' .. input.query:sub(1, max_length - 2) .. '"'
+  strict = true,
+  input_schema = s.object({
+    label = s.string():describe("A short human-readable label for this operation"),
+    query = s.string():describe("The input query"),
+  }):strict(),
+  format_preview = function(input)
+    return { label = input.label, detail = '"' .. input.query .. '"' }
   end,
-  execute = function(input)
+  execute = function(input, ctx)
     return { success = true, output = "done: " .. input.query }
   end,
 })
 ```
+
+`input_schema` accepts either a `flemma.schema.Node` (built with `s.object`, `s.string`, …) or a raw JSON Schema table. Every built-in uses the DSL — it serializes to JSON Schema lazily on request, gives you EmmyLua-friendly types, and makes [strict mode](#strict-mode-for-tool-schemas) effectively free. See [Tool input schemas with the schema DSL](#tool-input-schemas-with-the-schema-dsl) below for the full surface.
 
 **Module name** – pass a module path. If the module exports `.definitions` (an array of definition tables), they are registered synchronously. If it exports `.resolve(register, done)`, it is registered as an async source (see [Async tool definitions](#async-tool-definitions)):
 
@@ -500,16 +488,61 @@ tools.register("my_plugin.tools.search")
 ```
 
 > [!NOTE]
-> Built-in tool modules moved from `flemma.tools.definitions.*` to `flemma.tools.definitions.builtin.*` in v0.12. If you `require()` a built-in tool module by path, update the import.
+> Built-in tool modules moved from `flemma.tools.definitions.*` to `flemma.tools.definitions.builtin.*` in v0.12, and the jobs harness tool lives at `flemma.tools.definitions.harness.jobs`. If you `require()` a built-in tool module by path, update the import.
 
 **Batch** – pass an array of definition tables:
 
 ```lua
 tools.register({
-  { name = "tool_a", description = "...", input_schema = { type = "object", properties = {} } },
-  { name = "tool_b", description = "...", input_schema = { type = "object", properties = {} } },
+  {
+    name = "tool_a",
+    description = "...",
+    strict = true,
+    input_schema = s.object({ label = s.string() }):strict(),
+    execute = function(input, ctx) --[[ ... ]] end,
+  },
+  {
+    name = "tool_b",
+    description = "...",
+    strict = true,
+    input_schema = s.object({ label = s.string() }):strict(),
+    execute = function(input, ctx) --[[ ... ]] end,
+  },
 })
 ```
+
+### Tool input schemas with the schema DSL
+
+The `flemma.schema` module exposes a chainable DSL for declaring tool inputs:
+
+| Factory                                                     | Notes                                                                                              |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `s.string()` / `s.number()` / `s.integer()` / `s.boolean()` | Scalars. Optional positional default: `s.string("hello")`.                                         |
+| `s.object({...})`                                           | Object schema. **Strict by default** — `additionalProperties = false`, all listed fields required. |
+| `s.list(item)`                                              | JSON Schema array. (`s.array` does **not** exist — use `s.list`.)                                  |
+| `s.map(key, value)`                                         | Open object — JSON Schema `additionalProperties` with typed values.                                |
+| `s.enum({"a", "b"})`                                        | Enumerated string.                                                                                 |
+| `s.union(a, b, ...)`                                        | `anyOf`.                                                                                           |
+| `s.literal(value)`                                          | Exact-value match.                                                                                 |
+| `s.optional(inner)`                                         | Field may be **absent** (omitted from `required`).                                                 |
+| `s.nullable(inner)`                                         | Field is present but its value may be `null`. Required in JSON Schema; type becomes `[t, "null"]`. |
+
+Chainable methods on every schema node:
+
+| Method            | Effect                                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `:describe(text)` | Sets the `description` shown to the model.                                                           |
+| `:nullable()`     | Sugar for `s.nullable(self)`. The idiomatic way to mark a tool parameter as optional in strict mode. |
+| `:optional()`     | Sugar for `s.optional(self)`. The field may be absent — only valid outside strict mode.              |
+
+Object-specific:
+
+| Method           | Effect                                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `:strict()`      | Marks the object as strict (`additionalProperties = false`). This is the default for `s.object` — every built-in keeps the call as an explicit readability marker. |
+| `:passthrough()` | Inverse of `:strict()` — allow unknown keys.                                                                                                                       |
+
+Strict-mode invariants the docs used to spell out by hand are handled automatically: fields wrapped in `s.optional(...)` are excluded from `required`, all others are required in sorted order, and `additionalProperties = false` is emitted when the object is strict.
 
 ---
 
@@ -531,13 +564,14 @@ end
 
 ### Core fields
 
-| Field            | Type      | Description                                                      |
-| ---------------- | --------- | ---------------------------------------------------------------- |
-| `ctx.bufnr`      | `integer` | Buffer number for the current execution                          |
-| `ctx.cwd`        | `string`  | Absolute working directory (resolved from config or Neovim)      |
-| `ctx.timeout`    | `integer` | Default timeout in seconds (from `config.tools.default_timeout`) |
-| `ctx.__dirname`  | `string?` | Directory containing the `.chat` buffer (`nil` for unsaved)      |
-| `ctx.__filename` | `string?` | Full path of the `.chat` buffer (`nil` for unsaved)              |
+| Field            | Type      | Description                                                                                                                                                                                                                                                                                  |
+| ---------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.bufnr`      | `integer` | Buffer number for the current execution                                                                                                                                                                                                                                                      |
+| `ctx.tool_id`    | `string?` | The tool-call ID — the same string that appears in the ``**Tool Use:** `name` (`tool_id`)`` header. Buffer-unique; use it as a correlation key for scratch files, log tags, or any per-call artefact you need to namespace. Optional in the type but always populated during real execution. |
+| `ctx.cwd`        | `string`  | Absolute working directory (resolved from config or Neovim)                                                                                                                                                                                                                                  |
+| `ctx.timeout`    | `integer` | Default timeout in seconds (from `config.tools.default_timeout`)                                                                                                                                                                                                                             |
+| `ctx.__dirname`  | `string?` | Directory containing the `.chat` buffer (`nil` for unsaved)                                                                                                                                                                                                                                  |
+| `ctx.__filename` | `string?` | Full path of the `.chat` buffer (`nil` for unsaved)                                                                                                                                                                                                                                          |
 
 ### Namespaces
 
@@ -573,6 +607,12 @@ local result = ctx.truncate.truncate_tail(full_output)
 -- Truncate from the start (keep first N lines/bytes) – use for file reads
 local result = ctx.truncate.truncate_head(content)
 
+-- Tail-truncate with an automatic overflow file: when truncation occurs, the
+-- full output is written to a temp file (named with this tool call's id) and a
+-- "[full output: /path/...]" hint is appended to the returned content. This is
+-- what `bash` uses for its streaming output.
+local result = ctx.truncate.truncate_with_overflow(full_output, { direction = "tail" })
+
 -- Format byte counts for display
 local size_str = ctx.truncate.format_size(12345)  -- "12.1KB"
 
@@ -592,23 +632,41 @@ if tool_config and tool_config.shell then
 end
 ```
 
+### `ctx:get_parsed_document()` – Buffer AST access
+
+Returns the cached `flemma.ast.DocumentNode` for `ctx.bufnr`. Use it when a tool needs to inspect the surrounding conversation structure — for example, the `flemma.jobs.status` harness tool cross-checks in-memory state against `**Job Result:**` segments in the buffer.
+
+```lua
+local doc = ctx:get_parsed_document()
+for _, msg in ipairs(doc.messages) do
+  -- inspect roles, segments, tool calls...
+end
+```
+
+Reach for this only when buffer truth matters — most tools should operate on `input` and filesystem state, not the conversation transcript.
+
 ### Complete example
 
 ```lua
+local s = require("flemma.schema")
+local tools = require("flemma.tools")
+
 tools.register("export", {
   name = "export",
   description = "Save content to a file in the project",
-  input_schema = {
-    type = "object",
-    properties = {
-      path = { type = "string", description = "Output file path (relative or absolute)" },
-      content = { type = "string", description = "Content to write" },
-    },
-    required = { "path", "content" },
-    additionalProperties = false,
-  },
   strict = true,
   async = false,
+  input_schema = s.object({
+    label = s.string():describe("A short human-readable label (e.g., 'saving log')"),
+    path = s.string():describe("Output file path (relative or absolute)"),
+    content = s.string():describe("Content to write"),
+  }):strict(),
+  format_preview = function(input)
+    return {
+      label = input.label,
+      detail = { input.path, "(" .. #input.content .. "B)" },
+    }
+  end,
   execute = function(input, ctx)
     local path = ctx.path.resolve(input.path)
 
@@ -640,34 +698,31 @@ tools.register("export", {
 
 OpenAI's Responses API supports [strict mode](https://platform.openai.com/docs/guides/structured-outputs) for function calling, which guarantees that the model's arguments will conform exactly to your JSON Schema. All of Flemma's built-in tools use strict mode.
 
-To opt in for your custom tools, set `strict = true` on the definition and ensure the `input_schema` meets OpenAI's strict-mode requirements:
+To opt in for your custom tools, set `strict = true` on the definition and build the `input_schema` with `s.object(...):strict()`. The DSL handles every strict-mode invariant automatically:
 
-- All properties must be listed in `required`
-- The schema must include `additionalProperties = false`
-- Optional parameters use a nullable type array instead of being omitted from `required`:
+- Every field listed on the object is added to `required` in sorted order — wrap a field in `s.optional(...)` to exclude it.
+- `additionalProperties = false` is emitted when the object is strict (which is the default for `s.object`).
+- Optional parameters use `:nullable()`, which produces a `type: [t, "null"]` shape on the JSON Schema side. The field stays in `required`.
 
 ```lua
+local s = require("flemma.schema")
+
 tools.register("my_tool", {
   name = "my_tool",
   description = "Does something",
   strict = true,
-  input_schema = {
-    type = "object",
-    properties = {
-      query   = { type = "string", description = "Required input" },
-      max_results = { type = { "number", "null" }, description = "Optional limit (default: 10)" },
-    },
-    required = { "query", "max_results" },
-    additionalProperties = false,
-  },
-  execute = function(input)
+  input_schema = s.object({
+    query       = s.string():describe("Required input"),
+    max_results = s.number():nullable():describe("Optional limit (default: 10)"),
+  }):strict(),
+  execute = function(input, ctx)
     local limit = input.max_results or 10
     return { success = true, output = "found results" }
   end,
 })
 ```
 
-When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. Schema validation is your responsibility when opting in – Flemma passes the schema through as-is.
+When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. You can still pass a raw JSON Schema table for `input_schema` if you need full control — Flemma forwards whatever you give it.
 
 ---
 
@@ -730,7 +785,7 @@ Key details:
 - **Timeout** – if `done()` is never called, the source times out after `tools.default_timeout` seconds (default 30). This prevents a broken source from blocking requests forever.
 - **Error handling** – if the resolve function throws, `done(err)` is called automatically.
 
-Flemma's built-in [MCP integration](mcp.md) is implemented as an async tool source -- it's a good reference for the pattern in practice (`lua/flemma/tools/definitions/mcporter.lua`).
+Flemma's built-in [MCP integration](mcp.md) is implemented as an async tool source -- it's a good reference for the pattern in practice (`lua/flemma/tools/definitions/builtin/mcporter.lua`).
 
 ---
 

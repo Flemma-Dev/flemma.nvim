@@ -415,29 +415,36 @@ The sandbox module exposes a public API for tools and plugins:
 ```lua
 local sandbox = require("flemma.sandbox")
 
--- Configuration
-sandbox.resolve_config(opts)          -- Effective config (global + per-buffer + runtime override)
-sandbox.is_enabled(opts)              -- Is sandboxing currently enabled?
-sandbox.get_policy(bufnr, opts)       -- Resolved policy with path variables expanded
+-- Configuration (each call materializes through the layered config; pass a bufnr
+-- to resolve frontmatter overrides for that buffer, omit for global)
+sandbox.resolve_config(bufnr)         -- Effective config (global + per-buffer + runtime override)
+sandbox.is_enabled(bufnr)             -- Is sandboxing currently enabled?
+sandbox.get_policy(bufnr)             -- Resolved policy with path variables expanded
 
 -- Command wrapping
-sandbox.wrap_command(inner_cmd, bufnr, opts)  -- Wrap a command array; returns original if disabled
+sandbox.wrap_command(inner_cmd, bufnr) -- Wrap a command array; returns original if disabled
 
 -- Path checking
-sandbox.is_path_writable(path, bufnr, opts)   -- Would this path be writable under current policy?
+sandbox.is_path_writable(path, bufnr)  -- Would this path be writable under current policy?
 
 -- Backend management
-sandbox.validate_backend(opts)                -- Is a suitable backend available?
-sandbox.detect_available_backend(opts)        -- Which backend would be auto-detected?
-sandbox.register(name, definition)            -- Register a backend
-sandbox.unregister(name)                      -- Remove a backend
-sandbox.get(name)                             -- Look up a backend by name
-sandbox.get_all()                             -- All backends sorted by priority
-sandbox.count()                               -- Number of registered backends
-sandbox.setup()                               -- Register built-in backends
+sandbox.validate_backend(bufnr)        -- Is a suitable backend available?
+sandbox.detect_available_backend(bufnr) -- Which backend would be auto-detected?
+sandbox.register(name, definition)     -- Register a backend
+sandbox.register_module(module_path)   -- Register a backend from a Lua module path
+sandbox.unregister(name)               -- Remove a backend (returns true if found)
+sandbox.has(name)                      -- Is a backend with this name registered?
+sandbox.get(name)                      -- Look up a backend by name
+sandbox.get_all()                      -- All backends sorted by priority
+sandbox.get_config_schema(name)        -- Backend's `config_schema` (used by DISCOVER resolution)
+sandbox.count()                        -- Number of registered backends
+sandbox.clear()                        -- Remove every registered backend
+sandbox.setup()                        -- Register built-in backends
 
 -- Runtime toggle
 sandbox.set_enabled(enabled)           -- Override enabled state for this session
 sandbox.reset_enabled()                -- Clear the runtime override
 sandbox.get_override()                 -- Current override value (nil = no override)
 ```
+
+The `bufnr` argument is optional on every config-resolving call. Omit it for the global view; pass a chat buffer's `bufnr` to apply that buffer's `flemma.opt.sandbox.*` overrides.

@@ -199,13 +199,20 @@ Frontmatter config values are validated against the schema. Unknown keys produce
 
 Use `{{ expression }}` inside any `@System:` or `@You:` message. Expressions run in an environment built from registered populators that includes standard Lua libraries, select Neovim APIs, and variables from frontmatter. The built-in populators are defined in `lua/flemma/templating/builtins/`.
 
-Key built-ins:
+Key built-ins (from the `stdlib` populator):
 
 - `__filename` – the absolute path to the current `.chat` file.
 - `__dirname` – the directory containing the current file.
 - `include()` – inline another file (see below).
-- `string`, `table`, `math`, `utf8` – standard Lua libraries (safe subsets).
+- `string`, `table` – full standard libraries.
+- `math` – a curated subset: `abs`, `ceil`, `floor`, `max`, `min`, `random`, `randomseed`, `round` (alias for `floor`), `pi`.
+- `utf8` – the standard library when running on Lua 5.3+ (nil under LuaJIT).
 - `os.date`, `os.time`, `os.clock`, `os.difftime` – read-only time functions (no `execute`, `exit`, `getenv`, etc.).
+- `vim.fn.fnamemodify`, `vim.fn.getcwd`, `vim.fn.filereadable`, `vim.fn.simplify`, `vim.fs.normalize`, `vim.fs.abspath` – curated Neovim API surface for path resolution.
+- `assert`, `error`, `ipairs`, `pairs`, `pcall`, `select`, `tonumber`, `tostring`, `type`, `print`, `_VERSION` – essential Lua globals.
+- `symbols.BINARY`, `symbols.MIME` – opaque keys for [`include()` binary mode](#include-helper). `symbols` is reserved and cannot be reassigned from frontmatter.
+
+The `format` populator (priority 150) adds `format.number`, `format.tokens`, `format.money`, and `format.percent` — used by the default statusline template and reusable from any expression. The `iterators` populator (priority 200) adds `values()` and `each()` — see [Iterator helpers](#iterator-helpers).
 
 ```markdown
 @You:
@@ -215,10 +222,12 @@ Draft a short update for {{recipient}} covering:
 
 ### Evaluation rules
 
-- Expressions without an explicit `return` are auto-wrapped: `{{ 1 + 1 }}` becomes `return 1 + 1` internally.
+- Expression bodies are unconditionally wrapped as `return (...)`, so `{{ 1 + 1 }}` becomes `return (1 + 1)` internally. Don't write your own `return` — `{{ return foo }}` produces `return (return foo)`, which is a syntax error.
 - `nil` results produce no output (empty string) — but note that **accessing an undefined variable is an error**, not nil (see [strict variable checking](#strict-variable-checking) below). Only variables that are explicitly defined with a nil value produce no output.
 - Tables are automatically JSON-encoded via `flemma.utilities.json.encode()`.
 - Errors (including undefined variable access) are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
+- Expressions are also re-evaluated **passively** while you edit — see [Passive evaluation](#passive-evaluation) above. Treat side-effecting expressions accordingly: `math.random()` will draw a fresh value on every redraw, and a populator that reads from disk will be hit on every `InsertLeave`/`TextChanged`/`BufEnter`.
+- Expressions can suspend the send pipeline without losing the request. If an expression's populator raises `readiness.Suspense` (e.g., waiting on a credential or an MCP discovery), Flemma catches the sentinel, subscribes to the boundary, and retries the pipeline when it resolves. See [Architectural contracts for extension authors](extending.md#architectural-contracts-for-extension-authors) in the extension docs for the full pattern.
 
 ## Template code blocks
 
@@ -373,11 +382,11 @@ Included files have full template support at any nesting depth -- `{% %}` code b
 ### Safety guards
 
 - Relative paths resolve against the directory of the file that called `include()`.
-- Circular includes are detected via an immutable stack threaded through each call. The error message includes the full include chain: `"Circular include for 'c.md' (requested by 'b.md'). Include stack: a.chat -> b.md -> c.md"`.
+- Circular includes are detected via an immutable stack threaded through each call. The error message is `"Circular include detected (requested by '<filename>')"`, where `<filename>` is the calling template's `__filename`. The full include stack is attached as a structured `include_stack` field on the diagnostic table — visible in the diagnostic UI but not formatted into the message string itself.
 - Missing files or read errors raise diagnostics that block the request.
 - Binary includes skip circular detection since they don't recurse.
 
-### Iterator Helpers
+## Iterator helpers
 
 Flemma provides two iterator helpers for concise array iteration in templates:
 
@@ -407,9 +416,9 @@ The `loop` table provides:
 | `last`   | `true` for the last element  |
 | `length` | Total number of elements     |
 
-### Extending the Environment
+## Extending the environment
 
-The template environment is built from registered populators — functions that receive a table and populate it with globals. Flemma ships two built-in populators (`stdlib` at priority 100, `iterators` at priority 200).
+The template environment is built from registered populators — functions that receive a table and populate it with globals. Flemma ships three built-in populators: `stdlib` (priority 100), `format` (priority 150), and `iterators` (priority 200).
 
 Third-party populators are registered via `templating.modules` in setup:
 

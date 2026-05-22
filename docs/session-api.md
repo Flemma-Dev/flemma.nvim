@@ -22,6 +22,11 @@ local ts = require("flemma.session").now()
 
 ## Reading the current session
 
+Two ways to observe session state: poll the singleton on demand, or subscribe to the `request:finished` hook (see [docs/extending.md](extending.md#hooks-lifecycle-events)). The hook fires after a request is recorded and carries the just-added `flemma.session.Request` as `data.request`, so you can update UI without polling.
+
+> [!NOTE]
+> A request is only added to the session when the resolved model has registry pricing. Requests against custom or unknown models — where `flemma.models.registry.get_model_info(...).pricing` returns `nil` — silently skip session recording. If you're iterating on a new model and see no `request:finished` payload and an unchanged session, that's why.
+
 ```lua
 local session = require("flemma.session").get()
 

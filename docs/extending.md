@@ -74,7 +74,7 @@ vim.api.nvim_create_autocmd("User", {
 
 ### Lua subscribers
 
-In addition to User autocmds, hooks support direct Lua callbacks via `hooks.on()`. Internal subscribers fire synchronously before the autocmd, in registration order, with per-subscriber error isolation — one buggy listener never blocks another.
+In addition to User autocmds, hooks support direct Lua callbacks via `hooks.on()`. By default hooks are dispatched **asynchronously** via `vim.schedule` — both Lua subscribers and the User autocmd fire on the next event-loop tick. Within that tick, Lua subscribers run before the autocmd, in registration order, with per-subscriber error isolation so one buggy listener never blocks another.
 
 ```lua
 local hooks = require("flemma.hooks")
@@ -90,6 +90,10 @@ subscription:off()
 ```
 
 `hooks.on(name, callback)` returns a `flemma.hooks.Subscription` with an `:off()` method. Prefer autocmds for external plugins; prefer `hooks.on()` when you need guaranteed ordering relative to other subscribers or want to avoid the `ev.data` unwrapping overhead.
+
+#### Synchronous dispatch
+
+If a caller needs subscribers to complete before continuing (for cleanup hooks that must run before state is torn down), `hooks.dispatch(name, data, { sync = true })` skips the `vim.schedule` deferral and invokes subscribers inline. This is used internally for `buffer:destroyed`. Don't reach for this unless you genuinely need synchronous semantics — the async default keeps subscribers from blocking the main loop.
 
 ---
 
@@ -190,6 +194,8 @@ This is useful on NixOS, Guix, or systems where the gcloud CLI is not on `$PATH`
 
 ### Registering a custom resolver
 
+Credential resolution runs on the send pipeline, so resolvers must be **non-blocking**. Implement `resolve_async(self, credential, ctx, callback)` and drive subprocesses through `vim.system(cmd, opts, on_exit)` — never `vim.fn.system` and never `vim.system(cmd):wait()`. The walker prefers `resolve_async` when both forms are present.
+
 ```lua
 local secrets = require("flemma.secrets")
 
@@ -201,12 +207,25 @@ secrets.register("my_vault", {
     return credential.service == "my-service"
   end,
 
-  resolve = function(self, credential)
-    local value = vim.fn.system("vault read -field=value secret/" .. credential.kind)
-    if vim.v.shell_error == 0 then
-      return { value = vim.trim(value), ttl = 300 }
+  resolve_async = function(self, credential, ctx, callback)
+    if vim.fn.executable("vault") ~= 1 then
+      ctx:diagnostic("vault not found on PATH")
+      callback(nil)
+      return
     end
-    return nil  -- pass to next resolver
+
+    vim.system(
+      { "vault", "read", "-field=value", "secret/" .. credential.kind },
+      { text = true },
+      vim.schedule_wrap(function(result)
+        if result.code ~= 0 then
+          ctx:diagnostic("vault exit " .. result.code .. ": " .. (result.stderr or ""))
+          callback(nil)
+          return
+        end
+        callback({ value = vim.trim(result.stdout or ""), ttl = 300 })
+      end)
+    )
   end,
 })
 ```
@@ -214,12 +233,15 @@ secrets.register("my_vault", {
 The resolver contract:
 
 - **`supports(self, credential, ctx)`** → `boolean` – whether this resolver can attempt this credential. `ctx` is a `SecretsContext` (see below).
-- **`resolve(self, credential, ctx)`** → `{ value: string, ttl?: integer } | nil` – the credential value, or `nil` to pass. `ctx` is a `SecretsContext`.
+- **`resolve_async(self, credential, ctx, callback)`** – the preferred form. Call `callback(result_or_nil)` exactly once when done. The walker awaits it via `flemma.readiness`, so the send pipeline doesn't block while you fetch a token.
+- **`resolve(self, credential, ctx)`** → `{ value: string, ttl?: integer } | nil` – sync fallback, used only when `resolve_async` isn't defined. A sync `resolve` that does its own blocking I/O (`vim.fn.system`, `:wait()`, etc.) freezes the editor — don't do this.
 
 Resolvers receive a `SecretsContext` that provides:
 
 - **`ctx:get_config()`** → `table|nil` – returns the resolver's config subtree from `secrets.<resolver_name>` (e.g., `secrets.gcloud` for the gcloud resolver). Returns a deep copy; modifications don't affect global config.
 - **`ctx:diagnostic(message)`** – record a diagnostic explaining why this resolver couldn't help. These are surfaced in the failure notification when all resolvers fail.
+
+For a worked example, see `lua/flemma/secrets/resolvers/gcloud.lua` — it composes an async sub-resolution (service-account file → token) entirely through `vim.system` callbacks.
 
 ### Invalidating credentials
 
@@ -229,6 +251,43 @@ local secrets = require("flemma.secrets")
 secrets.invalidate("api_key", "anthropic")  -- invalidate a specific credential
 secrets.invalidate_all()                    -- clear the entire cache
 ```
+
+---
+
+## Architectural contracts for extension authors
+
+A few cross-cutting mechanisms aren't extension points themselves but every non-trivial extension brushes against at least one.
+
+### `flemma.readiness` — non-blocking suspension
+
+Any code reachable from the send pipeline that needs to wait on subprocess I/O — credential resolution, MCP discovery, tool definition resolution, usage estimation — must use the Suspense/boundary pattern in `flemma.readiness`. Leaf code raises `error(readiness.Suspense.new(message, boundary))`; orchestrators catch the sentinel via `pcall`, subscribe to the boundary, and retry the pipeline when it resolves. Concurrent consumers of the same boundary key (e.g. `secrets:vertex:access_token`) share one in-flight runner. The async secrets-resolver example above is wired through this — `resolve_async` doesn't block; the walker keys a boundary on the credential and re-runs the send when the callback fires.
+
+Two practical rules fall out of this:
+
+- **Never** `vim.system(cmd):wait()` from code that can reach the send pipeline. Use the async `vim.system(cmd, opts, on_exit)` form and hang the wait off a readiness boundary.
+- Any `pcall` between a leaf that raises `Suspense` and the orchestrator that catches it must check `readiness.is_suspense(err)` and re-raise — otherwise the sentinel is swallowed and the request silently dies.
+
+### `flemma.bridge` — breaking circular requires
+
+When two modules genuinely need to call each other and the obvious `require` would cycle, route through `flemma.bridge` instead of papering over with delayed `require`. Bridge exposes lazy accessors that resolve on first use; the source module installs the implementation when it loads.
+
+### The buffer AST is the only structural truth
+
+Anything that inspects conversation structure — roles, tool use/result blocks, thinking blocks, positions — must read from the cached `flemma.ast.DocumentNode` (via `parser.get_parsed_document(bufnr)` or, inside tools, `ctx:get_parsed_document()`). Don't pattern-match buffer lines. If the AST lacks a field you need, extend the AST rather than bypassing it.
+
+### Module-path registration
+
+Several registries accept a Lua module path string in user config and load it through `flemma.loader`:
+
+- `tools.register_module(module_path)` — load a tool module from a path string; validates existence up front and defers the `require`. The user-facing surface is `tools.modules` in setup config.
+- `sandbox.register_module(module_path)` — same shape for sandbox backends.
+- `templating.modules` — environment populators, loaded the same way.
+
+Use these instead of bare `require()` when the path comes from config or user input — the loader is Flemma's extensibility contract and gives consistent error messages, lazy semantics, and the path validation users expect.
+
+### Preprocessors and confirmations
+
+Preprocessors run after parsing and before the request leaves Flemma — they rewrite conversation segments (file references, includes, ambient context injection) and surface user confirmations. The registry lives at `lua/flemma/preprocessor/registry.lua` with built-in rewriters under `lua/flemma/preprocessor/rewriters/`. Confirmation rewriters use the same readiness/Suspense pattern: a rewriter that needs the user's decision raises Suspense on a boundary that resolves when the user replies. Documentation is currently code-only; treat the existing rewriters as the contract until a dedicated doc lands.
 
 ---
 

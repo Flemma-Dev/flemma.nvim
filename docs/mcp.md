@@ -137,6 +137,8 @@ When `tools.mcporter.enabled` is `true`, Flemma runs a three-phase discovery at 
 
 Tools from fast servers become available immediately -- you don't have to wait for every server to respond. If a server times out or fails, its tools are skipped and the rest proceed normally.
 
+As a performance shortcut, servers whose entire toolset is excluded by an `exclude` pattern (e.g. `exclude = { "slack.*" }` matches every `slack.*` tool) skip the schema fetch entirely — Flemma never spawns `mcporter list <server> --schema` for them.
+
 ### Tool naming
 
 Each discovered tool is named `server.tool_name` using a dot separator. Dots in server names themselves are replaced with hyphens to keep the separator unambiguous.
@@ -160,7 +162,9 @@ When the model invokes an MCP tool, Flemma runs:
 mcporter call <server>.<tool> --args '<json>' --output json
 ```
 
-The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
+The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the response is not shaped like a `CallToolResult` (no `content` array), Flemma falls back to inserting the raw output text verbatim — so non-conforming MCP servers still return something usable. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
+
+Outputs run through `ctx.truncate.truncate_with_overflow` the same way every other tool's output does, so large responses get truncated and the full text saved to an overflow file.
 
 ### Timeouts
 
