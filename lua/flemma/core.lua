@@ -741,6 +741,7 @@ local function attempt_advance_phase2(opts)
       notify.error("Could not satisfy dependency: " .. (diagnostic_message or err.message))
       return
     end
+    pending_entry.opts.evaluated_frontmatter = nil
     attempt_advance_phase2(pending_entry.opts)
   end)
 
@@ -928,6 +929,9 @@ function M.build_prompt_and_provider(bufnr, opts)
   end
 
   local context = context_module.from_buffer(bufnr)
+
+  tools.ensure_ready()
+
   local prompt, evaluated = pipeline.run(doc, context, {
     evaluated_frontmatter = opts.evaluated_frontmatter,
     bufnr = bufnr,
@@ -1007,6 +1011,9 @@ function M.send_to_provider(opts)
         local diag_msg = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
         notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
         return
+      end
+      if buffer_state.pending_send then
+        buffer_state.pending_send.opts.evaluated_frontmatter = nil
       end
       attempt()
     end)
