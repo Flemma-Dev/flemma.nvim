@@ -194,7 +194,6 @@ Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-expl
 - Add fresh specs for every new feature **and every bug fix**. Write the failing test first (TDD) when the reproduction is automatable. Place supporting data in `tests/fixtures/` with scenario-driven names.
 - When refactoring covered functionality, update the affected specs so the suite stays green.
 - Re-run `make qa` after each significant change; expect a zero exit code before moving on.
-- **`"Failed to parse API call data"` in test output is expected.** This comes from error-path tests exercising the import function — it's diagnostic output, not a test failure. Always check the exit code to determine pass/fail.
 
 ### Key testing patterns
 

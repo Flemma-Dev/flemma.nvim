@@ -219,21 +219,20 @@ What it doesn't try to do:
 
 All commands live under `:Flemma` with tab completion. Misspelled commands get did-you-mean suggestions.
 
-| `:Flemma` Command                                                     | Purpose                                                                     |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `send`                                                                | Send the buffer to the provider                                             |
-| `cancel`                                                              | Abort the active request or tool                                            |
-| `switch ...`                                                          | Change provider, model, or parameters                                       |
-| `status [verbose]`                                                    | Show runtime status and resolved configuration                              |
-| `import`                                                              | Import from Claude Workbench format (see [importing.md](docs/importing.md)) |
-| `usage:estimate`                                                      | Estimate input tokens and cost for the next send                            |
-| `usage:recall`                                                        | Re-show the most recent usage bar                                           |
-| `autopilot:enable\|disable\|status`                                   | Toggle or inspect autonomous mode                                           |
-| `sandbox:enable\|disable\|status`                                     | Toggle or inspect sandboxing                                                |
-| `tool:execute\|background\|approve\|reject\|cancel\|cancel-all\|list` | Manage tool executions                                                      |
-| `message:next\|previous`                                              | Jump between messages                                                       |
-| `logging:enable\|disable\|open`                                       | Structured logging                                                          |
-| `diagnostics:enable\|disable\|diff`                                   | Request diagnostics (useful for debugging cache)                            |
+| `:Flemma` Command                                                     | Purpose                                          |
+| --------------------------------------------------------------------- | ------------------------------------------------ |
+| `send`                                                                | Send the buffer to the provider                  |
+| `cancel`                                                              | Abort the active request or tool                 |
+| `switch ...`                                                          | Change provider, model, or parameters            |
+| `status [verbose]`                                                    | Show runtime status and resolved configuration   |
+| `usage:estimate`                                                      | Estimate input tokens and cost for the next send |
+| `usage:recall`                                                        | Re-show the most recent usage bar                |
+| `autopilot:enable\|disable\|status`                                   | Toggle or inspect autonomous mode                |
+| `sandbox:enable\|disable\|status`                                     | Toggle or inspect sandboxing                     |
+| `tool:execute\|background\|approve\|reject\|cancel\|cancel-all\|list` | Manage tool executions                           |
+| `message:next\|previous`                                              | Jump between messages                            |
+| `logging:enable\|disable\|open`                                       | Structured logging                               |
+| `diagnostics:enable\|disable\|diff`                                   | Request diagnostics (useful for debugging cache) |
 
 ### Keymaps (buffer-local to `.chat` files, all configurable)
 

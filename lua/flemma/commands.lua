@@ -198,33 +198,6 @@ local function setup_commands()
     end,
   }
 
-  command_tree.children.import = {
-    action = function()
-      local bufnr = vim.api.nvim_get_current_buf()
-      local cfg = require("flemma.config").get(bufnr)
-      local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
-      if not provider_module_path then
-        notify.error("No provider configured. Use :Flemma switch to select one.")
-        return
-      end
-
-      local provider_module = require("flemma.loader").load(provider_module_path)
-      if not provider_module or not provider_module.try_import_from_buffer then
-        notify.error("Current provider does not support chat imports.")
-        return
-      end
-
-      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-
-      local chat_content = provider_module.try_import_from_buffer(lines)
-      if chat_content then
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(chat_content, "\n", {}))
-        vim.bo[bufnr].filetype = "chat"
-        require("flemma.buffer.editing").auto_write(bufnr)
-      end
-    end,
-  }
-
   command_tree.children.switch = {
     action = function(context)
       local core = require("flemma.core")

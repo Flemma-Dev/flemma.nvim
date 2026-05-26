@@ -44,8 +44,6 @@ Methods are grouped into three categories:
     Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
     from JSON responses.
-  - `try_import_from_buffer(lines)` — import conversations from
-    external formats (static, no instance state).
   - `is_context_overflow(self, message)` — detect context window overflow
     from error messages.
   - `is_auth_error(self, message)` — detect authentication failures
@@ -377,15 +375,6 @@ function M.extract_json_response_error(self, data)
   end
 
   -- No recognizable error pattern found
-  return nil
-end
-
---- Try to import conversation from buffer lines in an external format.
---- Override to support importing from provider-specific formats (e.g. Anthropic
---- JSON exports). This is a static function — no instance state needed.
----@param lines string[]
----@return string|nil
-function M.try_import_from_buffer(lines)
   return nil
 end
 
