@@ -211,6 +211,11 @@ Completed background jobs are queued until one of two delivery points:
 
 Results appear as `` **Job Result:** `job_xxx` `` blocks inside `@You` messages. If the user is typing in the current `@You` block, the job result is inserted above in a separate `@You` block to avoid disrupting their work. Multiple results from different jobs merge into the same `@You` block when possible. Background `tool_result` placeholders are kept open (not auto-folded) while their job is still running, so the placeholder text and spinner remain visible.
 
+> [!IMPORTANT]
+> **Some models hallucinate pending job results.** When early jobs complete and their results are delivered before later jobs finish, the model sees a pattern — some results present, others pending — and may "complete" it by generating fabricated job output as plain text in its response. The hallucinated text can be convincingly detailed: plausible command output, tool IDs that mimic the real format, and formatting that resembles (but doesn't match) the actual `**Job Result:**` syntax.
+>
+> This has been observed with Gemini Flash 3.5 but can occur with any model prone to pattern completion over instruction following. The key thing to remember is that **job results can only appear in `@You:` messages** — jobs execute on your machine, and Flemma delivers their output on your behalf. Any reference to job results in an `@Assistant:` message is purely fabricated. The real results always arrive later as proper `**Job Result:**` blocks in `@You:` messages.
+
 ### Autopilot integration
 
 When autopilot is enabled and background jobs complete at idle, Flemma schedules a debounced auto-continue after `tools.autopilot.resume_delay` milliseconds (default `2000`). This gives you time to review the result before the model sees it. Press <kbd>Ctrl-C</kbd> during the delay to cancel. Entering insert mode during the delay also cancels auto-continue. When completions arrive during an active autopilot loop (not at idle), the delay is skipped and the conversation continues immediately.

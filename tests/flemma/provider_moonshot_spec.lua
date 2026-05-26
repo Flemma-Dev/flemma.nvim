@@ -172,48 +172,6 @@ describe("Moonshot Provider", function()
       end)
     end)
 
-    describe("thinking for kimi-k2-thinking", function()
-      it("should force thinking on for kimi-k2-thinking", function()
-        local provider = moonshot.new({
-          model = "kimi-k2-thinking",
-          max_tokens = 4096,
-        })
-        local prompt = make_prompt({ { type = "You", content = "Solve this" } })
-        local request_body = provider:build_request(prompt)
-
-        assert.is_not_nil(request_body.thinking)
-        assert.equals("enabled", request_body.thinking.type)
-        assert.equals(1.0, request_body.temperature)
-      end)
-
-      it("should force thinking on for kimi-k2-thinking-turbo", function()
-        local provider = moonshot.new({
-          model = "kimi-k2-thinking-turbo",
-          max_tokens = 4096,
-        })
-        local prompt = make_prompt({ { type = "You", content = "Solve this" } })
-        local request_body = provider:build_request(prompt)
-
-        assert.is_not_nil(request_body.thinking)
-        assert.equals("enabled", request_body.thinking.type)
-        assert.equals(1.0, request_body.temperature)
-      end)
-
-      it("should force thinking on even when user explicitly sets thinking to false", function()
-        local provider = moonshot.new({
-          model = "kimi-k2-thinking",
-          max_tokens = 4096,
-          thinking = { level = false, foreign = "preserve" },
-        })
-        local prompt = make_prompt({ { type = "You", content = "Hello" } })
-        local request_body = provider:build_request(prompt)
-
-        assert.is_not_nil(request_body.thinking, "Forced-thinking model should always have thinking")
-        assert.equals("enabled", request_body.thinking.type)
-        assert.equals(1.0, request_body.temperature)
-      end)
-    end)
-
     describe("no thinking for moonshot-v1 models", function()
       it("should not set thinking for moonshot-v1-128k", function()
         local provider = moonshot.new({

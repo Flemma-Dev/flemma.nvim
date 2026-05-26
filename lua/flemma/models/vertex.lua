@@ -5,6 +5,18 @@
 return {
   default = "gemini-3.1-pro-preview",
   models = {
+    -- Gemini 3.5 Flash
+    ["gemini-3.5-flash"] = {
+      pricing = {
+        input = 1.50,
+        output = 9.0,
+        cache_read = 0.15,
+      },
+      max_input_tokens = 1048576,
+      max_output_tokens = 65536,
+      thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+    },
+
     -- Gemini 3.1 Pro Preview
     ["gemini-3.1-pro-preview"] = {
       pricing = {
@@ -20,7 +32,7 @@ return {
       thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
-    -- Gemini 3.1 Flash Lite Preview
+    -- Gemini 3.1 Flash Lite
     ["gemini-3.1-flash-lite-preview"] = {
       pricing = {
         input = 0.25,
@@ -30,6 +42,31 @@ return {
       max_input_tokens = 1048576,
       max_output_tokens = 65536,
       thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+    },
+    ["gemini-3.1-flash-lite"] = {
+      pricing = {
+        input = 0.25,
+        output = 1.50,
+        cache_read = 0.025,
+      },
+      max_input_tokens = 1048576,
+      max_output_tokens = 65536,
+      thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+    },
+
+    -- Gemini 3 Pro Preview
+    ["gemini-3-pro-preview"] = {
+      pricing = {
+        input = 2.0,
+        output = 12.0,
+        cache_read = 0.20,
+      },
+      max_input_tokens = 1048576,
+      max_output_tokens = 65536,
+      thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
+      min_thinking_budget = 1,
+      max_thinking_budget = 32768,
+      thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
     -- Gemini 3 Flash Preview
