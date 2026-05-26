@@ -126,18 +126,48 @@ If you misspell a tool name, Flemma suggests the closest match: `"flemma.opt: un
 
 Only options you actually touch appear in the resolved overrides – unmodified settings fall through to your global config. See [docs/tools.md](tools.md) for more on tool approval and the resolver API.
 
-### JSON frontmatter with config operators
+### Op-prefix syntax for list values
 
-JSON frontmatter blocks can override Flemma configuration through a `flemma` key. Plain values set the option directly; for list-type options (tools, auto_approve), MongoDB-style operators give precise control over how the list is modified:
+For list-valued config fields, single-character prefixes on individual items compose set, append, prepend, remove, and preset spread into a single literal. These work everywhere a list value can appear — `setup()` config, Lua `flemma.opt`, JSON frontmatter — without needing to switch syntactic gears mid-list:
 
-| Operator   | Effect                                  | Example                                 |
-| ---------- | --------------------------------------- | --------------------------------------- |
-| `$set`     | Replace the value (same as no operator) | `"tools": { "$set": ["bash", "read"] }` |
-| `$append`  | Add item(s) to a list                   | `"tools": { "$append": "bash" }`        |
-| `$remove`  | Remove item(s) from a list              | `"tools": { "$remove": "write" }`       |
-| `$prepend` | Prepend item(s) to a list               | `"tools": { "$prepend": "bash" }`       |
+| Prefix | Effect                             | Example       |
+| ------ | ---------------------------------- | ------------- |
+| `+`    | Append item                        | `"+bash"`     |
+| `^`    | Prepend item                       | `"^bash"`     |
+| `!`    | Remove item                        | `"!write"`    |
+| `$`    | Spread a preset's items into place | `"$standard"` |
 
-Operators accept both single values and arrays: `"$append": ["bash", "grep"]`.
+The four prefixes can be mixed freely inside a single list — they apply in declaration order:
+
+```lua
+-- setup() config: start from $standard, drop write, then append bash
+tools = { auto_approve = { "$standard", "!write", "+bash" } }
+```
+
+```lua
+-- Lua frontmatter: same idea, per-buffer
+flemma.opt.tools.auto_approve = { "$readonly", "+bash" }
+```
+
+A bare value with no prefix is a `set` item (it replaces the list). Mixing bare values with ops works as expected — the bare values seed the list, then ops apply. Empty list `{}` means "set to empty list."
+
+Operators are non-composable — `+^bash`, `!$standard`, and similar combinations are parse errors. The `$` prefix only matches lowercase names so environment-variable-looking strings (`$HOME`, `${TMPDIR}`) pass through as set items. Unknown preset references produce a "did you mean?" warning at finalize time.
+
+> [!IMPORTANT]
+> **Op-prefixes are parsed only when assigning a list — never when calling a method.** `flemma.opt.tools = { "$standard", "+bash" }` works; `flemma.opt.tools:append("+bash")` does not (the literal string `"+bash"` fails tool validation). The ListProxy method API has its own verbs for the same effect:
+>
+> | Op-prefix form                                | Equivalent method call                    |
+> | --------------------------------------------- | ----------------------------------------- |
+> | `flemma.opt.tools = { existing, "+bash" }`    | `flemma.opt.tools:append("bash")`         |
+> | `flemma.opt.tools = { existing, "^bash" }`    | `flemma.opt.tools:prepend("bash")`        |
+> | `flemma.opt.tools = { existing, "!write" }`   | `flemma.opt.tools:remove("write")`        |
+> | `flemma.opt.tools = { "$standard", "+bash" }` | _not expressible as a single method call_ |
+>
+> Preset references (`"$name"`) are the one exception — they're expanded by the schema coerce function rather than the listops parser, so `:append("$standard")` and `:remove("$readonly")` both work as expected.
+
+### JSON frontmatter
+
+JSON frontmatter blocks can override Flemma configuration through a `flemma` key. Regular keys navigate into nested config objects; list-valued fields use the same [op-prefix syntax](#op-prefix-syntax-for-list-values) documented above:
 
 ````json
 ```json
@@ -150,11 +180,7 @@ Operators accept both single values and arrays: `"$append": ["bash", "grep"]`.
       "temperature": 0.3
     },
     "tools": {
-      "$append": "bash",
-      "auto_approve": {
-        "$append": "bash",
-        "$remove": "write"
-      }
+      "auto_approve": ["$standard", "!write", "+bash"]
     }
   },
   "recipient": "QA team"
@@ -162,12 +188,10 @@ Operators accept both single values and arrays: `"$append": ["bash", "grep"]`.
 ```
 ````
 
-Regular (non-`$`) keys navigate into child objects: `"parameters": { "thinking": "medium" }` descends into the `parameters` node and sets `thinking` to `"medium"` without touching other parameters. Operators and child keys can coexist on the same node — in the example above, `"tools"` both appends `"bash"` to the tool list and navigates into `auto_approve` for further operations.
-
-Plain values and arrays without operators default to `$set`. The `flemma` key is reserved for configuration; all other top-level keys become template variables available in `{{ expressions }}`, just like Lua frontmatter.
+`"parameters": { "thinking": "medium" }` descends into the `parameters` node and sets `thinking` to `"medium"` without touching other parameters. Plain arrays without prefixes replace the list entirely (`["read", "write"]` is equivalent to `["+read", "+write"]` starting from an empty list). The `flemma` key is reserved for configuration; all other top-level keys become template variables available in `{{ expressions }}`, just like Lua frontmatter.
 
 > [!NOTE]
-> JSON frontmatter operators are the equivalent of Lua frontmatter's `flemma.opt` proxy. Both write to the same per-buffer config layer. Use whichever syntax you prefer — Lua frontmatter for full programmatic control, JSON frontmatter for quick declarative overrides.
+> JSON frontmatter is the equivalent of Lua frontmatter's `flemma.opt` proxy. Both write to the same per-buffer config layer. Use whichever syntax you prefer — Lua frontmatter for full programmatic control, JSON frontmatter for quick declarative overrides.
 
 Frontmatter config values are validated against the schema. Unknown keys produce an error; misspelled tool names get a "did you mean?" suggestion.
 
@@ -175,13 +199,20 @@ Frontmatter config values are validated against the schema. Unknown keys produce
 
 Use `{{ expression }}` inside any `@System:` or `@You:` message. Expressions run in an environment built from registered populators that includes standard Lua libraries, select Neovim APIs, and variables from frontmatter. The built-in populators are defined in `lua/flemma/templating/builtins/`.
 
-Key built-ins:
+Key built-ins (from the `stdlib` populator):
 
 - `__filename` – the absolute path to the current `.chat` file.
 - `__dirname` – the directory containing the current file.
 - `include()` – inline another file (see below).
-- `string`, `table`, `math`, `utf8` – standard Lua libraries (safe subsets).
+- `string`, `table` – full standard libraries.
+- `math` – a curated subset: `abs`, `ceil`, `floor`, `max`, `min`, `random`, `randomseed`, `round` (alias for `floor`), `pi`.
+- `utf8` – the standard library when running on Lua 5.3+ (nil under LuaJIT).
 - `os.date`, `os.time`, `os.clock`, `os.difftime` – read-only time functions (no `execute`, `exit`, `getenv`, etc.).
+- `vim.fn.fnamemodify`, `vim.fn.getcwd`, `vim.fn.filereadable`, `vim.fn.simplify`, `vim.fs.normalize`, `vim.fs.abspath` – curated Neovim API surface for path resolution.
+- `assert`, `error`, `ipairs`, `pairs`, `pcall`, `select`, `tonumber`, `tostring`, `type`, `print`, `_VERSION` – essential Lua globals.
+- `symbols.BINARY`, `symbols.MIME` – opaque keys for [`include()` binary mode](#include-helper). `symbols` is reserved and cannot be reassigned from frontmatter.
+
+The `format` populator (priority 150) adds `format.number`, `format.tokens`, `format.money`, and `format.percent` — used by the default statusline template and reusable from any expression. The `iterators` populator (priority 200) adds `values()` and `each()` — see [Iterator helpers](#iterator-helpers).
 
 ```markdown
 @You:
@@ -191,10 +222,12 @@ Draft a short update for {{recipient}} covering:
 
 ### Evaluation rules
 
-- Expressions without an explicit `return` are auto-wrapped: `{{ 1 + 1 }}` becomes `return 1 + 1` internally.
+- Expression bodies are unconditionally wrapped as `return (...)`, so `{{ 1 + 1 }}` becomes `return (1 + 1)` internally. Don't write your own `return` — `{{ return foo }}` produces `return (return foo)`, which is a syntax error.
 - `nil` results produce no output (empty string) — but note that **accessing an undefined variable is an error**, not nil (see [strict variable checking](#strict-variable-checking) below). Only variables that are explicitly defined with a nil value produce no output.
 - Tables are automatically JSON-encoded via `flemma.utilities.json.encode()`.
 - Errors (including undefined variable access) are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
+- Expressions are also re-evaluated **passively** while you edit — see [Passive evaluation](#passive-evaluation) above. Treat side-effecting expressions accordingly: `math.random()` will draw a fresh value on every redraw, and a populator that reads from disk will be hit on every `InsertLeave`/`TextChanged`/`BufEnter`.
+- Expressions can suspend the send pipeline without losing the request. If an expression's populator raises `readiness.Suspense` (e.g., waiting on a credential or an MCP discovery), Flemma catches the sentinel, subscribes to the boundary, and retries the pipeline when it resolves. See [Architectural contracts for extension authors](extending.md#architectural-contracts-for-extension-authors) in the extension docs for the full pattern.
 
 ## Template code blocks
 
@@ -349,11 +382,11 @@ Included files have full template support at any nesting depth -- `{% %}` code b
 ### Safety guards
 
 - Relative paths resolve against the directory of the file that called `include()`.
-- Circular includes are detected via an immutable stack threaded through each call. The error message includes the full include chain: `"Circular include for 'c.md' (requested by 'b.md'). Include stack: a.chat -> b.md -> c.md"`.
+- Circular includes are detected via an immutable stack threaded through each call. The error message is `"Circular include detected (requested by '<filename>')"`, where `<filename>` is the calling template's `__filename`. The full include stack is attached as a structured `include_stack` field on the diagnostic table — visible in the diagnostic UI but not formatted into the message string itself.
 - Missing files or read errors raise diagnostics that block the request.
 - Binary includes skip circular detection since they don't recurse.
 
-### Iterator Helpers
+## Iterator helpers
 
 Flemma provides two iterator helpers for concise array iteration in templates:
 
@@ -383,9 +416,9 @@ The `loop` table provides:
 | `last`   | `true` for the last element  |
 | `length` | Total number of elements     |
 
-### Extending the Environment
+## Extending the environment
 
-The template environment is built from registered populators — functions that receive a table and populate it with globals. Flemma ships two built-in populators (`stdlib` at priority 100, `iterators` at priority 200).
+The template environment is built from registered populators — functions that receive a table and populate it with globals. Flemma ships three built-in populators: `stdlib` (priority 100), `format` (priority 150), and `iterators` (priority 200).
 
 Third-party populators are registered via `templating.modules` in setup:
 

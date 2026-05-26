@@ -308,14 +308,22 @@ end)
 
 describe("flemma.usage driver", function()
   local usage
+  local hooks
   local bar_mock
 
   before_each(function()
+    package.loaded["flemma.hooks"] = nil
     package.loaded["flemma.ui.bar"] = nil
     package.loaded["flemma.usage"] = nil
     package.loaded["flemma.state"] = nil
+    hooks = require("flemma.hooks")
     bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
     usage = require("flemma.usage")
+    usage.setup()
+  end)
+
+  after_each(function()
+    hooks._clear_subscribers()
   end)
 
   describe("show", function()
@@ -370,6 +378,44 @@ describe("flemma.usage driver", function()
       assert.equals("top", opts.position)
       local layout = require("flemma.ui.bar.layout")
       assert.equals(layout.PREFIX, opts.icon)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("request:finished hook", function()
+    it("shows bar when hook carries a request", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "x" })
+      vim.api.nvim_set_current_buf(bufnr)
+      local fake_request = {
+        model = "test-model",
+        provider = "test",
+        thoughts_tokens = 0,
+        cache_read_input_tokens = 0,
+        get_total_input_tokens = function()
+          return 100
+        end,
+        get_total_output_tokens = function()
+          return 50
+        end,
+        get_total_cost = function()
+          return 0.01
+        end,
+      }
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = fake_request })
+      assert.is_true(vim.wait(200, function()
+        return #bar_mock._handles > 0
+      end))
+      assert.equals(1, #bar_mock._handles)
+      assert.equals(bufnr, bar_mock._handles[1].opts.bufnr)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not show bar when hook has no request", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "errored" })
+      vim.wait(50)
+      assert.equals(0, #bar_mock._handles)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)

@@ -1,12 +1,12 @@
 --- Tests for grep tool definition
 
-package.loaded["flemma.tools.definitions.grep"] = nil
+package.loaded["flemma.tools.definitions.builtin.grep"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
 package.loaded["flemma.utilities.json"] = nil
 package.loaded["flemma.sink"] = nil
 
 local executor = require("flemma.tools.executor")
-local grep_module = require("flemma.tools.definitions.grep")
+local grep_module = require("flemma.tools.definitions.builtin.grep")
 
 describe("Grep Tool", function()
   local grep_def, fixture_dir, bufnr, ctx

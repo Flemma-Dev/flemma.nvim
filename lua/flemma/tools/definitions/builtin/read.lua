@@ -2,7 +2,7 @@
 --- Read file contents with offset/limit and head truncation
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
----@class flemma.tools.definitions.Read
+---@class flemma.tools.definitions.builtin.Read
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 

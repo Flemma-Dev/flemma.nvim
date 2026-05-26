@@ -21,15 +21,20 @@ setmetatable(M, { __index = openai_chat })
 
 -- Per-model thinking behaviour is declared in `lua/flemma/models/moonshot.lua`
 -- via `meta.thinking_mode`. Accepted values:
---   "forced"   — thinking is always on (kimi-k2-thinking, kimi-k2-thinking-turbo);
---                request always sends `thinking.type = "enabled"` and locks
---                temperature to 1.0 regardless of user configuration.
+--   "forced"   — thinking is unconditionally on; request always sends
+--                `thinking.type = "enabled"` and locks temperature to 1.0
+--                regardless of user configuration. Previously used by the
+--                kimi-k2-thinking and kimi-k2-thinking-turbo models (retired
+--                May 2026). No current model uses this mode, but the codepath
+--                is preserved — Moonshot may release future models that require
+--                always-on thinking. To activate: set `meta.thinking_mode = "forced"`
+--                on the model entry in `lua/flemma/models/moonshot.lua`.
 --   "optional" — thinking can be toggled (kimi-k2.6, kimi-k2.5); request sends
 --                `thinking.type = "enabled"|"disabled"` based on the user's
 --                resolved thinking state, with temperature locked accordingly
 --                (1.0 when enabled, 0.6 when disabled).
---   nil        — no thinking support (moonshot-v1-*, kimi-k2 preview/turbo);
---                no `thinking` parameter is sent.
+--   nil        — no thinking support (moonshot-v1-*); no `thinking` parameter
+--                is sent.
 
 ---@param model_name string
 ---@return "forced"|"optional"|nil

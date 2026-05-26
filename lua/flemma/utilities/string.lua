@@ -28,7 +28,7 @@ function M.truncate(text, max_width, suffix)
   if vim.api.nvim_strwidth(text) <= max_width then
     return text
   end
-  suffix = suffix or "\xe2\x80\xa6" -- "…" (U+2026, 3 bytes UTF-8)
+  suffix = suffix or "…"
   local suffix_width = vim.api.nvim_strwidth(suffix)
   local target = max_width - suffix_width
   if target <= 0 then
@@ -137,11 +137,11 @@ end
 ---@return string
 function M.format_estimate(input_tokens, model, pricing)
   if not pricing then
-    return M.format_number(input_tokens) .. " input tokens \xc2\xb7 " .. model
+    return M.format_number(input_tokens) .. " input tokens · " .. model
   end
   local cost = input_tokens * pricing.input / 1000000
   return string.format(
-    "%s input tokens \xc2\xb7 %s \xc2\xb7 %s (%s)",
+    "%s input tokens · %s · %s (%s)",
     M.format_number(input_tokens),
     M.format_money(cost),
     model,
@@ -246,6 +246,14 @@ function M.format_elapsed(seconds)
   local minutes = math.floor(total / 60)
   local remaining_seconds = total % 60
   return minutes .. "m " .. remaining_seconds .. "s"
+end
+
+---Escape Lua pattern magic characters in a string so it can be used as a
+---literal match in `string.find`, `string.gsub`, etc.
+---@param str string
+---@return string
+function M.escape_pattern(str)
+  return (str:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1"))
 end
 
 return M

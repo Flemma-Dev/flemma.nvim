@@ -66,6 +66,8 @@ function M.resolve_include_path(bufnr, lnum, col)
     lnum = lnum or cursor_pos[1] -- 1-indexed
     col = col or (cursor_pos[2] + 1) -- 0-indexed -> 1-indexed
   end
+  ---@cast lnum integer
+  ---@cast col integer
   log.trace("navigation: resolve_include_path at line=" .. lnum .. " col=" .. col .. " buf=" .. bufnr)
 
   local doc = parser.get_parsed_document(bufnr)

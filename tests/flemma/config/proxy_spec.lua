@@ -72,6 +72,7 @@ describe("flemma.config.proxy", function()
 
   before_each(function()
     package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.schema"] = nil
     package.loaded["flemma.schema.types"] = nil

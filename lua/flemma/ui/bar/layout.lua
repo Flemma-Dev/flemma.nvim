@@ -6,16 +6,16 @@ local M = {}
 local str = require("flemma.utilities.string")
 
 --- Separator between segments: thin vertical bar with spaces
-local SEPARATOR = " \xE2\x94\x82 " -- " │ " (U+2502, 5 bytes UTF-8)
-local SEPARATOR_DISPLAY_WIDTH = 3 -- " │ " is 3 display chars
+local SEPARATOR = " │ "
+local SEPARATOR_DISPLAY_WIDTH = 3
 
 --- Relaxed separator: double-spaced variant used when all items fit with extra breathing room
-local SEPARATOR_RELAXED = "  \xE2\x94\x82  " -- "  │  "
+local SEPARATOR_RELAXED = "  │  "
 local SEPARATOR_RELAXED_DISPLAY_WIDTH = 5
 
 --- Prefix shown before all content: information source + space
-local PREFIX = "\xE2\x84\xB9 " -- "ℹ " (U+2139, 3 bytes + 1 space)
-local PREFIX_DISPLAY_WIDTH = 2 -- ℹ is 1 display col + 1 space
+local PREFIX = "ℹ "
+local PREFIX_DISPLAY_WIDTH = 2
 
 --- Exported constants for consumers of this layout engine
 M.PREFIX = PREFIX

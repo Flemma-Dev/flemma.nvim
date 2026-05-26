@@ -31,12 +31,12 @@ describe("flemma.presets", function()
       assert.is_not_nil(presets.get("$readonly"))
     end)
 
-    it("built-in $standard approves read, write, edit, find, grep, ls", function()
+    it("built-in $standard approves read, write, edit, find, grep, ls, flemma:*", function()
       presets.setup(nil)
       local preset = presets.get("$standard")
       local approve = vim.deepcopy(preset.auto_approve)
       table.sort(approve)
-      assert.are.same({ "edit", "find", "grep", "ls", "read", "write" }, approve)
+      assert.are.same({ "edit", "find", "flemma.*", "grep", "ls", "read", "write" }, approve)
     end)
 
     it("built-in $readonly approves read, find, grep, ls", function()
@@ -232,6 +232,65 @@ describe("flemma.presets", function()
     assert.is_true(found, "expected warning about invalid string preset definition")
   end)
 
+  it("supports tools in strict table format", function()
+    presets.setup({
+      ["$blank"] = { tools = {} },
+    })
+    local preset = presets.get("$blank")
+    assert.is_not_nil(preset)
+    assert.are.same({}, preset.tools)
+  end)
+
+  it("stores tools with op prefixes as-is", function()
+    presets.setup({
+      ["$basics"] = { tools = { "!bash" } },
+    })
+    local preset = presets.get("$basics")
+    assert.are.same({ "!bash" }, preset.tools)
+  end)
+
+  it("does not include tools in parameters", function()
+    presets.setup({
+      ["$custom"] = { provider = "openai", model = "o3", tools = { "read" } },
+    })
+    local preset = presets.get("$custom")
+    assert.is_nil(preset.parameters.tools)
+  end)
+
+  it("allows presets with both tools and auto_approve", function()
+    presets.setup({
+      ["$safe"] = { tools = { "!bash" }, auto_approve = { "read" } },
+    })
+    local preset = presets.get("$safe")
+    assert.are.same({ "!bash" }, preset.tools)
+    assert.are.same({ "read" }, preset.auto_approve)
+  end)
+
+  it("rejects tools that is not a table", function()
+    presets.setup({ ["$bad"] = { tools = "bash" } })
+    assert.is_nil(presets.get("$bad"))
+  end)
+
+  it("rejects preset names that don't start with $lowercase", function()
+    presets.setup({
+      ["$MyPreset"] = { provider = "openai", model = "gpt-4o" },
+      ["$123"] = { provider = "openai", model = "gpt-4o" },
+    })
+
+    assert.is_nil(presets.get("$MyPreset"))
+    assert.is_nil(presets.get("$123"))
+
+    flush_schedule()
+    local found_warning = false
+    for _, note in ipairs(notifications) do
+      if note.message:find("lowercase") then
+        found_warning = true
+        break
+      end
+    end
+    assert.is_true(found_warning, "expected warning about lowercase convention")
+  end)
+
   it("ignores unknown fields on preset definitions (passthrough format)", function()
     presets.setup({
       ["$custom"] = { provider = "openai", model = "o3", deny = { "write" } },
@@ -334,6 +393,61 @@ describe("flemma.presets", function()
         end
       end
       assert.is_false(found, "should not warn when all tools are known")
+    end)
+
+    it("strips op prefixes before tool registry lookup", function()
+      package.loaded["flemma.tools.registry"] = nil
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
+        name = "bash",
+        description = "Run bash",
+        input_schema = { type = "object" },
+      })
+      tools_registry.register("read", {
+        name = "read",
+        description = "Read files",
+        input_schema = { type = "object" },
+      })
+
+      presets.setup({
+        ["$safe"] = {
+          auto_approve = { "+read", "!bash" },
+          tools = { "^read", "!bash" },
+        },
+      })
+      presets.finalize()
+
+      flush_schedule()
+      local found_unknown = false
+      for _, note in ipairs(notifications) do
+        if note.message:find("unknown tool") then
+          found_unknown = true
+          break
+        end
+      end
+      assert.is_false(found_unknown, "should not warn for known tools behind op prefixes")
+    end)
+
+    it("skips $-prefixed entries in finalize validation", function()
+      package.loaded["flemma.tools.registry"] = nil
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+
+      presets.setup({
+        ["$composed"] = { tools = { "$standard", "!bash" } },
+      })
+      presets.finalize()
+
+      flush_schedule()
+      local found_standard_warning = false
+      for _, note in ipairs(notifications) do
+        if note.message:find("'%$standard'") then
+          found_standard_warning = true
+          break
+        end
+      end
+      assert.is_false(found_standard_warning, "should skip $-prefixed entries, not validate them as tool names")
     end)
   end)
 
@@ -446,6 +560,7 @@ describe(":Flemma switch completion ordering", function()
       initialize_provider = function() end,
       send_to_provider = function() end,
       cancel_request = function() end,
+      setup = function() end,
     }
 
     package.preload["flemma.core"] = function()
@@ -530,6 +645,7 @@ describe(":Flemma switch with presets", function()
       initialize_provider = function() end,
       send_to_provider = function() end,
       cancel_request = function() end,
+      setup = function() end,
     }
     function stub_core.switch_provider(provider, model, parameters)
       stub_core.last_switch = {
@@ -663,5 +779,44 @@ describe(":Flemma switch with presets", function()
       end
     end
     assert.is_true(found, "expected warning about unknown preset")
+  end)
+
+  it("writes tools with remove ops to RUNTIME layer", function()
+    local flemma = require("flemma")
+    flemma.setup({
+      presets = {
+        ["$nobash"] = { tools = { "!bash" } },
+      },
+    })
+
+    vim.cmd("Flemma switch $nobash")
+
+    local config_facade = require("flemma.config")
+    local store = require("flemma.config.store")
+    local ops = store.dump_layer(config_facade.LAYERS.RUNTIME)
+    local remove_ops = vim.tbl_filter(function(op)
+      return op.op == "remove" and op.path == "tools" and op.value == "bash"
+    end, ops)
+    assert.are.equal(1, #remove_ops, "should record a remove op for bash on the tools path")
+  end)
+
+  it("writes empty tools set to RUNTIME layer", function()
+    local flemma = require("flemma")
+    flemma.setup({
+      presets = {
+        ["$blank"] = { tools = {} },
+      },
+    })
+
+    vim.cmd("Flemma switch $blank")
+
+    local config_facade = require("flemma.config")
+    local store = require("flemma.config.store")
+    local ops = store.dump_layer(config_facade.LAYERS.RUNTIME)
+    local set_ops = vim.tbl_filter(function(op)
+      return op.op == "set" and op.path == "tools"
+    end, ops)
+    assert.are.equal(1, #set_ops, "should record a set op for empty tools list")
+    assert.are.same({}, set_ops[1].value)
   end)
 end)

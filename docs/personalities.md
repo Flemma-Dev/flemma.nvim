@@ -40,7 +40,7 @@ Files with identical content (e.g., symlinks) are deduplicated — only the firs
 
 ## Creating a Personality
 
-Each personality is a Lua module at `lua/flemma/personalities/<name>.lua` that implements a `render()` function:
+Built-in personalities live under `lua/flemma/personalities/styles/` (the `styles/` sub-folder is the role — "this is what a personality module looks like"). Your own personalities can live anywhere on the Lua path; only the registration step cares about the module name. Each personality module implements a `render()` function:
 
 ```lua
 ---@class flemma.personalities.MyPersonality : flemma.personalities.Personality
@@ -75,7 +75,7 @@ The `opts` table is pre-built before `render()` is called. The personality does 
 
 #### Tools
 
-All enabled tools (respecting frontmatter opts), sorted alphabetically. Each entry has:
+The tools resolved for the current buffer's prompt, sorted alphabetically. By default this is the set of enabled tools, but `flemma.opt.tools` in frontmatter may explicitly list disabled tools — those are also included here (disabled tools that aren't explicitly listed are excluded). Each entry has:
 
 ```lua
 ---@class flemma.personalities.ToolEntry
@@ -130,13 +130,13 @@ Part names (`snippet`, `guidelines`, etc.) are not prescribed by Flemma. They ar
 
 ### Registering a Built-in Personality
 
-Add the module path to `BUILTIN_PERSONALITIES` in `lua/flemma/personalities/init.lua`:
+Add the module path to `BUILTIN_PERSONALITIES` in `lua/flemma/personalities/init.lua`. The registration name (the table key) is the user-facing identifier — use a hyphenated string. The value is a dot-delimited Lua module path:
 
 ```lua
 local BUILTIN_PERSONALITIES = {
-  ["coding-assistant"] = "flemma.personalities.coding-assistant",
-  ["my-personality"] = "flemma.personalities.my-personality",
+  ["coding-assistant"] = "flemma.personalities.styles.coding_assistant",
+  ["my-personality"] = "flemma.personalities.styles.my_personality",
 }
 ```
 
-The personality is loaded via `flemma.loader` and registered during `setup()`.
+The personality is loaded via `flemma.loader` and registered during `setup()`. The hyphen-vs-underscore split (hyphen in the name, underscore in the file path) follows Flemma's general convention — user-facing identifiers use hyphens, on-disk filenames use snake_case.

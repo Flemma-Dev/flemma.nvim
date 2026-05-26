@@ -85,31 +85,32 @@ describe("flemma.loader", function()
   end)
 
   describe("registry name validation", function()
-    it("tools registry rejects names with dots", function()
+    it("allows dots in tool names", function()
       local registry = require("flemma.tools.registry")
-      assert.has_error(function()
+      assert.has_no.errors(function()
         registry.register("my.tool", {
           name = "my.tool",
           description = "test",
-          input_schema = { type = "object" },
+          input_schema = { type = "object", properties = {} },
+          execute = function() end,
         })
-      end, "flemma: tool name 'my.tool' must not contain dots (dots indicate module paths)")
+      end)
     end)
 
-    it("approval registry rejects names with dots", function()
+    it("allows dots in approval resolver names", function()
       local approval = require("flemma.tools.approval")
-      assert.has_error(function()
+      assert.has_no.errors(function()
         approval.register("my.resolver", {
           resolve = function()
             return nil
           end,
         })
-      end, "flemma: approval resolver name 'my.resolver' must not contain dots (dots indicate module paths)")
+      end)
     end)
 
-    it("sandbox registry rejects names with dots", function()
+    it("allows dots in sandbox backend names", function()
       local sandbox = require("flemma.sandbox")
-      assert.has_error(function()
+      assert.has_no.errors(function()
         sandbox.register("my.backend", {
           available = function()
             return true
@@ -118,7 +119,31 @@ describe("flemma.loader", function()
             return cmd
           end,
         })
-      end, "flemma: sandbox backend name 'my.backend' must not contain dots (dots indicate module paths)")
+      end)
+    end)
+
+    it("rejects colons in tool names", function()
+      local registry = require("flemma.tools.registry")
+      assert.has_error(function()
+        registry.register("my:tool", {
+          name = "my:tool",
+          description = "test",
+          input_schema = { type = "object", properties = {} },
+          execute = function() end,
+        })
+      end, "flemma: tool name 'my:tool' contains invalid characters (allowed: alphanumeric, underscore, dot, hyphen)")
+    end)
+
+    it("rejects spaces in tool names", function()
+      local registry = require("flemma.tools.registry")
+      assert.has_error(function()
+        registry.register("my tool", {
+          name = "my tool",
+          description = "test",
+          input_schema = { type = "object", properties = {} },
+          execute = function() end,
+        })
+      end, "flemma: tool name 'my tool' contains invalid characters (allowed: alphanumeric, underscore, dot, hyphen)")
     end)
   end)
 end)

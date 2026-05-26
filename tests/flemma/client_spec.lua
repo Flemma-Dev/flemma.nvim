@@ -93,7 +93,7 @@ end)
 -- ─── integration: header capture via socat ─────────────────────────────────
 
 describe("client.send_request() header wire format", function()
-  local PORT = 19876
+  local PORT = 19876 + (vim.version().minor or 0)
   local socat_job ---@type integer|nil
 
   ---@type string[]

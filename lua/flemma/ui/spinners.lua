@@ -17,10 +17,11 @@ M.FRAMES = {
     "⣥", "⣦", "⣮", "⣶", "⣷", "⣿", "⡿", "⠿", "⢟", "⠟", "⡛", "⠛", "⠫", "⢋",
     "⠋", "⠍", "⡉", "⠉", "⠑", "⠡", "⢁",
   },
+  countdown = { "◜", "◠", "◝", "◞", "◡", "◟" },
 }
 -- stylua: ignore end
 
---- Animation speed per phase — number of 100ms ticks per frame advance
+--- Animation speed per phase — number of 100ms ticks per frame advance.
 ---@type table<string, integer>
 M.SPEED = {
   waiting = 1,
@@ -28,6 +29,7 @@ M.SPEED = {
   streaming = 1,
   buffering = 2,
   tool = 2,
+  countdown = 1,
 }
 
 return M

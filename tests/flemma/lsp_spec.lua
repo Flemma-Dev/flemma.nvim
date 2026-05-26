@@ -2,8 +2,8 @@ describe("Flemma LSP", function()
   local flemma
 
   before_each(function()
-    -- Clear the FlemmaLsp augroup to prevent stale autocmds from previous tests
-    vim.api.nvim_create_augroup("FlemmaLsp", { clear = true })
+    -- Clear hooks subscribers to prevent stale subscriptions from previous tests
+    require("flemma.hooks")._clear_subscribers()
     -- Stop any lingering LSP clients
     for _, client in pairs(vim.lsp.get_clients({ name = "flemma" })) do
       client:stop(true)
@@ -584,5 +584,166 @@ describe("Flemma LSP", function()
     local result = definition_sync(client, bufnr, 3, 2)
     assert.is_not_nil(result, "Should navigate from tool_use body to tool_result")
     assert.equals(6, result.range.start.line)
+  end)
+
+  it("navigates from tool_result with job= to job_result", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_bg1`)",
+      "```json",
+      '{"command": "sleep 10"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_bg1` (job=job_nav1)",
+      "",
+      "```",
+      "Running as a background job.",
+      "```",
+      "",
+      "@You:",
+      "**Job Result:** `job_nav1`",
+      "",
+      "```",
+      "done",
+      "```",
+    })
+
+    -- Cursor on tool_result header (0-indexed line 6)
+    local result = definition_sync(client, bufnr, 6, 5)
+    assert.is_not_nil(result, "Expected navigation from tool_result to job_result")
+    -- Job result header is at line 14 (1-indexed) = line 13 (0-indexed)
+    assert.equals(13, result.range.start.line)
+  end)
+
+  it("navigates from job_result back to tool_result", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_bg2`)",
+      "```json",
+      '{"command": "sleep 10"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_bg2` (job=job_nav2)",
+      "",
+      "```",
+      "Running as a background job.",
+      "```",
+      "",
+      "@You:",
+      "**Job Result:** `job_nav2`",
+      "",
+      "```",
+      "result here",
+      "```",
+    })
+
+    -- Cursor on job_result header (0-indexed line 13)
+    local result = definition_sync(client, bufnr, 13, 5)
+    assert.is_not_nil(result, "Expected navigation from job_result to tool_result")
+    -- Tool result header is at line 7 (1-indexed) = line 6 (0-indexed)
+    assert.equals(6, result.range.start.line)
+  end)
+
+  it("returns nil for tool_result with job= when job not delivered", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_bg3`)",
+      "```json",
+      '{"command": "sleep 999"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_bg3` (job=job_pending1)",
+      "",
+      "```",
+      "Running as a background job.",
+      "```",
+    })
+
+    -- Cursor on tool_result header (0-indexed line 6)
+    local result = definition_sync(client, bufnr, 6, 5)
+    assert.is_nil(result, "Should not navigate when job is not delivered")
+  end)
+
+  it("shows job pending hover for tool_result with undelivered job", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_bg4`)",
+      "```json",
+      '{"command": "sleep 999"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_bg4` (job=job_hover1)",
+      "",
+      "```",
+      "Running as a background job.",
+      "```",
+    })
+
+    -- Hover on tool_result header (0-indexed line 6)
+    local result = hover_sync(client, bufnr, 6, 5)
+    assert.is_not_nil(result, "Expected hover result")
+    assert.is_truthy(result.contents.value:find("job_hover1"))
+    assert.is_truthy(result.contents.value:find("pending"))
+    assert.is_truthy(result.contents.value:find("flemma%-ast"), "Should include AST dump")
+  end)
+
+  it("shows job completed hover for tool_result with delivered job", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_bg5`)",
+      "```json",
+      '{"command": "ls"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_bg5` (job=job_hover2)",
+      "",
+      "```",
+      "Running as a background job.",
+      "```",
+      "",
+      "@You:",
+      "**Job Result:** `job_hover2`",
+      "",
+      "```",
+      "file1.txt",
+      "```",
+    })
+
+    -- Hover on tool_result header (0-indexed line 6)
+    local result = hover_sync(client, bufnr, 6, 5)
+    assert.is_not_nil(result, "Expected hover result")
+    assert.is_truthy(result.contents.value:find("job_hover2"))
+    assert.is_truthy(result.contents.value:find("completed"))
+    assert.is_truthy(result.contents.value:find("flemma%-ast"), "Should include AST dump")
+  end)
+
+  it("shows job error hover for tool_result with failed job", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_bg6`)",
+      "```json",
+      '{"command": "exit 1"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_bg6` (job=job_hover3)",
+      "",
+      "```",
+      "Running as a background job.",
+      "```",
+      "",
+      "@You:",
+      "**Job Result:** `job_hover3` (error)",
+      "",
+      "```",
+      "Exit code 1",
+      "```",
+    })
+
+    -- Hover on tool_result header (0-indexed line 6)
+    local result = hover_sync(client, bufnr, 6, 5)
+    assert.is_not_nil(result, "Expected hover result")
+    assert.is_truthy(result.contents.value:find("job_hover3"))
+    assert.is_truthy(result.contents.value:find("error"))
+    assert.is_truthy(result.contents.value:find("flemma%-ast"), "Should include AST dump")
   end)
 end)

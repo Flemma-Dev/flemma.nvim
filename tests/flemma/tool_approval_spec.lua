@@ -13,6 +13,7 @@ package.loaded["flemma.parser"] = nil
 package.loaded["flemma.sandbox"] = nil
 package.loaded["flemma.sandbox.backends.bwrap"] = nil
 package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.listops"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
 package.loaded["flemma.config.schema"] = nil
@@ -424,6 +425,37 @@ describe("Approval Setup", function()
 
       -- Resolver is registered but always returns nil, so default kicks in
       assert.equals("require_approval", approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t1" }))
+    end)
+  end)
+
+  describe("with glob patterns in auto_approve", function()
+    it("approves tools matching a wildcard pattern", function()
+      set_config_and_setup({ tools = { auto_approve = { "flemma.*" } } })
+
+      assert.equals("approve", approval.resolve("flemma.jobs.status", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("flemma.future_tool", {}, { bufnr = 1, tool_id = "t2" }))
+    end)
+
+    it("does not approve tools outside the glob pattern", function()
+      set_config_and_setup({ tools = { auto_approve = { "flemma.*" } } })
+
+      assert.equals("require_approval", approval.resolve("bash", { command = "ls" }, { bufnr = 1, tool_id = "t1" }))
+    end)
+
+    it("mixes exact matches with glob patterns", function()
+      set_config_and_setup({ tools = { auto_approve = { "read", "flemma.*" } } })
+
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("flemma.jobs.status", {}, { bufnr = 1, tool_id = "t2" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = 1, tool_id = "t3" }))
+    end)
+
+    it("supports MCP-style namespace patterns", function()
+      set_config_and_setup({ tools = { auto_approve = { "slack.*" } } })
+
+      assert.equals("approve", approval.resolve("slack.channels_list", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("slack.send_message", {}, { bufnr = 1, tool_id = "t2" }))
+      assert.equals("require_approval", approval.resolve("github.create_pr", {}, { bufnr = 1, tool_id = "t3" }))
     end)
   end)
 
@@ -1392,13 +1424,12 @@ describe("Frontmatter Approval", function()
       assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
 
-    it("frontmatter can remove $standard to disable auto-approval", function()
+    it("frontmatter can set empty auto_approve to disable auto-approval", function()
       set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
 
       local bufnr = create_buffer({
         "```lua",
-        'flemma.opt.tools.auto_approve = { "$standard" }',
-        'flemma.opt.tools.auto_approve:remove("$standard")',
+        "flemma.opt.tools.auto_approve = {}",
         "```",
         "@You:",
         "test",
@@ -2415,20 +2446,20 @@ end)
 -- ============================================================================
 
 describe("Injector resolve_error_message", function()
-  it("returns DENIED_MESSAGE for denied status", function()
-    assert.equals(injector.DENIED_MESSAGE, injector.resolve_error_message("denied"))
+  it("returns denied message for denied status", function()
+    assert.equals("The tool was denied by a policy.", injector.resolve_error_message("denied"))
   end)
 
-  it("returns DENIED_MESSAGE for denied status even with content", function()
-    assert.equals(injector.DENIED_MESSAGE, injector.resolve_error_message("denied", "user content"))
+  it("returns denied message for denied status even with content", function()
+    assert.equals("The tool was denied by a policy.", injector.resolve_error_message("denied", "user content"))
   end)
 
-  it("returns REJECTED_MESSAGE for rejected status with no content", function()
-    assert.equals(injector.REJECTED_MESSAGE, injector.resolve_error_message("rejected"))
+  it("returns rejected message for rejected status with no content", function()
+    assert.equals("This tool has been rejected by the user.", injector.resolve_error_message("rejected"))
   end)
 
-  it("returns REJECTED_MESSAGE for rejected status with empty content", function()
-    assert.equals(injector.REJECTED_MESSAGE, injector.resolve_error_message("rejected", ""))
+  it("returns rejected message for rejected status with empty content", function()
+    assert.equals("This tool has been rejected by the user.", injector.resolve_error_message("rejected", ""))
   end)
 
   it("returns user content for rejected status with non-empty content", function()
@@ -2535,7 +2566,6 @@ describe("Approval Preset Expansion", function()
   end)
 
   it("unions multiple presets", function()
-    -- Register custom presets before facade init (presets.setup is called inside set_config_and_setup)
     config_facade.init(schema)
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { auto_approve = { "$standard", "$extra" } } })
     require("flemma.presets").setup({ ["$extra"] = { auto_approve = { "bash" } } })

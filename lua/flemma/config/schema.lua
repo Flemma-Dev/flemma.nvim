@@ -14,6 +14,16 @@ local symbols = require("flemma.symbols")
 -- Reusable type helpers
 -- ---------------------------------------------------------------------------
 
+---@type string[]
+local BAR_POSITIONS = { "top", "bottom", "top left", "top right", "bottom left", "bottom right" }
+
+--- Bar position enum with a caller-supplied default.
+---@param default string
+---@return flemma.schema.Node
+local function position(default)
+  return s.enum(BAR_POSITIONS, default)
+end
+
 --- HighlightValue: string | { dark: string, light: string }
 --- String defaults produce a union with the string branch carrying the default.
 --- Table defaults produce a union with the object branch carrying the defaults.
@@ -115,6 +125,7 @@ return s.object({
         model = s.optional(s.string()),
         parameters = s.optional(general_parameters_schema()),
         auto_approve = s.optional(s.list(s.string())),
+        tools = s.optional(s.list(s.string())),
       })
     ),
     {}
@@ -130,25 +141,12 @@ return s.object({
       s.list(s.string(), { "$standard" }),
       s.func():type_as("flemma.tools.AutoApproveFunction"),
       s.string()
-    )
-      :type_as("flemma.tools.AutoApprove")
-      :coerce(function(value, _ctx)
-        -- Expand $-prefixed preset references to their auto_approve list.
-        -- At boot time presets may not be registered yet; finalize() re-runs
-        -- coerce after presets.setup() so deferred expansion succeeds.
-        if type(value) ~= "string" or not vim.startswith(value, "$") then
-          return value
-        end
-        local preset = require("flemma.presets").get(value)
-        if not preset or not preset.auto_approve then
-          return value
-        end
-        return preset.auto_approve
-      end),
+    ):type_as("flemma.tools.AutoApprove"),
     auto_approve_sandboxed = s.boolean(true),
     autopilot = s.object({
       enabled = s.boolean(true),
       max_turns = s.integer(100),
+      resume_delay = s.integer(2000),
     }):coerce(function(value, _ctx)
       if type(value) == "boolean" then
         return { enabled = value }
@@ -160,16 +158,6 @@ return s.object({
     show_spinner = s.boolean(true),
     cursor_after_result = s.enum({ "result", "stay", "next" }, "result"),
     modules = s.list(s.loadable(), {}),
-    mcporter = s.object({
-      enabled = s.boolean(false),
-      path = s.string("mcporter"),
-      timeout = s.integer(60),
-      startup = s.object({
-        concurrency = s.integer(4),
-      }),
-      include = s.list(s.string(), {}),
-      exclude = s.list(s.string(), {}),
-    }),
     truncate = s.object({
       output_path_format = s.string("${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"),
     }),
@@ -180,18 +168,44 @@ return s.object({
     [symbols.ALIASES] = {
       approve = "auto_approve",
     },
-  }):allow_list(s.string():validate(function(name)
-    local tool_registry = require("flemma.tools.registry")
-    if not tool_registry.has(name) then
-      local suggestion = tool_registry.closest_match(name)
-      local message = ("Unknown tool '%s'"):format(name)
-      if suggestion then
-        message = message .. (" -- did you mean '%s'?"):format(suggestion)
+  })
+    :allow_list(s.string():validate(function(name)
+      local glob = require("flemma.utilities.glob")
+      if glob.is_glob(name) then
+        return false, ("Glob pattern '%s' matched no tools"):format(name)
       end
-      return false, message
-    end
-    return true
-  end)),
+      local tool_registry = require("flemma.tools.registry")
+      if not tool_registry.has(name) then
+        local suggestion = tool_registry.closest_match(name)
+        local message = ("Unknown tool '%s'"):format(name)
+        if suggestion then
+          message = message .. (" -- did you mean '%s'?"):format(suggestion)
+        end
+        return false, message
+      end
+      return true
+    end))
+    :coerce(function(value, _ctx)
+      if type(value) ~= "string" then
+        return value
+      end
+      local glob = require("flemma.utilities.glob")
+      if not glob.is_glob(value) then
+        return value
+      end
+      local tool_registry = require("flemma.tools.registry")
+      local expanded = {}
+      for tool_name, _ in pairs(tool_registry.get_all({ include_disabled = true })) do
+        if glob.match(tool_name, value) then
+          table.insert(expanded, tool_name)
+        end
+      end
+      table.sort(expanded)
+      if #expanded == 0 then
+        return value
+      end
+      return expanded
+    end),
 
   templating = s.object({
     modules = s.list(s.loadable(), {}),
@@ -230,6 +244,8 @@ return s.object({
     tool_result_denied = highlight("DiagnosticError"),
     tool_result_aborted = highlight("DiagnosticError"),
     tool_preview = highlight("Comment"),
+    fence_label = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
+    fence_bar = highlight("FlemmaFenceLabel"),
     fold_preview = highlight("Comment"),
     fold_meta = highlight("Comment"),
     tool_detail = highlight("Comment"),
@@ -239,7 +255,7 @@ return s.object({
 
   ruler = s.object({
     enabled = s.boolean(true),
-    char = s.string("\u{2500}"),
+    char = s.string("─"),
     hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
   }),
 
@@ -279,26 +295,15 @@ return s.object({
     usage = s.object({
       enabled = s.boolean(true),
       timeout = s.integer(10000),
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "top"),
+      position = position("top"),
       highlight = s.string("@text.note,PmenuSel"),
     }),
     progress = s.object({
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "bottom left"),
+      position = position("bottom left"),
       highlight = s.string("StatusLine"),
+    }),
+    jobs = s.object({
+      position = position("bottom right"),
     }),
     pricing = s.object({
       enabled = s.boolean(true),
@@ -309,8 +314,8 @@ return s.object({
         s.string([[
           {{ model.name }}
           {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
-          {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
-          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#·%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+          {%- if session.cost then %} %#FlemmaStatusTextMuted#·%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
           {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
         ]]),
         s.func():type_as("flemma.statusline.FormatFunction")
@@ -327,7 +332,10 @@ return s.object({
     disable_textwidth = s.boolean(true),
     auto_write = s.boolean(false),
     manage_updatetime = s.boolean(true),
-    foldlevel = s.integer(1),
+    fold = s.object({
+      level = s.integer(1),
+      gap = s.boolean(false),
+    }),
     -- Compact `{conceallevel}{concealcursor}` format, e.g. "2nv" = conceallevel 2, concealcursor "nv".
     -- false disables the override and leaves the user's own window settings untouched.
     -- See docs/conceal.md.
@@ -336,6 +344,7 @@ return s.object({
       thinking = s.boolean(true),
       tool_use = s.boolean(true),
       tool_result = s.boolean(true),
+      job_result = s.boolean(true),
       frontmatter = s.boolean(false),
     }),
   }),
@@ -345,10 +354,15 @@ return s.object({
       send = s.string("<C-]>"),
       cancel = s.string("<C-c>"),
       tool_execute = s.string("<M-CR>"),
+      tool_background = s.string("<M-b>"),
       message_next = s.string("]m"),
       message_prev = s.string("[m"),
       fold_toggle = s.union(s.string("<Space>"), s.literal(false)),
-      conceal_toggle = s.union(s.string("<Space><Space>"), s.literal(false)),
+      fold_turn = s.union(s.string("zy"), s.literal(false)),
+      fold_turns = s.union(s.string("zY"), s.literal(false)),
+      conceal_toggle = s.union(s.string("yoe"), s.literal(false)),
+      conceal_on = s.union(s.string("]oe"), s.literal(false)),
+      conceal_off = s.union(s.string("[oe"), s.literal(false)),
     }),
     insert = s.object({
       send = s.string("<C-]>"),
@@ -403,7 +417,7 @@ return s.object({
   integrations = s.object({
     devicons = s.object({
       enabled = s.boolean(true),
-      icon = s.string("\u{2234}"), -- ∴ U+2234 Therefore
+      icon = s.string("∴"),
     }),
   }),
 
@@ -411,7 +425,15 @@ return s.object({
     enabled = s.boolean(vim.lsp ~= nil),
   }),
 
-  experimental = s.object({}),
+  experimental = s.object({
+    -- Patch the global markdown treesitter highlights query to strip
+    -- conceal_lines directives from fenced code block delimiters. Without this,
+    -- conceallevel>=2 triggers an expensive _on_conceal_line callback on every
+    -- keystroke (~30ms overhead on large buffers). The patch is deferred to the
+    -- first .chat file open so markdown-only sessions are unaffected. Set to
+    -- false if the patch interferes with other markdown plugins.
+    patch_markdown_conceal = s.boolean(true),
+  }),
 
   [symbols.ALIASES] = {
     timeout = "parameters.timeout",

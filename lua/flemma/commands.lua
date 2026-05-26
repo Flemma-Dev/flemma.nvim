@@ -273,11 +273,12 @@ local function setup_commands()
           return
         end
 
-        -- Apply auto_approve from preset to RUNTIME layer
+        local config_facade = require("flemma.config")
+        if preset.tools then
+          config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME).tools = preset.tools
+        end
         if preset.auto_approve then
-          local config_facade = require("flemma.config")
-          local w = config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME)
-          w.tools.auto_approve = preset.auto_approve
+          config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME).tools.auto_approve = preset.auto_approve
         end
 
         local provider = preset.provider
@@ -586,6 +587,18 @@ local function setup_commands()
           local ok, err = require("flemma.tools.executor").execute_at_cursor(bufnr)
           if not ok then
             notify.error(err or "Execution failed")
+          end
+        end,
+      },
+      background = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = require("flemma.tools.executor").background_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Failed to move tool to background")
+          else
+            notify.info("Tool moved to background.")
           end
         end,
       },

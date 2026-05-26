@@ -3,6 +3,7 @@ package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 
 local tools = require("flemma.tools")
+local tools_registry = require("flemma.tools.registry")
 local loader = require("flemma.loader")
 
 -- Register a fixture tool module via package.preload
@@ -75,6 +76,268 @@ describe("tools.modules config", function()
   end)
 end)
 
+describe("async tool source with module schema", function()
+  local s = require("flemma.schema")
+  local config_facade = require("flemma.config")
+  local schema
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+    config_facade.init(schema)
+
+    tools = require("flemma.tools")
+    tools_registry = require("flemma.tools.registry")
+    tools.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    package.preload["test.fixture.async_with_schema"] = nil
+    package.loaded["test.fixture.async_with_schema"] = nil
+  end)
+
+  it("registers module-level config schema for DISCOVER resolution", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+            endpoint = s.optional(s.string()),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+
+    local found = tools.get_config_schema("my_async_source")
+    assert.is_not_nil(found, "module schema should be discoverable via get_config_schema")
+  end)
+
+  it("module schema is accessible from the registry directly", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+
+    assert.is_not_nil(tools_registry.get_module_schema("my_async_source"))
+    assert.is_nil(tools_registry.get_module_schema("nonexistent"))
+  end)
+
+  it("module schema defaults materialize into config store", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+            timeout = s.integer(42),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+
+    local cfg = config_facade.get()
+    assert.is_not_nil(cfg.tools.my_async_source)
+    assert.equals(false, cfg.tools.my_async_source.enabled)
+    assert.equals(42, cfg.tools.my_async_source.timeout)
+  end)
+
+  it("clear() removes module schemas", function()
+    package.preload["test.fixture.async_with_schema"] = function()
+      return {
+        metadata = {
+          name = "my_async_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+          }),
+        },
+        resolve = function(_register, done)
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.register("test.fixture.async_with_schema")
+    assert.is_not_nil(tools_registry.get_module_schema("my_async_source"))
+
+    tools.clear()
+    assert.is_nil(tools_registry.get_module_schema("my_async_source"))
+  end)
+end)
+
+-- Regression: DISCOVER-backed tool config (e.g., tools.mcporter) is deferred
+-- during config.apply(SETUP, ..., {defer_discover=true}). The async resolver
+-- must not fire until after finalize() replays the deferred writes, otherwise
+-- it sees the schema default (enabled=false) instead of the user's value.
+describe("async tool source reads deferred config after finalize", function()
+  local s = require("flemma.schema")
+  local config_facade = require("flemma.config")
+  local schema
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+    config_facade.init(schema)
+
+    tools = require("flemma.tools")
+    tools_registry = require("flemma.tools.registry")
+    tools.clear()
+  end)
+
+  after_each(function()
+    package.preload["test.fixture.gated_async"] = nil
+    package.loaded["test.fixture.gated_async"] = nil
+  end)
+
+  ---Build a fixture module whose resolver captures the config it sees.
+  ---@param capture table Table to write resolve_saw_enabled into
+  ---@return table module The preloadable module table
+  local function make_gated_fixture(capture)
+    return {
+      metadata = {
+        name = "gated_source",
+        config_schema = s.object({
+          enabled = s.boolean(false),
+          path = s.string("default-path"),
+        }),
+      },
+      resolve = function(register, done)
+        local cfg = config_facade.get()
+        local source_cfg = cfg.tools and cfg.tools.gated_source or {}
+        capture.enabled = source_cfg.enabled
+        if not source_cfg.enabled then
+          done()
+          return
+        end
+        register("gated_tool", {
+          name = "gated_tool",
+          description = "Registered because enabled=true",
+          input_schema = { type = "object", properties = {} },
+        })
+        done()
+      end,
+      timeout = 5,
+    }
+  end
+
+  -- The core invariant: after the full boot sequence, the resolver must see
+  -- the user's DISCOVER-backed config, not the schema default.
+  it("resolver sees user-provided enabled=true after deferred replay", function()
+    local capture = {}
+    package.preload["test.fixture.gated_async"] = function()
+      return make_gated_fixture(capture)
+    end
+
+    -- 1. Apply user config with defer_discover
+    local _, _, deferred = config_facade.apply(
+      config_facade.LAYERS.SETUP,
+      { tools = { gated_source = { enabled = true, path = "/usr/bin/test" } } },
+      { defer_discover = true }
+    )
+
+    -- 2. Module registration (registers schema + defers async start)
+    tools.setup()
+    tools.register("test.fixture.gated_async")
+
+    -- 3. Finalize replays deferred writes (enabled=true lands in L20)
+    config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+
+    -- 4. Start deferred async sources (resolver runs with finalized config)
+    tools.start_pending_sources()
+
+    assert.is_true(capture.enabled, "resolver should see enabled=true from deferred config")
+    local all = tools.get_all({ include_disabled = true })
+    assert.is_not_nil(all.gated_tool, "tool should be registered when enabled=true")
+  end)
+
+  it("resolver sees default enabled=false when user does not enable", function()
+    local capture = {}
+    package.preload["test.fixture.gated_async"] = function()
+      return make_gated_fixture(capture)
+    end
+
+    local _, _, deferred = config_facade.apply(config_facade.LAYERS.SETUP, {}, { defer_discover = true })
+
+    tools.setup()
+    tools.register("test.fixture.gated_async")
+    config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+    tools.start_pending_sources()
+
+    assert.is_false(capture.enabled, "resolver should see enabled=false (default)")
+  end)
+
+  -- Verify the mechanism: register() defers async sources, not fires them
+  -- immediately. Without deferral, the resolver would run before finalize().
+  it("register() does not fire async resolver immediately", function()
+    local resolve_called = false
+    package.preload["test.fixture.gated_async"] = function()
+      return {
+        metadata = {
+          name = "gated_source",
+          config_schema = s.object({
+            enabled = s.boolean(false),
+          }),
+        },
+        resolve = function(_register, done)
+          resolve_called = true
+          done()
+        end,
+        timeout = 5,
+      }
+    end
+
+    tools.setup()
+    tools.register("test.fixture.gated_async")
+
+    -- Resolver should NOT have fired yet — it's deferred
+    assert.is_false(resolve_called, "resolver should be deferred, not immediate")
+
+    -- After start_pending_sources, it fires
+    tools.start_pending_sources()
+    assert.is_true(resolve_called, "resolver should fire after start_pending_sources")
+  end)
+end)
+
 describe("provider module resolution", function()
   local provider_registry
 
@@ -128,173 +391,6 @@ describe("provider module resolution", function()
   it("is_module_path detects provider module paths in config", function()
     assert.is_true(loader.is_module_path("3rd.provider.deepseek"))
     assert.is_false(loader.is_module_path("anthropic"))
-  end)
-end)
-
-describe("approval module resolution", function()
-  local approval
-  local config_facade = require("flemma.config")
-  local schema = require("flemma.config.schema")
-
-  before_each(function()
-    package.loaded["flemma.tools.approval"] = nil
-    package.loaded["flemma.config"] = nil
-    package.loaded["flemma.config.store"] = nil
-    package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema"] = nil
-    approval = require("flemma.tools.approval")
-    config_facade = require("flemma.config")
-    schema = require("flemma.config.schema")
-    config_facade.init(schema)
-
-    package.preload["test.fixture.approval"] = function()
-      return {
-        resolve = function(tool_name)
-          if tool_name == "bash" then
-            return "deny"
-          end
-          return nil
-        end,
-        priority = 80,
-        description = "Test approval resolver",
-      }
-    end
-
-    config_facade.apply(config_facade.LAYERS.SETUP, {
-      tools = {
-        auto_approve = "test.fixture.approval",
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-  end)
-
-  after_each(function()
-    approval.clear()
-    package.preload["test.fixture.approval"] = nil
-    package.loaded["test.fixture.approval"] = nil
-  end)
-
-  it("loads resolver from module path on first resolve", function()
-    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("deny", result)
-  end)
-
-  it("passes through for tools the module doesn't handle", function()
-    local result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("require_approval", result)
-  end)
-
-  it("is addressable by module path via get() and unregister()", function()
-    local entry = approval.get("test.fixture.approval")
-    assert.is_not_nil(entry)
-    assert.equals(100, entry.priority)
-
-    assert.is_true(approval.unregister("test.fixture.approval"))
-    assert.is_nil(approval.get("test.fixture.approval"))
-  end)
-end)
-
-describe("approval module resolution with string[]", function()
-  local approval
-  local config_facade = require("flemma.config")
-  local schema = require("flemma.config.schema")
-
-  before_each(function()
-    package.loaded["flemma.tools.approval"] = nil
-    package.loaded["flemma.config"] = nil
-    package.loaded["flemma.config.store"] = nil
-    package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema"] = nil
-    approval = require("flemma.tools.approval")
-    config_facade = require("flemma.config")
-    schema = require("flemma.config.schema")
-    config_facade.init(schema)
-
-    package.preload["test.fixture.approval"] = function()
-      return {
-        resolve = function(tool_name)
-          if tool_name == "bash" then
-            return "deny"
-          end
-          return nil
-        end,
-      }
-    end
-
-    package.preload["test.fixture.approval2"] = function()
-      return {
-        resolve = function(tool_name)
-          if tool_name == "read_file" then
-            return "approve"
-          end
-          return nil
-        end,
-      }
-    end
-  end)
-
-  after_each(function()
-    approval.clear()
-    package.preload["test.fixture.approval"] = nil
-    package.loaded["test.fixture.approval"] = nil
-    package.preload["test.fixture.approval2"] = nil
-    package.loaded["test.fixture.approval2"] = nil
-  end)
-
-  it("loads multiple module resolvers from string[]", function()
-    config_facade.apply(config_facade.LAYERS.SETUP, {
-      tools = {
-        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-
-    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("deny", result)
-
-    result = approval.resolve("read_file", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("approve", result)
-  end)
-
-  it("mixes module paths and plain tool names in string[]", function()
-    config_facade.apply(config_facade.LAYERS.SETUP, {
-      tools = {
-        auto_approve = { "test.fixture.approval", "calculator" },
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-
-    -- Module resolver handles bash
-    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("deny", result)
-
-    -- Plain tool name match
-    result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("approve", result)
-
-    -- Neither module nor tool name list handles this
-    result = approval.resolve("unknown", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("require_approval", result)
-  end)
-
-  it("passes through when no module handles the tool", function()
-    config_facade.apply(config_facade.LAYERS.SETUP, {
-      tools = {
-        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-
-    local result = approval.resolve("unknown_tool", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("require_approval", result)
   end)
 end)
 
@@ -388,8 +484,8 @@ describe("end-to-end integration", function()
     assert.is_nil(tool)
   end)
 
-  it("name with dot is rejected at define() time", function()
-    assert.has_error(function()
+  it("name with dot is accepted at define() time", function()
+    assert.has_no.errors(function()
       require("flemma.tools.registry").define("dotted.name", {
         name = "dotted.name",
         description = "test",

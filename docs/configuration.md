@@ -34,7 +34,7 @@ require("flemma").setup({
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
   tools = {
     require_approval = true,                 -- When false, auto-approves all tools
-    auto_approve = { "$standard" },          -- $standard approves read, write, edit, find, grep, ls
+    auto_approve = { "$standard" },          -- List, glob patterns, presets ($name), or a function — see docs/tools.md#configuring-approval
     auto_approve_sandboxed = true,           -- Auto-approve sandboxed tools (set false to require manual approval)
     max_concurrent = 2,                      -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30,                    -- Async tool timeout (seconds)
@@ -43,22 +43,26 @@ require("flemma").setup({
     autopilot = {
       enabled = true,                        -- Auto-execute approved tools and re-send
       max_turns = 100,                       -- Safety limit on consecutive autonomous turns
+      resume_delay = 2000,                   -- Delay (ms) before auto-continue after background job completion
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
       cwd = "urn:flemma:buffer:path",        -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
-    grep = {                                 -- [experimental.tools] Grep tool configuration
+    grep = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for searches
       exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
     },
-    find = {                                 -- [experimental.tools] Find tool configuration
+    find = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for file searches
       exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
     },
-    ls = {                                   -- [experimental.tools] Ls tool configuration
+    ls = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
+    },
+    truncate = {
+      output_path_format = "${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt",  -- Where overflow files are written
     },
     mcporter = {
       enabled = false,                       -- Discover MCP servers via mcporter CLI (see docs/mcp.md)
@@ -67,7 +71,7 @@ require("flemma").setup({
       startup = {
         concurrency = 4,                     -- Max parallel schema fetches at startup
       },
-      include = {},                          -- Glob patterns: matching tools enabled (e.g., { "slack:*" })
+      include = {},                          -- Glob patterns: matching tools enabled (e.g., { "slack.*" })
       exclude = {},                          -- Glob patterns: matching tools skipped entirely
     },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
@@ -88,8 +92,8 @@ require("flemma").setup({
     lua_delimiter = "FlemmaLuaExpression",   -- {{ }} and {% %} delimiters
     user_file_reference = "Include",
     thinking_tag = "Comment",
-    thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
-                       light = "Comment-bg:#102020+fg:#111111" },
+    thinking_block = { dark = "Comment+bg:#000000-fg:#333333",
+                       light = "Comment-bg:#000000+fg:#333333" },
     tool_icon = "FlemmaToolUseTitle",
     tool_name = "Function",
     tool_use_title = "Function",
@@ -102,6 +106,9 @@ require("flemma").setup({
     tool_result_aborted  = "DiagnosticError", -- concise `(aborted)` suffix
     tool_preview = "Comment",
     tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
+    fence_label = { dark = "Comment-fg:#303030",    -- Fence code block language label
+                    light = "Comment+fg:#303030" },
+    fence_bar = "FlemmaFenceLabel",                 -- Fence code block delimiter bar
     fold_preview = "Comment",
     fold_meta = "Comment",
     busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
@@ -119,10 +126,10 @@ require("flemma").setup({
   },
   line_highlights = {
     enabled = true,
-    frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
-    system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
-    user = { dark = "Normal", light = "Normal" },
-    assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
+    frontmatter = { dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" },
+    system = { dark = "Normal+bg:#101112", light = "Normal-bg:#101112" },
+    user = { dark = "Normal+bg:#202122", light = "Normal-bg:#202122" },
+    assistant = { dark = "Normal", light = "Normal" },
   },
   ui = {
     usage = {
@@ -135,7 +142,13 @@ require("flemma").setup({
       position = "bottom left",                -- Same anchor enum as ui.usage.position
       highlight = "StatusLine",                -- Highlight group(s) for the progress bar; first with both fg+bg wins
     },
-    pricing = { enabled = true },
+    jobs = {
+      position = "bottom right",               -- Background jobs bar position
+    },
+    pricing = {
+      enabled = true,                          -- Show cost-per-request annotations
+      high_cost_threshold = 30,                -- Cents — requests above this get a high-cost highlight
+    },
     statusline = {
       format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
     },
@@ -145,12 +158,16 @@ require("flemma").setup({
     disable_textwidth = true,
     auto_write = false,                      -- Write buffer after each request
     manage_updatetime = true,                -- Lower updatetime in chat buffers
-    foldlevel = 1,                           -- 0=all closed, 1=thinking collapsed, 99=all open
+    fold = {
+      level = 1,                             -- 0=all closed, 1=thinking collapsed, 99=all open
+      gap = false,                           -- Leave one blank line visible between folded messages
+    },
     conceal = "2nv",                         -- "{level}{cursor}" — hide markdown syntax by default; false/nil to opt out
     auto_close = {
       thinking = true,                       -- Auto-close thinking blocks when they become terminal
       tool_use = true,                       -- Auto-close tool_use blocks when completed
       tool_result = true,                    -- Auto-close tool_result blocks when terminal
+      job_result = true,                     -- Auto-close job_result blocks when delivered
       frontmatter = false,                   -- Auto-close frontmatter blocks (disabled by default)
     },
   },
@@ -161,6 +178,15 @@ require("flemma").setup({
   },
   diagnostics = {
     enabled = false,                         -- Enable request diagnostics for debugging prompt caching issues
+  },
+  integrations = {
+    devicons = {
+      enabled = true,                        -- Register a `.chat` filetype icon with nvim-web-devicons when installed
+      icon = "∴",                            -- Glyph used for the icon
+    },
+  },
+  lsp = {
+    enabled = vim.lsp ~= nil,                -- In-process LSP for .chat buffers (hover, go-to-definition)
   },
   secrets = {
     gcloud = {
@@ -195,10 +221,15 @@ require("flemma").setup({
       send = "<C-]>",                        -- Hybrid: execute pending tools or send
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
+      tool_background = "<M-b>",             -- Move executing tool to background
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
-      conceal_toggle = "<Space><Space>",     -- Toggle conceal level; false to disable
+      fold_turn = "zy",                      -- Fold intermediate messages in current turn
+      fold_turns = "zY",                     -- Fold intermediate messages in every turn
+      conceal_toggle = "yoe",                -- Toggle conceal level; false to disable
+      conceal_on = "]oe",                    -- Enable conceal; false to disable
+      conceal_off = "[oe",                   -- Disable conceal; false to disable
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
@@ -206,8 +237,7 @@ require("flemma").setup({
     text_object = "m",                       -- "m" or false to disable
   },
   experimental = {
-    lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)
-    tools = false,                          -- Enable exploration tools (grep, find, ls) — see docs/tools.md
+    patch_markdown_conceal = true,          -- Replace markdown conceal_lines with fence overlay extmarks (see docs/conceal.md)
   },
 })
 ```
@@ -296,7 +326,8 @@ Phase labeling is enabled by default. Set `false` to omit phase labels from the 
 | `editing.disable_textwidth` | `true`  | Sets `textwidth = 0` in chat buffers to prevent hard wrapping.                                                                                                                                                        |
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
-| `editing.foldlevel`         | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+| `editing.fold.level`        | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+| `editing.fold.gap`          | `false` | Leave one blank line visible between consecutive folded messages for visual separation. Only applies to message-level folds; tool block folds always collapse fully.                                                  |
 | `editing.conceal`           | `"2nv"` | Compact `{conceallevel}{concealcursor}` override applied to chat windows. See [docs/conceal.md](conceal.md) for format and the `line_highlights` interaction caveat.                                                  |
 | `editing.auto_close.*`      | varies  | Auto-close (fold) blocks when they reach a terminal state. See [Auto-close behaviour](#auto-close-behaviour) below.                                                                                                   |
 
@@ -337,14 +368,23 @@ Old `.chat` files that use the previous inline role marker format (e.g., `@You: 
 
 Autopilot turns Flemma into an autonomous agent. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
 
-| Key                         | Default | Effect                                                                                                                                                                |
-| --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tools.autopilot.enabled`   | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
-| `tools.autopilot.max_turns` | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
+| Key                            | Default | Effect                                                                                                                                                                |
+| ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tools.autopilot.enabled`      | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
+| `tools.autopilot.max_turns`    | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
+| `tools.autopilot.resume_delay` | `2000`  | Milliseconds to wait before auto-continuing after a background job completes. Press <kbd>Ctrl-C</kbd> during the delay to cancel. Set `0` for immediate resume.       |
 
 When a tool requires user approval, autopilot injects a tool_result placeholder with a `(pending)` header suffix and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `(pending)` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `(pending)` suffix is cleared from the header and your content is sent to the model. If you edit the content of an `(approved)` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
 
-Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop.
+Press <kbd>Ctrl-C</kbd> at any point to cancel. The behaviour is cursor-aware:
+
+- **Cursor on a tool** (foreground or background) — cancels that specific tool.
+- **Cursor elsewhere** with an active request or tool — cancels the active request/tool.
+- **Cursor elsewhere** with nothing active — the first press shows `Nothing to cancel (press again to cancel all)` and starts a 500ms timer. A second <kbd>Ctrl-C</kbd> within that window triggers a **RAGE cancel** that kills every pending tool (foreground + background) and any in-flight API request.
+
+Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop. The 500ms timer resets on any successful cancellation, so intermediate cancels (e.g., killing an active request) don't accidentally trigger RAGE on the next miss — clearing a request + background jobs may take three presses (kill request → miss → rage).
+
+When background jobs complete while the conversation is idle, autopilot schedules a debounced auto-continue after `resume_delay` milliseconds. The delay gives you time to review the result or press <kbd>Ctrl-C</kbd> to cancel the pending resume specifically. If you enter insert mode during the delay, auto-continue is also cancelled. During an active autopilot loop (tools still executing in the foreground), background completions are drained immediately without the delay.
 
 Toggle autopilot at runtime without changing your config:
 
@@ -420,6 +460,7 @@ When blocks reach a terminal state (e.g., a thinking block finishes streaming, a
 | `editing.auto_close.thinking`    | `true`  | Auto-close `<thinking>` blocks when they finish streaming.                 |
 | `editing.auto_close.tool_use`    | `true`  | Auto-close `**Tool Use:**` blocks after the tool executes.                 |
 | `editing.auto_close.tool_result` | `true`  | Auto-close `**Tool Result:**` blocks when they reach a terminal state.     |
+| `editing.auto_close.job_result`  | `true`  | Auto-close `**Job Result:**` blocks when delivered from background jobs.   |
 | `editing.auto_close.frontmatter` | `false` | Auto-close frontmatter blocks. Disabled by default so you can edit freely. |
 
 ### Tool concurrency
@@ -447,25 +488,25 @@ Enable request diagnostics to inspect what Flemma sends to and receives from the
 
 Toggle at runtime with `:Flemma diagnostics:enable` / `:Flemma diagnostics:disable`.
 
-### Experimental LSP
+### LSP
 
-Flemma includes an in-process LSP server for `.chat` buffers. It provides hover information (AST node details, segment types, message positions) and basic go-to-definition for `include()` expressions and `@./path` file references.
+Flemma includes an in-process LSP server for `.chat` buffers. It provides hover information (AST node details, segment types, message positions) and go-to-definition that follows `include()` expressions, `@./path` file references, and the `tool_result` ↔ `**Job Result:**` linkage for background jobs.
 
-| Key                | Default          | Effect                                                           |
-| ------------------ | ---------------- | ---------------------------------------------------------------- |
-| `experimental.lsp` | `vim.lsp ~= nil` | Enable the LSP server. Auto-enabled when `vim.lsp` is available. |
+| Key           | Default          | Effect                                                           |
+| ------------- | ---------------- | ---------------------------------------------------------------- |
+| `lsp.enabled` | `vim.lsp ~= nil` | Enable the LSP server. Auto-enabled when `vim.lsp` is available. |
 
-The LSP attaches automatically to `.chat` buffers. Use your usual LSP keybindings (e.g., `K` for hover) to inspect buffer structure.
+The LSP attaches automatically to `.chat` buffers. Use your usual LSP keybindings (e.g., `K` for hover, `gd` for go-to-definition) to inspect buffer structure.
 
-### Experimental exploration tools
+### Experimental Markdown conceal patch
 
-Three additional built-in tools (`grep`, `find`, `ls`) are available for codebase exploration. They are disabled by default and must be opted into explicitly.
+| Key                                   | Default | Effect                                                                                                                                                                            |
+| ------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `experimental.patch_markdown_conceal` | `true`  | Replace Neovim's `conceal_lines` directives on fenced code block delimiters with configurable fence overlay extmarks. See [docs/conceal.md](conceal.md) for the full explanation. |
 
-| Key                  | Default | Effect                                                                                                                      |
-| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `experimental.tools` | `false` | Enable `grep`, `find`, and `ls` tools. See [docs/tools.md](tools.md#experimental-exploration-tools) for the full reference. |
+When enabled, fenced code block delimiters (` ``` `) are styled with overlay extmarks (`FlemmaFenceLabel` for the language tag, `FlemmaFenceBar` for the delimiter bar) instead of being hidden via treesitter `conceal_lines`. This eliminates a ~88% per-keystroke overhead caused by the interaction between `conceallevel >= 2` and treesitter highlighting on large buffers. Typing latency drops from ~36ms to ~4ms per keystroke. The fence overlays also gain contrast-adjusted highlights when overlapping with `CursorLine`, ensuring readability across colorschemes.
 
-Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
+Set `false` to restore the standard Neovim conceal behaviour for fenced code blocks.
 
 ### Config aliases
 

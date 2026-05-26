@@ -1,5 +1,6 @@
 local processor = require("flemma.processor")
 local ast = require("flemma.ast")
+local log = require("flemma.logging")
 local roles = require("flemma.utilities.roles")
 
 ---@class flemma.Pipeline
@@ -124,6 +125,20 @@ function M.run(doc, context, opts)
   -- Strip when tool_use parts are present — trailing text after tool_use blocks
   -- violates the Anthropic API constraint, and the abort info is already conveyed
   -- through the status=aborted tool_result placeholders.
+  local job_id_to_tool = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ---@cast seg flemma.ast.ToolResultSegment
+        local info = tool_use_index[seg.tool_use_id]
+        job_id_to_tool[seg.meta.job] = {
+          tool_use_id = seg.tool_use_id,
+          tool_name = info and info.name or "unknown",
+        }
+      end
+    end
+  end
+
   for _, entry in ipairs(collected) do
     if entry.role == "assistant" then
       local keep_aborted = true
@@ -147,6 +162,34 @@ function M.run(doc, context, opts)
         local info = tool_use_index[part.tool_use_id]
         if info then
           part.name = info.name
+        end
+      end
+    end
+
+    for i, part in ipairs(parts) do
+      if part.kind == "job_result" then
+        ---@cast part flemma.ast.GenericJobResultPart
+        local info = job_id_to_tool[part.job_id]
+        if info then
+          log.trace(
+            "pipeline: enriching job result "
+              .. part.job_id
+              .. " → "
+              .. info.tool_name
+              .. " ("
+              .. info.tool_use_id
+              .. ")"
+          )
+          parts[i] = {
+            kind = "text",
+            text = "[Job result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text,
+          }
+        else
+          log.warn("pipeline: no tool_result found for job " .. part.job_id .. ", using fallback enrichment")
+          parts[i] = {
+            kind = "text",
+            text = "[Job result for unknown tool (job: " .. part.job_id .. ")]\n" .. part.text,
+          }
         end
       end
     end

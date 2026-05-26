@@ -8,6 +8,7 @@
 ---@class flemma.config.operators
 local M = {}
 
+local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
 
@@ -89,8 +90,12 @@ local function walk(schema, path, value, layer, bufnr, failures)
     return
   end
 
-  -- Sequential table on list-capable node: list set
+  -- Sequential table on list-capable node: route through listops when
+  -- op-prefixed values are present, otherwise plain set.
   if vim.islist(value) then
+    if listops.try_apply(unwrapped, value, layer, bufnr, path) then
+      return
+    end
     if unwrapped:is_list() or unwrapped:has_list_part() then
       local item_schema = unwrapped:get_list_item_schema() or unwrapped:get_item_schema()
       if item_schema then
@@ -182,6 +187,7 @@ end
 ---
 --- Walks a decoded JSON table, interpreting $-prefixed keys as operations and
 --- regular keys as child navigation. Plain values and arrays default to "set".
+--- List arrays route through listops for op-prefix decomposition.
 ---
 --- Operators:
 ---   $set     — explicit set (same as plain value)

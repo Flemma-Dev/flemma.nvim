@@ -3,6 +3,7 @@
 ---@class flemma.State
 local M = {}
 
+local hooks = require("flemma.hooks")
 local session_module = require("flemma.session")
 local client = require("flemma.client")
 local writequeue = require("flemma.buffer.writequeue")
@@ -17,13 +18,19 @@ local writequeue = require("flemma.buffer.writequeue")
 
 ---@alias flemma.state.ProgressPhase "waiting"|"thinking"|"streaming"|"buffering"
 
+---@class flemma.state.PendingSend
+---@field subscription flemma.readiness.Subscription
+---@field opts table
+---@field kind? "phase2"
+
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
 ---@field request_cancelled boolean Whether the current request has been cancelled
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
----@field pending_send? { subscription: flemma.readiness.Subscription, opts: table } Queued send awaiting async readiness
+---@field pending_send? flemma.state.PendingSend Queued send awaiting async readiness
+---@field resume_delay_timer? uv.uv_timer_t Debounce timer for auto-continue after background job drain
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
 ---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming
@@ -36,14 +43,17 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
+---@field pending_folds_retried? boolean True after a deferred retry has been scheduled for the current pending set
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
 ---@field personality_environment? flemma.personalities.CachedEnvironment Cached date/time for prompt caching (captured on first request)
 ---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
 ---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
 ---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
+---@field delivery_queue? flemma.tools.JobDelivery[] Completed job results awaiting delivery
 ---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
 ---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
+---@field cursorline_hl_group? string CursorLine variant highlight group for the current cursor row (read by fence decoration provider)
 ---@field diagnostics_baseline_provider? string Provider that produced the current diagnostics baseline
 ---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
 ---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
@@ -65,17 +75,6 @@ local writequeue = require("flemma.buffer.writequeue")
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
-
----@type table<string, fun(bufnr: integer)>
-local cleanup_hooks = {}
-
----Register a buffer cleanup hook. Called during cleanup_buffer_state().
----Used by modules that state cannot require directly (circular dependency).
----@param name string Hook identifier (for idempotent registration)
----@param fn fun(bufnr: integer) Cleanup function
-function M.register_cleanup(name, fn)
-  cleanup_hooks[name] = fn
-end
 
 ---Get the global session (tracks all requests across buffers)
 ---@return flemma.session.Session
@@ -158,11 +157,7 @@ function M.cleanup_buffer_state(bufnr)
       vim.fn.timer_stop(st.progress_timer)
     end
   end
-  -- Run registered cleanup hooks (executor, usage) before clearing state.
-  -- Hooks may access buffer state (e.g., executor), so this runs before nil.
-  for _, fn in pairs(cleanup_hooks) do
-    pcall(fn, bufnr)
-  end
+  hooks.dispatch("buffer:destroyed", { bufnr = bufnr }, { sync = true })
   buffer_states[bufnr] = nil
   writequeue.clear(bufnr)
 end

@@ -55,6 +55,7 @@ describe("flemma.status", function()
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.presets"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.schema"] = nil

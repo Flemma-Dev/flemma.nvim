@@ -3,23 +3,27 @@
 ---@class flemma.Tools
 local M = {}
 
+local approval = require("flemma.tools.approval")
 local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
+local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
 
 local BUILTIN_TOOLS = {
-  "flemma.tools.definitions.bash",
-  "flemma.tools.definitions.read",
-  "flemma.tools.definitions.edit",
-  "flemma.tools.definitions.write",
-  "flemma.tools.definitions.grep",
-  "flemma.tools.definitions.find",
-  "flemma.tools.definitions.ls",
-  "flemma.tools.definitions.mcporter",
+  "flemma.tools.definitions.builtin.bash",
+  "flemma.tools.definitions.builtin.read",
+  "flemma.tools.definitions.builtin.edit",
+  "flemma.tools.definitions.builtin.write",
+  "flemma.tools.definitions.builtin.grep",
+  "flemma.tools.definitions.builtin.find",
+  "flemma.tools.definitions.builtin.ls",
+  "flemma.tools.definitions.builtin.mcporter",
+  "flemma.tools.definitions.harness.jobs",
 }
 
 --------------------------------------------------------------------------------
@@ -31,6 +35,9 @@ local pending_sources = 0
 local ready_callbacks = {}
 local active_timers = {}
 local generation = 0
+
+---@type { resolve_fn: fun(register: fun(name: string, def: flemma.tools.ToolDefinition), done: fun(err?: string)), opts: { timeout?: integer } }[]|nil
+local deferred_async_sources = {}
 
 ---Fire all ready callbacks, clear the list, and emit the boot-complete autocmd
 local function fire_ready_callbacks()
@@ -137,6 +144,20 @@ function M.on_ready(callback)
   table.insert(ready_callbacks, callback)
 end
 
+---Start async tool sources that were deferred during module registration.
+---Called after config finalization so DISCOVER-backed config values (e.g.,
+---tools.mcporter.enabled) are available when resolvers read config.
+function M.start_pending_sources()
+  local sources = deferred_async_sources or {}
+  deferred_async_sources = nil
+  for _, entry in ipairs(sources) do
+    M.register_async(entry.resolve_fn, entry.opts)
+  end
+  if #sources == 0 and pending_sources == 0 then
+    vim.schedule(fire_ready_callbacks)
+  end
+end
+
 --------------------------------------------------------------------------------
 -- Third-party module tracking
 --------------------------------------------------------------------------------
@@ -175,6 +196,21 @@ end
 --------------------------------------------------------------------------------
 -- Public API
 --------------------------------------------------------------------------------
+
+---Raise Suspense if async tool sources are still running, then load any
+---pending third-party modules. Safe to call from any pipeline stage that
+---needs tool definitions to be available.
+function M.ensure_ready()
+  if pending_sources > 0 then
+    local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
+      M.on_ready(function()
+        done({ ok = true })
+      end)
+    end)
+    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
+  end
+  ensure_modules_loaded()
+end
 
 ---Setup tool registry with built-in tools
 function M.setup()
@@ -222,6 +258,25 @@ function M.to_json_schema(definition)
   return schema --[[@as flemma.tools.JSONSchema]]
 end
 
+---Serialize a tool's input_schema for prompt inclusion, injecting the
+---`background` parameter for async tools that haven't opted out.
+---@param definition flemma.tools.ToolDefinition
+---@return flemma.tools.JSONSchema
+function M.to_json_schema_for_prompt(definition)
+  local schema = M.to_json_schema(definition)
+  if definition.async and definition.backgroundable ~= false then
+    schema = vim.deepcopy(schema)
+    schema.properties = schema.properties or {}
+    schema.properties.background = {
+      type = "boolean",
+      default = false,
+      description = messages.render("tool-parameter--background"),
+    }
+    log.trace("tools: injected background parameter into schema for " .. definition.name)
+  end
+  return schema
+end
+
 ---Get all registered tools (excludes disabled tools by default).
 ---Loads any pending third-party modules before returning.
 ---@param opts? { include_disabled?: boolean, config?: flemma.Config }
@@ -243,22 +298,23 @@ end
 ---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(bufnr)
-  if pending_sources > 0 then
-    local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
-      M.on_ready(function()
-        done({ ok = true })
-      end)
-    end)
-    error(readiness.Suspense.new("Waiting for tool definitions to load\u{2026}", boundary))
-  end
-  ensure_modules_loaded()
+  -- Block until every async tool source (e.g. MCPorter) has finished registering.
+  -- The full tool set goes into the provider request as part of the cache prefix.
+  -- If we allowed a request to go out before all sources resolve, the first request
+  -- would establish a prefix with a partial tool list. Once the remaining sources
+  -- finish, subsequent requests would include the full list, breaking the prefix
+  -- and invalidating the cache for the entire conversation from that point on.
+  M.ensure_ready()
+
   if bufnr then
     local tools_info = config_facade.inspect(bufnr, "tools")
     local tools_list = tools_info and tools_info.value
-    if type(tools_list) == "table" and #tools_list > 0 then
-      -- Check if the list was modified by a layer above DEFAULTS
+    if type(tools_list) == "table" then
       local source = tools_info.layer
       if source and source ~= "D" then
+        if #tools_list == 0 then
+          return {}
+        end
         local all_tools = M.get_all({ include_disabled = true })
         local allowed = {}
         for _, name in ipairs(tools_list) do
@@ -312,11 +368,26 @@ function M.register(source, definition)
       -- register("module.name") — load module
       local mod = loader.load(source)
       if type(mod.resolve) == "function" then
-        M.register_async(mod.resolve, { timeout = mod.timeout })
+        if mod.metadata and mod.metadata.config_schema then
+          registry.register_module_schema(mod.metadata.name, mod.metadata.config_schema)
+          config_facade.register_module_defaults("tools", mod.metadata.name, mod.metadata.config_schema)
+        end
+        if deferred_async_sources then
+          table.insert(deferred_async_sources, { resolve_fn = mod.resolve, opts = { timeout = mod.timeout } })
+        else
+          M.register_async(mod.resolve, { timeout = mod.timeout })
+        end
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
           register_tool(def.name, def)
         end
+      end
+      if mod.approval and type(mod.approval.resolve) == "function" then
+        approval.register(source, {
+          resolve = mod.approval.resolve,
+          priority = mod.approval.priority,
+          description = mod.approval.description or ("Module approval resolver from " .. source),
+        })
       end
     end
   elseif type(source) == "function" then
@@ -346,6 +417,7 @@ function M.clear()
     close_fn()
   end
   active_timers = {}
+  deferred_async_sources = {}
   pending_modules = {}
   loaded_modules = {}
 end
@@ -363,14 +435,41 @@ end
 ---@return flemma.schema.ObjectNode|nil config_schema Tool config schema, or nil if not found
 function M.get_config_schema(name)
   local tool = M.get(name)
-  if not tool then
-    return nil
+  if tool then
+    return tool.metadata and tool.metadata.config_schema
   end
-  return tool.metadata and tool.metadata.config_schema
+  return registry.get_module_schema(name)
 end
 
 M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor
+
+--------------------------------------------------------------------------------
+-- Tool approval (public API)
+--------------------------------------------------------------------------------
+
+---Approve a pending tool call by ID.
+---Sets the tool_result header to `(approved)`. The next phase advance
+---(manual `<C-]>` or autopilot) will execute the tool.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error
+function M.approve(bufnr, tool_id)
+  return require("flemma.tools.executor").approve(bufnr, tool_id)
+end
+
+---Reject a pending tool call by ID.
+---Sets the tool_result header to `(rejected)`, optionally writing a
+---rejection message into the fence body that the model will see.
+---@param bufnr integer
+---@param tool_id string
+---@param message string|nil Optional rejection reason
+---@return boolean success
+---@return string|nil error
+function M.reject(bufnr, tool_id, message)
+  return require("flemma.tools.executor").reject(bufnr, tool_id, message)
+end
 
 return M

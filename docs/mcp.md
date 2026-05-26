@@ -60,7 +60,7 @@ require("flemma").setup({
   tools = {
     mcporter = {
       enabled = true,
-      include = { "slack:*", "linear:*" },
+      include = { "slack.*", "linear.*" },
     },
   },
 })
@@ -91,7 +91,7 @@ tools = {
 
 ### Include / exclude
 
-Glob patterns use `*` as a wildcard. Both match against the full tool name (`server:tool_name`).
+Glob patterns use `*` as a wildcard. Both match against the full tool name (`server.tool_name`).
 
 1. **Exclude** runs first -- matching tools are not registered at all.
 2. **Include** runs second -- matching tools are marked `enabled = true`.
@@ -99,11 +99,11 @@ Glob patterns use `*` as a wildcard. Both match against the full tool name (`ser
 
 | Goal                                | Config                                       |
 | ----------------------------------- | -------------------------------------------- |
-| Enable all Slack tools              | `include = { "slack:*" }`                    |
-| Enable Slack + Linear search        | `include = { "slack:*", "linear:search_*" }` |
+| Enable all Slack tools              | `include = { "slack.*" }`                    |
+| Enable Slack + Linear search        | `include = { "slack.*", "linear.search_*" }` |
 | Enable everything                   | `include = { "*" }`                          |
 | Discover everything, enable nothing | `include = {}` (default)                     |
-| Skip GitHub entirely                | `exclude = { "github:*" }`                   |
+| Skip GitHub entirely                | `exclude = { "github.*" }`                   |
 
 ### Per-file opt-in
 
@@ -111,7 +111,7 @@ Tools registered with `enabled = false` (discovered but not included) can be ena
 
 ````markdown
 ```lua
-flemma.opt.tools:append({"slack:channels_list", "slack:conversations_unreads"})
+flemma.opt.tools:append({"slack.channels_list", "slack.conversations_unreads"})
 ```
 
 @System:
@@ -137,17 +137,22 @@ When `tools.mcporter.enabled` is `true`, Flemma runs a three-phase discovery at 
 
 Tools from fast servers become available immediately -- you don't have to wait for every server to respond. If a server times out or fails, its tools are skipped and the rest proceed normally.
 
+As a performance shortcut, servers whose entire toolset is excluded by an `exclude` pattern (e.g. `exclude = { "slack.*" }` matches every `slack.*` tool) skip the schema fetch entirely — Flemma never spawns `mcporter list <server> --schema` for them.
+
 ### Tool naming
 
-Each discovered tool is named `server:tool_name` using a colon separator. Dots in server names are replaced with hyphens (dots are reserved for Lua module paths in Flemma).
+Each discovered tool is named `server.tool_name` using a dot separator. Dots in server names themselves are replaced with hyphens to keep the separator unambiguous.
 
 | MCPorter server + tool          | Flemma tool name            |
 | ------------------------------- | --------------------------- |
-| `slack` + `channels_list`       | `slack:channels_list`       |
-| `github` + `search_code`        | `github:search_code`        |
-| `my.custom.server` + `do_thing` | `my-custom-server:do_thing` |
+| `slack` + `channels_list`       | `slack.channels_list`       |
+| `github` + `search_code`        | `github.search_code`        |
+| `my.custom.server` + `do_thing` | `my-custom-server.do_thing` |
 
-On the wire (in API requests to LLM providers), the colon is encoded to `__` to satisfy provider name constraints (`[a-zA-Z0-9_-]+`). This encoding is transparent -- you always use colons in config and frontmatter.
+On the wire (in API requests to LLM providers), the dot is encoded to `__` to satisfy provider name constraints (`[a-zA-Z0-9_-]+`). This encoding is transparent — you always use dots in config and frontmatter, and the progress bar and other UI surfaces decode `__` back to `.` for display.
+
+> [!NOTE]
+> The tool name separator changed from `:` to `.` in v0.12. Older configs using `"server:tool"` patterns will no longer match — update them to `"server.tool"`.
 
 ### Execution
 
@@ -157,7 +162,9 @@ When the model invokes an MCP tool, Flemma runs:
 mcporter call <server>.<tool> --args '<json>' --output json
 ```
 
-The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
+The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the response is not shaped like a `CallToolResult` (no `content` array), Flemma falls back to inserting the raw output text verbatim — so non-conforming MCP servers still return something usable. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
+
+Outputs run through `ctx.truncate.truncate_with_overflow` the same way every other tool's output does, so large responses get truncated and the full text saved to an overflow file.
 
 ### Timeouts
 

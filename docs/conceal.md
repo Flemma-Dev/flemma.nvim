@@ -17,7 +17,7 @@ Accepts a compact `{conceallevel}{concealcursor}` spec that is applied to every 
 
 The leading digit is parsed as `conceallevel` (`0`–`3`). Any characters that follow populate `concealcursor` — `n`, `v`, `i`, `c` per `:h 'concealcursor'`. Malformed values are silently ignored so a typo doesn't break your buffer.
 
-The override applies on `BufWinEnter` and `FileType chat`, so splitting or re-displaying a chat buffer re-applies it. Non-chat buffers are never touched.
+The override applies on `BufRead`/`BufNewFile` (the first time a `.chat` buffer is loaded) and on `FileType chat`, so newly opened chat buffers always pick up the configured value. A separate `BufWinEnter` autocmd runs in the **other** direction: when a non-chat buffer lands in a window that was previously displaying a chat buffer (and therefore still carries the chat conceal fingerprint), Flemma restores the global conceal defaults so your other windows aren't left with chat's settings.
 
 ## Why Markdown is concealed by default
 
@@ -25,57 +25,89 @@ Flemma's chat buffer already carries a lot of signal — role markers, tool-use 
 
 If you prefer raw Markdown always, `editing.conceal = false` restores the pre-v0.11 behaviour.
 
+## Fence overlay system
+
+Code fences inside `.chat` buffers are drawn as styled overlays — the language label sits on the top fence, a delimiter bar on the bottom — instead of being hidden completely by Neovim's default conceal. You get a clean visual marker without losing the fence as a structural row in the buffer (which matters for folding; see [Limitations](#limitations)). The system is controlled by `experimental.patch_markdown_conceal` (default `true`).
+
+When enabled:
+
+- Fence delimiters render as overlay labels only when `conceallevel >= 2`; toggle conceal off and the raw delimiters return.
+- Style the label and the bar via `highlights.fence_label` and `highlights.fence_bar`.
+- Overlays stay readable when your cursor is on the fence line (contrast-adjusted against `CursorLine`).
+
+Set `experimental.patch_markdown_conceal = false` to restore Neovim's standard fence concealing.
+
+<details>
+<summary>Why this exists (performance)</summary>
+
+Neovim's bundled markdown treesitter queries use `conceal_lines` to hide fenced-delimiter lines. At `conceallevel >= 2` this interacts poorly with treesitter highlighting, adding ~36ms of per-keystroke overhead on large buffers. Replacing it with overlay extmarks at the decoration-provider layer brings typing latency down to ~4ms per keystroke. Markdown buffers in the same session keep their native fence concealing via automatic highlighter restoration — only `.chat` buffers route through the overlay system.
+
+</details>
+
 ## Toggling conceal at runtime
 
-Press `<Space><Space>` (double-tap Space) in a chat buffer to toggle `conceallevel` between the configured level and `0`. This lets you peek at raw Markdown without leaving the buffer or changing your config.
+The default keymaps follow Neovim's `yo`/`[o`/`]o` option-toggle convention:
 
-The toggle is bound by default to `keymaps.normal.conceal_toggle`. You can remap it, disable it with `false`, or ignore it entirely — it is only registered when `editing.conceal` is active. When `<Space>` is your `mapleader`, neither the fold toggle nor the conceal toggle are registered (see [configuration.md](configuration.md) for details).
+| Key   | Action                                           | Config key                      |
+| ----- | ------------------------------------------------ | ------------------------------- |
+| `yoe` | Toggle `conceallevel` between configured and `0` | `keymaps.normal.conceal_toggle` |
+| `]oe` | Enable conceal (set to configured level)         | `keymaps.normal.conceal_on`     |
+| `[oe` | Disable conceal (set to `0`)                     | `keymaps.normal.conceal_off`    |
+
+You can remap any of them or disable with `false`. They are only registered when `editing.conceal` is active.
 
 If you manage your own keymaps (`keymaps.enabled = false`), a one-liner does the same thing:
 
 ```vim
-:nnoremap <Space><Space> :setlocal conceallevel=<C-R>=&conceallevel == 0 ? '2' : '0'<CR><CR>
+:nnoremap yoe :setlocal conceallevel=<C-R>=&conceallevel == 0 ? '2' : '0'<CR><CR>
 ```
 
 Note that this hard-codes level `2` — if your `editing.conceal` uses a different level, adjust accordingly.
 
 ## Limitations
 
-These are live interactions between `conceallevel` and other Neovim subsystems that we've chosen to live with rather than paper over. Each one is a Neovim drawing/layering choice, not a Flemma bug.
+A couple of edge cases where `conceallevel` interacts with other Neovim subsystems in ways Flemma can't paper over. Each one has a sensible default that avoids the issue — these notes are for when you deviate from defaults.
 
-### `line_highlights` and concealed cells
+### `line_highlights` at `conceallevel = 1`
 
-Flemma paints per-role backgrounds on chat lines via `line_hl_group` extmarks (`FlemmaLineUser`, `FlemmaLineAssistant`, etc.). At `conceallevel = 1`, Neovim replaces concealed markup with a placeholder character whose background comes from the `Conceal` highlight group — **not** from the `line_hl_group` beneath. The concealed cells therefore render with Neovim's default `Conceal` background, which typically appears as a distinct band against the role-coloured line.
+At `conceallevel = 1`, Neovim replaces concealed markup with a placeholder character whose background comes from Neovim's `Conceal` highlight group — **not** from the per-role `line_hl_group` Flemma paints onto chat lines. The concealed cells therefore render with a distinct band against the role-coloured line.
 
-This is a design decision in Neovim's drawing code: `src/nvim/drawline.c` unconditionally assigns `wlv.char_attr = conceal_attr` for concealed cells, discarding the computed attribute stack that would otherwise carry the line background through. The code comment acknowledges the tradeoff explicitly (`no concealing past the end of the line, it interferes with line highlighting`).
+**Workaround:** the default of `conceallevel = 2` sidesteps this entirely. If you explicitly set `editing.conceal = "1n"`, expect the band around concealed placeholders.
+
+<details>
+<summary>Why this can't be fixed in Flemma</summary>
+
+This is a design decision in Neovim's drawing code (`src/nvim/drawline.c`): concealed cells are unconditionally assigned the `Conceal` attribute, discarding the line-background attribute stack. The code comment acknowledges the tradeoff explicitly (`no concealing past the end of the line, it interferes with line highlighting`).
 
 We investigated every realistic mitigation:
 
-- `bg = "NONE"` on `Conceal` (or a remapped `FlemmaConceal` via `winhighlight`) falls through to `Normal` — not to `line_hl_group`.
-- Higher-priority extmark `hl_group` / `hl_group + hl_eol = true` at priorities 50, 200, 4096 — Conceal still wins for concealed cells.
-- Emitting our own `conceal + hl_group` override extmarks at every conceal position — works mechanically, but requires a `nvim_set_decoration_provider` walking treesitter queries on every visible line per redraw to discover where concealment happens. Cost: ~5–20 ms per redraw on warm caches, scaling with viewport size. For a chat plugin that's more complexity than the visual benefit justifies.
+- `bg = "NONE"` on `Conceal` (or a remapped `FlemmaConceal` via `winhighlight`) falls through to `Normal`, not to `line_hl_group`.
+- Higher-priority extmark `hl_group` overrides (priorities 50, 200, 4096, with and without `hl_eol = true`) — Conceal still wins for concealed cells.
+- Emitting our own `conceal + hl_group` override extmarks at every conceal position works mechanically, but requires walking treesitter queries on every visible line per redraw to discover where concealment happens. Cost: ~5–20 ms per redraw on warm caches, scaling with viewport size. More complexity than the visual benefit justifies.
 
-**So we don't fix this.** The default of `conceallevel = 2` sidesteps the issue entirely — concealed markup is hidden completely, there is no placeholder cell, and `line_highlights` renders as expected. If you set `conceallevel = 1` yourself (`editing.conceal = "1n"`), you'll see the Neovim band around concealed placeholders; that's expected.
+</details>
 
-### Folds and `conceal_lines`
+### Folds inside concealed fence lines
 
-Neovim's bundled `runtime/queries/markdown/highlights.scm:50-59` sets `conceal_lines = ""` on `fenced_code_block_delimiter` captures. At `conceallevel >= 1` this directive hides the **entire delimiter line** (` ```lua ` / ` ``` `), not just the backtick characters. Because Flemma registers `chat` as a markdown variant (`vim.treesitter.language.register("markdown", { "chat" })`), the same directive applies to every fenced block inside `.chat` buffers — frontmatter fences and every ` ```json ` / ` ``` ` inside tool-use/tool-result blocks.
+Neovim's bundled markdown treesitter queries hide entire fenced-delimiter lines (` ```lua `, ` ``` `) at `conceallevel >= 1`. Because Flemma registers `chat` as a markdown variant, this applies to every fenced block inside `.chat` buffers — frontmatter fences and tool-use/tool-result code blocks alike. Inside a message body that's fine: the fence vanishes and the content keeps rendering. The awkward case is folding the frontmatter region: Neovim draws the fold placeholder on the fold's first line, which would now be a zero-height concealed fence, so the whole folded region would vanish from the screen.
 
-Inside a message body that's fine: the fence lines disappear and the content lines keep rendering normally, giving you the readable-Markdown experience that concealing is for. The frontmatter block is the awkward one — it sits **inside a closed fold** by default, and Neovim's fold placeholder is rendered on the fold's first line, which is the now-concealed opening fence. `drawline` treats `conceal_lines` as zero-height and has no fallback to the first non-concealed row, so the whole folded region vanishes from the screen.
+**What we ship:** with `experimental.patch_markdown_conceal = true` (default), Flemma replaces this mechanism with overlay extmarks at redraw time. The fence lines stay as real, non-zero-height rows, so folds — including the frontmatter fold — collapse to a proper one-line placeholder regardless of `conceallevel`. Setting `experimental.patch_markdown_conceal = false` opts back into Neovim's native behaviour, including the fold-vanish issue.
 
-We investigated:
+<details>
+<summary>Implementation details</summary>
 
-- Moving the fold range to skip the fence (start at line 2) — salvages the placeholder but leaves the fold boundaries off-by-one from the AST, and degenerates on 1-line bodies.
-- Emitting a `virt_lines_above` banner on the first non-concealed line below the frontmatter — works, but introduces a new navigation surface area (the banner can't be cursor-landed on) and duplicates the existing fold-preview affordance.
-- Shipping a `queries/chat/highlights.scm` override that inherits markdown without `conceal_lines` — restores the fence lines globally in `.chat`, which defeats the point of `editing.conceal = "2nv"` (the fences are the noise you wanted hidden).
+The overlay is drawn by an `nvim_set_decoration_provider` callback that emits `FlemmaFenceLabel` (language label) and `FlemmaFenceBar` (delimiter bar) extmarks when `conceallevel >= 2`. These are **decoration-time extmarks**, not persistent extmarks in any namespace — debugging tools that enumerate `vim.api.nvim_buf_get_extmarks` won't see them. Markdown buffers in the same session keep their native fence concealing via automatic highlighter restoration; only `.chat` buffers route through the overlay system.
 
-**What we ship:** at `conceallevel >= 1`, the frontmatter fold rule (`lua/flemma/ui/folding/rules/frontmatter.lua`) returns no fold entries. The frontmatter body renders inline with its `@Lua`/`@JSON` treesitter highlighting, the two delimiter lines stay concealed as intended, and there is no collapsed placeholder to disappear. At `conceallevel = 0` the fold is emitted as before. The window's live `vim.wo.conceallevel` is also part of the fold map cache key, so toggling it at runtime re-evaluates without a manual `:edit`.
+Upstream, the underlying issue is an unfortunate layering between `conceal_lines` and fold placeholders — not special-cased because `conceal_lines` was added for the "hide a blank JSX attribute line" shape of problem, not for rows that were structurally load-bearing. A `neovim/neovim` feature request ("fold placeholder should fall back to the first non-`conceal_lines` row in range") would be the durable fix.
 
-Upstream this is an unfortunate layering between `conceal_lines` and fold placeholders — not special-cased because `conceal_lines` was added for the "hide a blank JSX attribute line" shape of problem, not for rows that were structurally load-bearing. A `neovim/neovim` feature request ("fold placeholder should fall back to the first non-`conceal_lines` row in range") would be the durable fix.
+</details>
 
-## References (Neovim)
+<details>
+<summary>References (Neovim source)</summary>
 
 - `:h 'conceallevel'`, `:h 'concealcursor'` — Neovim docs.
 - `src/nvim/drawline.c` — the assignment that makes `Conceal` terminal for concealed cells; the `conceal_lines` zero-height branch that wins over fold placeholders.
 - `runtime/lua/vim/treesitter/highlighter.lua` — where the ephemeral `conceal + hl_group` extmark is emitted per capture.
 - `runtime/queries/markdown/highlights.scm:50-59` — the `(#set! conceal_lines "")` directive on fenced-code-block delimiters.
+
+</details>

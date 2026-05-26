@@ -7,6 +7,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
@@ -38,11 +39,11 @@ local state = require("flemma.state")
 -- Constants
 -- ============================================================================
 
-local CHAR_TOP = "\u{256d}" -- ╭
-local CHAR_MIDDLE = "\u{2502}" -- │
-local CHAR_BOTTOM = "\u{2570}" -- ╰
-local CHAR_PENDING = "\u{250a}" -- ┊ (incomplete/streaming interior)
-local CHAR_PENDING_END = "\u{2514}" -- └ (incomplete turn end — sharp corner vs rounded ╰)
+local CHAR_TOP = "╭"
+local CHAR_MIDDLE = "│"
+local CHAR_BOTTOM = "╰"
+local CHAR_PENDING = "┊"
+local CHAR_PENDING_END = "└"
 
 -- ============================================================================
 -- Per-buffer cache
@@ -453,14 +454,20 @@ end
 -- ============================================================================
 
 ---Clean up turn cache for a buffer.
----Registered as a state cleanup hook so it runs on buffer teardown.
+---Runs on buffer teardown via the buffer:destroyed hook.
 ---@param bufnr integer
 function M.cleanup(bufnr)
   turn_caches[bufnr] = nil
 end
 
--- Register cleanup hook with state module
-state.register_cleanup("turns", M.cleanup)
+---Get the detected turn ranges for a buffer.
+---@param bufnr integer
+---@return flemma.ui.TurnRange[]
+function M.get_ranges(bufnr)
+  M.update(bufnr)
+  local cache = turn_caches[bufnr]
+  return cache and cache.ranges or {}
+end
 
 -- ============================================================================
 -- Test helpers
@@ -471,6 +478,12 @@ state.register_cleanup("turns", M.cleanup)
 ---@return flemma.ui.TurnBufferCache|nil
 function M._get_turn_cache(bufnr)
   return turn_caches[bufnr]
+end
+
+function M.setup()
+  hooks.on("buffer:destroyed", function(data)
+    M.cleanup(data.bufnr)
+  end)
 end
 
 return M

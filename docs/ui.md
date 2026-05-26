@@ -33,9 +33,30 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
 | `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
 | `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
+| `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)        |
+| `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)           |
 | `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
+
+### Job result highlights
+
+`**Job Result:**` headers use their own syntax groups, each linked to the corresponding tool result group by default:
+
+| Group                     | Links to                   |
+| ------------------------- | -------------------------- |
+| `FlemmaJobResultTitle`    | `FlemmaToolResultTitle`    |
+| `FlemmaJobResultError`    | `FlemmaToolResultError`    |
+| `FlemmaJobResultPending`  | `FlemmaToolResultPending`  |
+| `FlemmaJobResultApproved` | `FlemmaToolResultApproved` |
+| `FlemmaJobResultRejected` | `FlemmaToolResultRejected` |
+| `FlemmaJobResultDenied`   | `FlemmaToolResultDenied`   |
+| `FlemmaJobResultAborted`  | `FlemmaToolResultAborted`  |
+
+Override any group to style job results independently from tool results.
+
+> [!NOTE]
+> Fold text uses `FlemmaJobResultTitle` for the title, but indicators currently use the `FlemmaTool*` groups directly for both tool and job results.
 
 ## Theme-aware values
 
@@ -169,11 +190,32 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
+Eight highlight groups control indicator colours — four for the inline `⬢` icon and four for the EOL status text:
+
+| Group                     | Default link            | When it's used                           |
+| ------------------------- | ----------------------- | ---------------------------------------- |
+| `FlemmaToolIconPending`   | `FlemmaToolResultTitle` | Inline `⬢` on pending tools              |
+| `FlemmaToolIconExecuting` | `FlemmaToolResultTitle` | _(not shown — no prefix when executing)_ |
+| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle` | Inline `⬢` + fold icon on success        |
+| `FlemmaToolIconError`     | `DiagnosticError`       | Inline `⬢` + fold icon on error          |
+| `FlemmaToolPending`       | `DiagnosticHint`        | EOL `⏸ Pending` text                    |
+| `FlemmaToolExecuting`     | `DiagnosticInfo`        | EOL spinner + `Executing…` text          |
+| `FlemmaToolSuccess`       | `DiagnosticOk`          | EOL `✔ Complete` text                   |
+| `FlemmaToolError`         | `DiagnosticError`       | EOL `⚠ Failed` text                     |
+
+By default, icon colours match the `Tool Result:` header while status text uses semantic Diagnostic colours. Override any group to customise:
+
+```lua
+-- Make icons match status colours instead of the header
+vim.api.nvim_set_hl(0, "FlemmaToolIconSuccess", { link = "DiagnosticOk" })
+vim.api.nvim_set_hl(0, "FlemmaToolIconError",   { link = "DiagnosticError" })
+```
+
 ### Tool previews
 
 When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
 
-Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **label** (the LLM's stated intent, shown italic) and **detail** (the raw command or path, shown dimmer), separated by an em-dash: `bash: running tests — $ make test`. When width is limited, detail truncates first to preserve the label. Custom tools can provide their own via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
+Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **detail** (the raw command or path) and a **label** (the LLM's stated intent), separated by an em-dash and rendered detail-first: `bash: $ make test — running tests`. When width is limited, detail truncates first to preserve the label. The italic-label/dim-detail split is only visible in folded message previews, where each chunk gets its own highlight; the virt-line preview shown over pending placeholders uses a single combined `FlemmaToolPreview` highlight. Custom tools can provide their own previews via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
 
 Preview lines use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). See [docs/tools.md](tools.md#tool-previews) for the full reference on built-in formatters, the generic fallback, and writing custom preview functions.
 
@@ -186,17 +228,45 @@ Flemma uses a two-level fold hierarchy:
 | Level 1    | Each message                 | Collapse long exchanges without losing context.     |
 | Level 2    | Thinking blocks, frontmatter | Keep reasoning traces and templates out of the way. |
 
-The initial fold level is controlled by `editing.foldlevel` (default: `1`, which collapses thinking blocks and frontmatter but keeps messages open). Set to `0` to collapse everything, or `99` to open everything.
+The initial fold level is controlled by `editing.fold.level` (default: `1`, which collapses thinking blocks and frontmatter but keeps messages open). Set to `0` to collapse everything, or `99` to open everything.
+
+When `editing.fold.gap` is `true`, folded messages leave one trailing blank line visible between them for visual separation. This only applies to message-level folds — tool block folds always collapse fully. Disabled by default.
+
+### Folding a turn
+
+A **turn** is one round-trip in the conversation: an `@You` message and every `@Assistant` reply and tool exchange that answers it, up to the next `@You`. Two keybindings collapse turns to their endpoints so you can scan a long conversation as a clean question/answer dialogue:
+
+| Key  | Action                                                                    | Config                      |
+| ---- | ------------------------------------------------------------------------- | --------------------------- |
+| `zy` | Fold every message in the turn under the cursor except the first and last | `keymaps.normal.fold_turn`  |
+| `zY` | Apply the same fold to every turn in the buffer                           | `keymaps.normal.fold_turns` |
+
+The first and last messages stay open so the question and final answer remain visible — intermediate assistant responses, tool calls, and tool results collapse. A turn with only a question and a single response folds nothing (there's nothing intermediate to hide).
 
 ### Fold text
 
 Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:
 
 - **Messages:** `─ Role preview... (N lines)` when rulers are enabled (default), or `@Role: preview... (N lines)` otherwise – role name uses `FlemmaRole{Role}Name`, preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`, ruler char uses `FlemmaRuler`.
-- **Tool Use:** `⬡ Tool Use: name: label — detail (N lines)` – icon (hollow hexagon) uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, label uses `FlemmaToolLabel` (italic), detail uses `FlemmaToolDetail`, meta uses `FlemmaFoldMeta`. When the tool's `format_preview` returns a structured `{ label, detail }`, the label shows the LLM's stated intent and detail shows the raw technical summary. When only detail is available, it falls back to the previous format.
-- **Tool Result:** `⬢ Tool Result: name: label — detail (N lines)` – same structure as tool use but with a filled hexagon icon and `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
+- **Tool Use:** `⬡ Tool Use: name: detail — label (N lines)` – icon (hollow hexagon) uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, detail uses `FlemmaToolDetail`, label uses `FlemmaToolLabel` (italic), meta uses `FlemmaFoldMeta`. When the tool's `format_preview` returns a structured `{ label, detail }`, detail shows the raw technical summary and label shows the LLM's stated intent. When only detail is available, it falls back to the previous format.
+- **Tool Result:** `⬢ Tool Result: name: detail — label (N lines)` – same structure as tool use but with a filled hexagon icon and `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
 - **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
 - **Frontmatter:** ` ```language preview... ``` (N lines) ` – uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
+
+## Fence overlays
+
+When `experimental.patch_markdown_conceal` is enabled (the default), fenced code block delimiters are replaced with styled overlay extmarks instead of being hidden via treesitter `conceal_lines`. This eliminates significant per-keystroke overhead on large buffers while keeping the visual appearance clean.
+
+Two highlight groups control the overlay appearance:
+
+| Group              | Default                     | Applies to                                          |
+| ------------------ | --------------------------- | --------------------------------------------------- |
+| `FlemmaFenceLabel` | theme-aware `Comment`       | Language tag on the opening delimiter (e.g., `lua`) |
+| `FlemmaFenceBar`   | links to `FlemmaFenceLabel` | Delimiter bar character                             |
+
+When the cursor line overlaps with a fence overlay, the highlights are automatically contrast-adjusted against `CursorLine` to ensure readability. This uses pre-computed highlight variants that blend the fence colours with the `CursorLine` background.
+
+Fence overlays are only shown when `conceallevel >= 2`. Toggling conceal off (`[oe` or `yoe`) reveals the raw ` ``` ` delimiters. See [docs/conceal.md](conceal.md) for the full interaction between conceallevel and fence rendering.
 
 ## Usage bar
 
@@ -232,7 +302,7 @@ Before sending, preview the cost of the next request with `:Flemma usage:estimat
 
 For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they reference `buffer.tokens.input`. Estimates are deduped and suppressed while a chat request is already in flight.
 
-See `lua/flemma/usage.lua` for the driver and `lua/flemma/ui/bar/` for the shared Bar rendering class.
+See `lua/flemma/usage/` for the driver and prefetch logic, and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 
 ## Extmark priority
 
@@ -263,11 +333,35 @@ ui = {
 }
 ```
 
+## Jobs bar
+
+When background jobs are running, Flemma shows a floating bar anchored to one of the chat window's edges (default: bottom right). The bar displays the active job count with an animated spinner and disappears when all jobs complete.
+
+```lua
+ui = {
+  jobs = {
+    position = "bottom right",  -- one of: top, bottom, top left, top right,
+                                --          bottom left, bottom right
+  },
+}
+```
+
+When autopilot schedules a debounced auto-continue after a background job completes, the bar shows a countdown animation alongside the job count. The countdown reflects the `tools.autopilot.resume_delay` timer. Press <kbd>Ctrl-C</kbd> during the countdown to cancel the auto-continue — the countdown disappears from the bar but the job count remains while jobs are still running.
+
 ## AST inspection
 
 ### Hover
 
-When `experimental.lsp` is enabled, hovering over any element in a `.chat` buffer shows a compact AST node dump in a fenced `flemma-ast` code block. The dump shows the node's kind, position, and key fields at depth 1 — container nodes (messages, documents) show a child summary instead of recursing.
+When `lsp.enabled` is set (the default whenever `vim.lsp` is available), hovering over any element in a `.chat` buffer shows a compact AST node dump in a fenced `flemma-ast` code block. The dump shows the node's kind, position, and key fields at depth 1 — container nodes (messages, documents) show a child summary instead of recursing.
+
+### Go-to-definition
+
+Press `gd` (or use your LSP go-to-definition keymap) on:
+
+- A `tool_result` carrying a `job=` modeline → jumps to the matching `**Job Result:**` block.
+- A `**Job Result:**` header → jumps back to the originating `tool_result` placeholder.
+- An `include("...")` expression → opens the included file.
+- A `@./path` file reference → opens the referenced file.
 
 ### AST diff
 

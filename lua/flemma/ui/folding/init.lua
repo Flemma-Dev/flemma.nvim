@@ -8,12 +8,12 @@ local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
-local notify = require("flemma.notify")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
 local str = require("flemma.utilities.string")
 local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
+local turns = require("flemma.ui.turns")
 
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
 local LABEL_DETAIL_SEPARATOR = " — "
@@ -43,18 +43,12 @@ local BUILTIN_RULES = {
 -- Fold Map Cache
 -- ============================================================================
 
----The frontmatter rule reads `vim.wo.conceallevel` in its populate() to decide
----whether to emit fold entries (see lua/flemma/ui/folding/rules/frontmatter.lua
----and docs/conceal.md "Folds and `conceal_lines`"). Include it in the cache
----key so a conceallevel toggle self-invalidates — the OptionSet autocmd in
----ui/init.lua handles the on-screen refold, but the cache key is what keeps
----get_fold_level() correct between eager triggers.
----@type { changedtick: integer, bufnr: integer, conceallevel: integer, map: table<integer, string> }
-local fold_map_cache = { changedtick = -1, bufnr = -1, conceallevel = -1, map = {} }
+---@type { changedtick: integer, bufnr: integer, map: table<integer, string> }
+local fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
 
 ---Invalidate the fold map cache so the next get_fold_level rebuilds it.
 local function invalidate_cache()
-  fold_map_cache = { changedtick = -1, bufnr = -1, conceallevel = -1, map = {} }
+  fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
 end
 
 -- ============================================================================
@@ -170,16 +164,51 @@ end
 -- Fold Level
 -- ============================================================================
 
----Get fold level for a line number. O(1) lookup into cached fold map.
+---Get fold level for a line number. O(1) lookup into the cached fold map.
+---
+---## Performance background
+---
+---Neovim calls this function for every visible line (~300 on a typical
+---screen) each time foldexpr is re-evaluated. A naive implementation that
+---re-parses on every changedtick change causes a full AST parse + fold map
+---rebuild PER KEYSTROKE — ~3ms of Lua work that then triggers Neovim's
+---C-level fold state recalculation across all visible lines. On a 5000-line
+---buffer this compounds to 120ms+ per keystroke (profiled May 2025).
+---
+---## Strategy: defer during insert mode
+---
+---Buffer/conceallevel changes always rebuild (rare, needed for correctness).
+---Changedtick changes (every keystroke) are handled in two paths:
+---
+--- - **Normal mode**: rebuild immediately. Needed for `:read`, undo, and
+---   programmatic `nvim_buf_set_lines` (including test setups).
+--- - **Insert mode**: return `"="` ("keep previous level") for every line.
+---   This tells Neovim's fold engine "nothing changed" — a fast path that
+---   skips fold state recalculation entirely. The fold map catches up on
+---   CursorHold via invalidate_folds.
+---
+---The `"="` return during insert mode means folds are visually stale while
+---typing. This is acceptable because fold boundaries (role markers, tool
+---blocks) rarely change mid-keystroke, and any inaccuracy is corrected the
+---moment the user pauses (CursorHold fires after `updatetime` ms).
 ---@param lnum integer
 ---@return string
 function M.get_fold_level(lnum)
   local bufnr = vim.api.nvim_get_current_buf()
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  local conceal = vim.wo.conceallevel
-  if fold_map_cache.changedtick ~= tick or fold_map_cache.bufnr ~= bufnr or fold_map_cache.conceallevel ~= conceal then
+  if fold_map_cache.bufnr ~= bufnr then
     local doc = parser.get_parsed_document(bufnr)
-    fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
+    fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
+  elseif fold_map_cache.changedtick ~= tick then
+    local mode = vim.api.nvim_get_mode().mode
+    -- "=" tells Neovim "fold level unchanged from previous line evaluation",
+    -- which it fast-paths without updating fold state. Returning the cached
+    -- map value instead would force fold state recalculation for each line.
+    if mode == "i" or mode == "ic" or mode == "ix" or mode == "R" or mode == "Rc" or mode == "Rx" then
+      return "="
+    end
+    local doc = parser.get_parsed_document(bufnr)
+    fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
   end
   return fold_map_cache.map[lnum] or "="
 end
@@ -209,7 +238,21 @@ end
 ---@return {[1]:string, [2]:string}[]
 function M.get_fold_text()
   local foldstart_lnum = vim.v.foldstart
-  local foldend_lnum = vim.v.foldend
+  local ok, result = pcall(M._build_fold_text, foldstart_lnum, vim.v.foldend)
+  if ok then
+    return result
+  end
+  log.warn(string.format("fold text error at line %d: %s", foldstart_lnum, tostring(result)))
+  return { { vim.fn.getline(foldstart_lnum), "Folded" } }
+end
+
+---Build the fold text chunk list. Separated from get_fold_text so that
+---errors in tool preview formatters are caught by the pcall wrapper
+---above rather than breaking the entire fold display.
+---@param foldstart_lnum integer
+---@param foldend_lnum integer
+---@return {[1]:string, [2]:string}[]
+function M._build_fold_text(foldstart_lnum, foldend_lnum)
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
   local doc = get_document()
   local text_width = preview.get_text_area_width(vim.api.nvim_get_current_win())
@@ -219,14 +262,13 @@ function M.get_fold_text()
   local fm = doc.frontmatter
   if fm and fm.position.start_line == foldstart_lnum then
     local prefix = "```" .. fm.language .. " "
-    local suffix_full = " ``` " .. suffix
+    local suffix_full = " " .. suffix
     local fold_preview =
       preview.format_content_preview(fm.code, text_width - str.strwidth(prefix) - str.strwidth(suffix_full))
     if fold_preview ~= "" then
       return {
         { prefix, "Comment" },
-        { fold_preview, "Comment" },
-        { " ``` ", "Comment" },
+        { fold_preview .. " ", "Comment" },
         { suffix, "FlemmaFoldMeta" },
       }
     else
@@ -301,8 +343,8 @@ function M.get_fold_text()
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
       local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
-      if label then
-        fixed_chrome = fixed_chrome + str.strwidth(label) + separator_width -- label + em-dash separator
+      if detail then
+        fixed_chrome = fixed_chrome + str.strwidth(detail) + separator_width
       end
       local available = text_width - fixed_chrome
 
@@ -311,19 +353,18 @@ function M.get_fold_text()
       if label or detail then
         table.insert(chunks, { ": ", "FlemmaToolName" })
 
-        if label then
-          table.insert(chunks, { label, "FlemmaToolLabel" })
-          if detail and available > 0 then
-            local detail_text = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
-            if detail_text ~= "" then
-              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
+        if detail then
+          table.insert(chunks, { detail, "FlemmaToolDetail" })
+          if label and available > 0 then
+            local label_text = str.truncate(label, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
             end
           end
         else
-          -- No label: show detail only (reclaim separator space)
-          local detail_text =
-            str.truncate(detail --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
-          table.insert(chunks, { detail_text, "FlemmaToolDetail" })
+          local label_text =
+            str.truncate(label --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(chunks, { label_text, "FlemmaToolLabel" })
         end
         table.insert(chunks, { " ", "FlemmaFoldPreview" })
       else
@@ -337,10 +378,18 @@ function M.get_fold_text()
       local tool_info = tool_use_index[tool_seg.tool_use_id]
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
+      local effective_status = query.effective_tool_result_status(tool_seg, doc)
+
+      local icon_hl = "FlemmaToolIcon"
+      if effective_status == "error" then
+        icon_hl = "FlemmaToolIconError"
+      elseif not effective_status and tool_seg.content ~= "" then
+        icon_hl = "FlemmaToolIconSuccess"
+      end
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { TOOL_RESULT_ICON .. " ", "FlemmaToolIcon" },
+        { TOOL_RESULT_ICON .. " ", icon_hl },
         { "Tool Result: ", "FlemmaToolResultTitle" },
         { tool_name, "FlemmaToolName" },
       }
@@ -351,12 +400,69 @@ function M.get_fold_text()
         + str.strwidth(": ")
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
-      if tool_seg.status == "error" then
+      if effective_status == "error" then
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+      local available = text_width - fixed_chrome
+
+      table.insert(chunks, { ": ", "FlemmaFoldPreview" })
+      if effective_status == "error" then
+        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      end
+
+      local body = preview.format_content_preview(tool_seg.content, available)
       if tool_label then
-        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + result_separator_width -- label + em-dash separator
+        if body ~= "" then
+          local body_text = str.truncate(body, available - result_separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          if body_text ~= "" then
+            table.insert(chunks, { body_text, "FlemmaFoldPreview" })
+            available = available - str.strwidth(body_text)
+          end
+          if available > result_separator_width then
+            local label_text =
+              str.truncate(tool_label, available - result_separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
+            end
+          end
+        else
+          local label_text = str.truncate(tool_label, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          if label_text ~= "" then
+            table.insert(chunks, { label_text, "FlemmaToolLabel" })
+          end
+        end
+      elseif body ~= "" then
+        table.insert(chunks, { body, "FlemmaFoldPreview" })
+      end
+
+      table.insert(chunks, { " ", "FlemmaFoldPreview" })
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+      return chunks
+    elseif tool_kind == "job_result" then
+      ---@cast tool_seg flemma.ast.JobResultSegment
+      local icon_hl = "FlemmaToolIcon"
+      if tool_seg.status == "error" then
+        icon_hl = "FlemmaToolIconError"
+      elseif tool_seg.content ~= "" then
+        icon_hl = "FlemmaToolIconSuccess"
+      end
+
+      ---@type {[1]:string, [2]:string}[]
+      local chunks = {
+        { TOOL_RESULT_ICON .. " ", icon_hl },
+        { "Job Result: ", "FlemmaJobResultTitle" },
+        { tool_seg.job_id, "FlemmaToolName" },
+      }
+
+      local fixed_chrome = str.strwidth(TOOL_RESULT_ICON .. " ")
+        + str.strwidth("Job Result: ")
+        + str.strwidth(tool_seg.job_id)
+        + str.strwidth(": ")
+        + str.strwidth(" ")
+        + str.strwidth(suffix)
+      if tool_seg.status == "error" then
+        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local available = text_width - fixed_chrome
 
@@ -365,19 +471,9 @@ function M.get_fold_text()
         table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
       end
 
-      if tool_label then
-        table.insert(chunks, { tool_label, "FlemmaToolLabel" })
-        if available > 0 then
-          local body = preview.format_content_preview(tool_seg.content, available)
-          if body ~= "" then
-            table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
-          end
-        end
-      else
-        local body = preview.format_content_preview(tool_seg.content, available)
-        if body ~= "" then
-          table.insert(chunks, { body, "FlemmaFoldPreview" })
-        end
+      local body = preview.format_content_preview(tool_seg.content, available)
+      if body ~= "" then
+        table.insert(chunks, { body, "FlemmaFoldPreview" })
       end
 
       table.insert(chunks, { " ", "FlemmaFoldPreview" })
@@ -458,7 +554,7 @@ function M.setup_folding(bufnr)
   vim.wo[winid].foldmethod = "expr"
   vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
   vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.folding").get_fold_text()'
-  vim.wo[winid].foldlevel = config_facade.get().editing.foldlevel
+  vim.wo[winid].foldlevel = config_facade.get().editing.fold.level
 end
 
 ---Close all open sub-folds within a line range before closing the outer fold.
@@ -503,22 +599,9 @@ function M.toggle_message_fold()
     return
   end
 
-  -- No message at cursor — check frontmatter. The AST-provided range is what
-  -- proves the cursor is inside frontmatter; the conceallevel check below is
-  -- then the specific reason we know there is no fold to toggle (rather than,
-  -- say, a stale fold map).
   local fm = doc.frontmatter
   if fm and lnum >= fm.position.start_line and lnum <= fm.position.end_line then
     local fm_start = fm.position.start_line
-    if vim.wo.conceallevel >= 1 then
-      notify.info(
-        string.format(
-          "frontmatter isn't foldable with conceallevel=%d. This is a Neovim limitation.",
-          vim.wo.conceallevel
-        )
-      )
-      return
-    end
     if vim.fn.foldclosed(fm_start) ~= -1 then
       vim.cmd(fm_start .. " foldopen")
     else
@@ -527,24 +610,193 @@ function M.toggle_message_fold()
   end
 end
 
----Force Neovim to re-evaluate all fold levels for a buffer.
+-- ============================================================================
+-- Turn Folding
+-- ============================================================================
+
+---Check whether a @You message contains only job results (no real user text).
+---Such messages are auto-delivered background task completions, not user input.
+---@param msg flemma.ast.MessageNode
+---@return boolean
+local function is_job_delivery_only(msg)
+  if msg.role ~= "You" then
+    return false
+  end
+  for _, seg in ipairs(msg.segments) do
+    if seg.kind == "text" and seg.value:match("%S") then
+      return false
+    elseif seg.kind ~= "job_result" and seg.kind ~= "tool_result" and seg.kind ~= "text" then
+      return false
+    end
+  end
+  return true
+end
+
+---Open a message fold if it's closed, then close its inner sub-folds.
+---@param msg flemma.ast.MessageNode
+local function open_and_tidy_message(msg)
+  local msg_start = msg.position.start_line
+  if vim.fn.foldclosed(msg_start) ~= -1 then
+    pcall(function()
+      vim.cmd(msg_start .. " foldopen")
+    end)
+  end
+  close_sub_folds(msg_start + 1, msg.position.end_line)
+end
+
+---Fold intermediate messages in a single turn.
+---Closes inner folds (level 2) first, then the message fold (level 1) for
+---each message that is not the first or last in the turn. Also folds a leading
+---@You message if it contains only auto-delivered job results.
+---The first and last visible messages are opened (if closed) and their inner
+---folds (thinking, tool blocks) are closed for a clean overview.
+---@param bufnr integer
+---@param range flemma.ui.TurnRange
+local function fold_turn_range(bufnr, range)
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Collect messages within this turn's line range
+  local turn_messages = {} ---@type flemma.ast.MessageNode[]
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line >= range.start_line and msg.position.end_line <= range.end_line then
+      table.insert(turn_messages, msg)
+    end
+  end
+
+  if #turn_messages < 2 then
+    return
+  end
+
+  -- Determine the effective first visible message (skip leading job-delivery messages)
+  local first_visible = 1
+  while first_visible < #turn_messages and is_job_delivery_only(turn_messages[first_visible]) do
+    first_visible = first_visible + 1
+  end
+
+  -- Ensure the fold map is fresh
+  M.get_fold_level(range.start_line)
+
+  local last = #turn_messages
+
+  -- Fold everything except first_visible and last
+  for i = 1, #turn_messages do
+    if i == first_visible or i == last then
+      open_and_tidy_message(turn_messages[i])
+    else
+      local msg = turn_messages[i]
+      local msg_start = msg.position.start_line
+      if vim.fn.foldclosed(msg_start) == -1 then
+        close_sub_folds(msg_start + 1, msg.position.end_line)
+        pcall(function()
+          vim.cmd(msg_start .. " foldclose")
+        end)
+      end
+    end
+  end
+end
+
+---Fold intermediate messages in the turn containing the cursor.
+---No-op if cursor is outside any turn or the turn has 2 or fewer messages.
+---@param bufnr? integer Buffer number (defaults to current buffer)
+function M.fold_turn_at_cursor(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local lnum = vim.fn.line(".")
+  local ranges = turns.get_ranges(bufnr)
+
+  for _, range in ipairs(ranges) do
+    if lnum >= range.start_line and lnum <= range.end_line then
+      fold_turn_range(bufnr, range)
+      return
+    end
+  end
+end
+
+---Fold intermediate messages in all turns, plus frontmatter and system messages.
+---@param bufnr? integer Buffer number (defaults to current buffer)
+function M.fold_all_turns(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local ranges = turns.get_ranges(bufnr)
+
+  for _, range in ipairs(ranges) do
+    fold_turn_range(bufnr, range)
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Ensure the fold map is fresh for foldclose operations below
+  if #doc.messages > 0 then
+    M.get_fold_level(doc.messages[1].position.start_line)
+  end
+
+  -- Fold frontmatter
+  local fm = doc.frontmatter
+  if fm and vim.fn.foldclosed(fm.position.start_line) == -1 then
+    pcall(function()
+      vim.cmd(fm.position.start_line .. " foldclose")
+    end)
+  end
+
+  -- Fold system messages
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "System" and vim.fn.foldclosed(msg.position.start_line) == -1 then
+      close_sub_folds(msg.position.start_line + 1, msg.position.end_line)
+      pcall(function()
+        vim.cmd(msg.position.start_line .. " foldclose")
+      end)
+    end
+  end
+end
+
+---Rebuild the fold map and tell Neovim to re-evaluate fold levels.
+---Called from update_ui on CursorHold/CursorHoldI.
 ---
----Incremental fold recalculation only updates changed lines, but tool_use
----fold levels depend on distant tool_result segments — resetting foldmethod
----forces a complete re-evaluation. The fold map cache is also invalidated
----so get_fold_level rebuilds from the current AST even when changedtick
----has not advanced (e.g., update_ui on the same event loop tick).
+---## Why `set foldmethod=expr` is expensive
 ---
----Unconditionally sets foldmethod=expr rather than guarding on the current
----value: external view restoration (`:loadview` when `viewoptions` includes
----`folds`) silently switches foldmethod to `manual`, which would prevent
----foldexpr from being evaluated for new content. Re-asserting expr on every
----UI cycle ensures self-healing regardless of session/view persistence.
+---`set foldmethod=expr` forces Neovim to call the foldexpr callback for
+---every visible line. Even if get_fold_level returns instantly, Neovim's
+---C-level fold engine must process the returned level string, update the
+---fold tree, and recalculate the display. On a 5000-line buffer with ~300
+---visible lines, this costs 50-100ms (profiled May 2025). Doing it on
+---every CursorHoldI (which fires every `updatetime` ms during pauses in
+---insert mode) makes typing feel sluggish.
+---
+---## Strategy: skip redundant re-evaluations
+---
+--- 1. **Already current**: if changedtick hasn't advanced, the fold map is
+---    already built — skip the rebuild AND the `set foldmethod=expr`. Only
+---    re-assert foldmethod if something external switched it away from
+---    `expr` (e.g., `:loadview` restoring `foldmethod=manual`).
+---
+--- 2. **Changed in insert mode**: rebuild the fold map (cheap, ~3ms) so
+---    it's ready for the next normal-mode evaluation, but SKIP the
+---    `set foldmethod=expr` re-assertion (expensive). get_fold_level is
+---    already returning `"="` during insert mode, so Neovim's fold state
+---    won't pick up the new map until the user leaves insert mode anyway.
+---
+--- 3. **Changed in normal mode**: full rebuild + re-assert. This handles
+---    undo, `:read`, streaming content, and the first CursorHold after
+---    leaving insert mode.
 ---@param bufnr integer
 function M.invalidate_folds(bufnr)
-  invalidate_cache()
   local winid = vim.fn.bufwinid(bufnr)
-  if winid ~= -1 then
+  if winid == -1 then
+    return
+  end
+  local foldmethod_ok = vim.wo[winid].foldmethod == "expr"
+  -- Invalidate the cache unconditionally. Neovim's incremental fold updater
+  -- (foldUpdateIEMS, triggered by nvim_buf_set_lines) may have already called
+  -- get_fold_level for the modified line range, warming the cache with the
+  -- current tick. But that incremental update only covers modified lines —
+  -- unmodified lines whose fold level changed indirectly (e.g. a tool_use
+  -- block becoming foldable because its result was injected elsewhere) are
+  -- not revisited. Invalidating the cache ensures the next full fold
+  -- evaluation (triggered by `set foldmethod=expr`) rebuilds from scratch.
+  invalidate_cache()
+  local mode = vim.api.nvim_get_mode().mode
+  if
+    not foldmethod_ok
+    or (mode ~= "i" and mode ~= "ic" and mode ~= "ix" and mode ~= "R" and mode ~= "Rc" and mode ~= "Rx")
+  then
     vim.fn.win_execute(winid, "set foldmethod=expr")
   end
 end
@@ -563,7 +815,11 @@ local function safe_foldclose(winid, start_lnum, end_lnum)
   local fold_level = vim.api.nvim_win_call(winid, function()
     return vim.fn.foldlevel(start_lnum)
   end)
-  if not fold_level or fold_level <= 0 then
+  -- All auto-closeable ranges are level-2 folds (tool blocks, thinking,
+  -- job results, frontmatter). If foldlevel is only 1, the inner fold
+  -- hasn't been established yet (foldexpr is lazy) and :foldclose would
+  -- close the enclosing level-1 message fold instead.
+  if not fold_level or fold_level < 2 then
     return false
   end
   local fold_closed = vim.api.nvim_win_call(winid, function()
@@ -597,6 +853,9 @@ function M.fold_completed_blocks(bufnr)
   if winid == -1 then
     log.debug("fold_completed_blocks(): Buffer " .. bufnr .. " has no window. Cannot close folds.")
     return
+  end
+  if buffer_state.fold_completed_tick ~= tick then
+    buffer_state.pending_folds_retried = nil
   end
   buffer_state.fold_completed_tick = tick
 
@@ -640,9 +899,30 @@ function M.fold_completed_blocks(bufnr)
 
   -- Track pending folds for retry on subsequent calls
   buffer_state.pending_folds = next(pending) ~= nil and pending or nil
+  if not buffer_state.pending_folds then
+    buffer_state.pending_folds_retried = nil
+  end
 
   if #new_folds > 0 then
     log.debug("fold_completed_blocks(): Auto-closed " .. #new_folds .. " fold(s) in buffer " .. bufnr)
+  end
+
+  -- When folds fail because foldexpr hasn't been fully evaluated yet
+  -- (newly inserted lines lack fold boundaries), schedule a single
+  -- deferred retry. The :redraw forces Vim to evaluate foldexpr for all
+  -- visible lines, establishing the fold boundaries that :foldclose needs.
+  if buffer_state.pending_folds and not buffer_state.pending_folds_retried then
+    buffer_state.pending_folds_retried = true
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local retry_winid = vim.fn.bufwinid(bufnr)
+      if retry_winid ~= -1 then
+        vim.fn.win_execute(retry_winid, "redraw")
+      end
+      M.fold_completed_blocks(bufnr)
+    end)
   end
 end
 

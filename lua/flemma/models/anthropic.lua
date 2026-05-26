@@ -142,7 +142,7 @@ return {
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
 
-    -- Claude Opus 4.1 (as of Aug 2025)
+    -- Claude Opus 4.1
     ["claude-opus-4-1"] = {
       pricing = {
         input = 15.0,
@@ -170,7 +170,7 @@ return {
       min_cache_tokens = 2048,
     },
 
-    -- Claude Opus 4
+    -- Claude Opus 4 (deprecated, retiring Jun 15, 2026)
     ["claude-opus-4-0"] = {
       pricing = {
         input = 15.0,
@@ -198,7 +198,7 @@ return {
       min_cache_tokens = 2048,
     },
 
-    -- Claude Sonnet 4
+    -- Claude Sonnet 4 (deprecated, retiring Jun 15, 2026)
     ["claude-sonnet-4-0"] = {
       pricing = {
         input = 3.0,
@@ -224,19 +224,6 @@ return {
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
       min_cache_tokens = 2048,
-    },
-
-    -- Claude Haiku 3 (deprecated, retiring Apr 20, 2026)
-    ["claude-3-haiku-20240307"] = {
-      pricing = {
-        input = 0.25,
-        output = 1.25,
-        cache_read = 0.03,
-        cache_write = 0.30,
-      },
-      max_input_tokens = 200000,
-      max_output_tokens = 4096,
-      min_cache_tokens = 1024,
     },
   },
 }

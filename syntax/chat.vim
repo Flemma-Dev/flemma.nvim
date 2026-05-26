@@ -35,11 +35,23 @@ syntax match FlemmaToolResultRejected "(rejected)" contained
 syntax match FlemmaToolResultDenied   "(denied)"   contained
 syntax match FlemmaToolResultAborted  "(aborted)"  contained
 
+" Job Result title: **Job Result:**
+syntax match FlemmaJobResultTitle "\*\*Job Result:\*\*" contained
+" Job Result status suffixes (same set as Tool Result)
+syntax match FlemmaJobResultError    "(error)"    contained
+syntax match FlemmaJobResultPending  "(pending)"  contained
+syntax match FlemmaJobResultApproved "(approved)" contained
+syntax match FlemmaJobResultRejected "(rejected)" contained
+syntax match FlemmaJobResultDenied   "(denied)"   contained
+syntax match FlemmaJobResultAborted  "(aborted)"  contained
+
 " Tool Use region (in assistant messages): **Tool Use:** `name` (`id`)
 " Note: Tool names and IDs in backticks are handled by treesitter markdown_inline as inline code
 syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained containedin=FlemmaAssistant contains=FlemmaToolUseTitle
 " Tool Result region (in user messages): **Tool Result:** `id` (optional concise status)
 syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaToolResultTitle,FlemmaToolResultError,FlemmaToolResultPending,FlemmaToolResultApproved,FlemmaToolResultRejected,FlemmaToolResultDenied,FlemmaToolResultAborted
+" Job Result region (in user messages): **Job Result:** `job_id` (optional concise status)
+syntax region FlemmaJobResult start="\*\*Job Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaJobResultTitle,FlemmaJobResultError,FlemmaJobResultPending,FlemmaJobResultApproved,FlemmaJobResultRejected,FlemmaJobResultDenied,FlemmaJobResultAborted
 
 " Note: Signature concealment is now handled via extmarks in ui.lua highlight_thinking_tags()
 " This avoids needing conceallevel which affects the whole buffer (including frontmatter)

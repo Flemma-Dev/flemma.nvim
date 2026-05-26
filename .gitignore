@@ -6,6 +6,10 @@ node_modules/
 /IDEAS.md
 .env
 
+# Profile runs (contrib/profile/run.sh output)
+/.profile/
+/contrib/profile/fixture.chat
+
 # Ephemeral
 /.claude/plans/*.md
 /contrib/*.git/

@@ -704,6 +704,115 @@ describe("flemma.ui.bar", function()
     end)
   end)
 
+  -- Regression: dismiss() during a command-line window (q:, q/, q?) fails to
+  -- delete float scratch buffers because nvim_buf_delete raises E11 ("Invalid
+  -- in command-line window"). The pcall in dismiss() swallows the error, the
+  -- bar handle is marked dismissed and its references nilled — but the actual
+  -- float windows survive as orphans with no mechanism to clean them up.
+  describe("dismiss during cmdwin", function()
+    local function open_visible_bufnr()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "hello" })
+      vim.api.nvim_set_current_buf(bufnr)
+      return bufnr
+    end
+
+    it("defers float cleanup to CmdwinLeave", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      local float_bufnr = bar._float_bufnr
+      assert.is_truthy(float_bufnr)
+      assert.is_true(vim.api.nvim_buf_is_valid(float_bufnr))
+
+      rawset(vim.fn, "getcmdwintype", function()
+        return ":"
+      end)
+      bar:dismiss()
+      rawset(vim.fn, "getcmdwintype", nil)
+
+      assert.is_true(bar:is_dismissed())
+      assert.is_true(vim.api.nvim_buf_is_valid(float_bufnr), "float scratch buffer must survive dismiss during cmdwin")
+
+      vim.api.nvim_exec_autocmds("CmdwinLeave", {})
+      vim.wait(100, function()
+        return not vim.api.nvim_buf_is_valid(float_bufnr)
+      end)
+      assert.is_false(vim.api.nvim_buf_is_valid(float_bufnr), "float scratch buffer must be deleted after CmdwinLeave")
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("also defers gutter float cleanup to CmdwinLeave", function()
+      local bufnr = open_visible_bufnr()
+      local winid = vim.fn.bufwinid(bufnr)
+      vim.wo[winid].number = true
+      vim.wo[winid].numberwidth = 4
+      vim.cmd("redraw")
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top left",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+        icon = "ℹ",
+      })
+      local float_bufnr = bar._float_bufnr
+      local gutter_bufnr = bar._gutter_bufnr
+      assert.is_truthy(float_bufnr)
+      assert.is_truthy(gutter_bufnr)
+
+      rawset(vim.fn, "getcmdwintype", function()
+        return ":"
+      end)
+      bar:dismiss()
+      rawset(vim.fn, "getcmdwintype", nil)
+
+      assert.is_true(bar:is_dismissed())
+      assert.is_true(vim.api.nvim_buf_is_valid(float_bufnr), "main float survives dismiss during cmdwin")
+      assert.is_true(vim.api.nvim_buf_is_valid(gutter_bufnr), "gutter float survives dismiss during cmdwin")
+
+      vim.api.nvim_exec_autocmds("CmdwinLeave", {})
+      vim.wait(100, function()
+        return not vim.api.nvim_buf_is_valid(float_bufnr)
+      end)
+
+      assert.is_false(vim.api.nvim_buf_is_valid(float_bufnr), "main float deleted after CmdwinLeave")
+      assert.is_false(vim.api.nvim_buf_is_valid(gutter_bufnr), "gutter float deleted after CmdwinLeave")
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("fires on_dismiss synchronously even during cmdwin", function()
+      local bufnr = open_visible_bufnr()
+      local calls = 0
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+        on_dismiss = function()
+          calls = calls + 1
+        end,
+      })
+
+      rawset(vim.fn, "getcmdwintype", function()
+        return ":"
+      end)
+      bar:dismiss()
+      rawset(vim.fn, "getcmdwintype", nil)
+
+      assert.equals(1, calls, "on_dismiss must fire synchronously, even during cmdwin")
+
+      vim.api.nvim_exec_autocmds("CmdwinLeave", {})
+      vim.wait(50, function()
+        return false
+      end)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   -- Regression: when the displacement loop in M.new dismisses the only bar
   -- on a buffer, Bar:dismiss clears bars[bufnr] to nil. Subsequent
   -- iterations of the loop must not index that nil — common trigger is

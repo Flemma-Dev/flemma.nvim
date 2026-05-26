@@ -4,6 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local hooks = require("flemma.hooks")
 local normalize = require("flemma.provider.normalize")
 local autopilot = require("flemma.autopilot")
 local processor = require("flemma.processor")
@@ -17,6 +18,11 @@ local display = require("flemma.utilities.display")
 local registry = require("flemma.provider.registry")
 
 local MARKER_SANDBOX = "⊡"
+local ICON_APPROVED = "✓"
+local ICON_DENIED = "✗"
+local ICON_PENDING_APPROVAL = "⋯"
+local ICON_BOOTING = "⧖"
+local ICON_BOOT_COMPLETE = "✔"
 
 --- Base code point for the decorative letter block used as source layer icons.
 --- Change this single value to switch icon style (e.g. 0x24B6 for circled,
@@ -893,8 +899,8 @@ local function format_provider_section(b, data, is_last)
       value = p.model or "(none)",
       source = p.model_source,
       put_fn = p.model and function(b_inner)
-          put_model_value(b_inner, p.model --[[@as string]])
-        end or nil,
+        put_model_value(b_inner, p.model --[[@as string]])
+      end or nil,
     },
   }
 
@@ -1238,11 +1244,11 @@ local function format_tools_section(b, data, is_last, verbose)
   -- booting indicator (kept stable across refreshes to avoid layout jumps)
   if t.booting then
     b:leaf(false)
-    b:put("⧖ loading async tool sources…", "FlemmaStatusBooting")
+    b:put(ICON_BOOTING .. " loading async tool sources…", "FlemmaStatusBooting")
     b:nl()
   elseif t.boot_completed then
     b:leaf(false)
-    b:put("✔ finished loading tool sources", "FlemmaStatusEnabled")
+    b:put(ICON_BOOT_COMPLETE .. " finished loading tool sources", "FlemmaStatusEnabled")
     b:nl()
   end
 
@@ -1309,7 +1315,7 @@ local function format_approval_section(b, data, is_last)
     if has_approved then
       groups_shown = groups_shown + 1
       b:branch(groups_shown == total_groups)
-      b:put("✓ ", "FlemmaStatusToolEnabled")
+      b:put(ICON_APPROVED .. " ", "FlemmaStatusToolEnabled")
       b:put("auto-approve", "FlemmaStatusToolEnabled")
       b:nl()
 
@@ -1329,7 +1335,7 @@ local function format_approval_section(b, data, is_last)
     if has_denied then
       groups_shown = groups_shown + 1
       b:branch(groups_shown == total_groups)
-      b:put("✗ ", "FlemmaStatusToolDisabled")
+      b:put(ICON_DENIED .. " ", "FlemmaStatusToolDisabled")
       b:put("deny", "FlemmaStatusToolDisabled")
       b:nl()
 
@@ -1349,7 +1355,7 @@ local function format_approval_section(b, data, is_last)
     if has_pending then
       groups_shown = groups_shown + 1
       b:branch(groups_shown == total_groups)
-      b:put("⋯ ", "FlemmaStatusToolPending")
+      b:put(ICON_PENDING_APPROVAL .. " ", "FlemmaStatusToolPending")
       b:put("require approval", "FlemmaStatusToolPending")
       b:nl()
 
@@ -1819,7 +1825,9 @@ function M.collect(bufnr)
     -- evaluate_frontmatter_internal, no separate normalization needed)
     for _, diagnostic in ipairs(fm_result.diagnostics) do
       if diagnostic.severity == "error" or diagnostic.severity == "warning" then
-        collected_diagnostics = collected_diagnostics or {}
+        if not collected_diagnostics then
+          collected_diagnostics = {}
+        end
         table.insert(collected_diagnostics, diagnostic)
       end
     end
@@ -2002,31 +2010,34 @@ function M.show(opts)
   vim.bo[buf].filetype = "flemma-status"
 
   -- Auto-refresh when async tool sources finish loading or config changes
-  local augroup = vim.api.nvim_create_augroup("FlemmaStatus", { clear = true })
-  vim.api.nvim_create_autocmd("User", {
-    group = augroup,
-    pattern = { "FlemmaBootComplete", "FlemmaConfigUpdated" },
+  local function on_refresh()
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    local source = vim.b[buf].flemma_source_bufnr
+    local refresh_bufnr = (source and vim.api.nvim_buf_is_valid(source)) and source or 0
+    local verbose = vim.b[buf].flemma_verbose or false
+    local refresh_data
+    if verbose then
+      refresh_data = M.collect_verbose(refresh_bufnr)
+    else
+      refresh_data = M.collect(refresh_bufnr)
+    end
+    local was_booting = vim.b[buf].flemma_was_booting or false
+    if was_booting and not refresh_data.tools.booting then
+      refresh_data.tools.boot_completed = true
+    end
+    vim.b[buf].flemma_was_booting = refresh_data.tools.booting
+    render_buffer(buf, win, M.format(refresh_data, verbose))
+  end
+  local boot_subscription = hooks.on("boot:complete", on_refresh)
+  local config_subscription = hooks.on("config:updated", on_refresh)
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    buffer = buf,
+    once = true,
     callback = function()
-      if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
-        pcall(vim.api.nvim_del_augroup_by_id, augroup)
-        return
-      end
-      local source = vim.b[buf].flemma_source_bufnr
-      local refresh_bufnr = (source and vim.api.nvim_buf_is_valid(source)) and source or 0
-      local verbose = vim.b[buf].flemma_verbose or false
-      local refresh_data
-      if verbose then
-        refresh_data = M.collect_verbose(refresh_bufnr)
-      else
-        refresh_data = M.collect(refresh_bufnr)
-      end
-      -- Show "finished" line only if the loading indicator was visible before
-      local was_booting = vim.b[buf].flemma_was_booting or false
-      if was_booting and not refresh_data.tools.booting then
-        refresh_data.tools.boot_completed = true
-      end
-      vim.b[buf].flemma_was_booting = refresh_data.tools.booting
-      render_buffer(buf, win, M.format(refresh_data, verbose))
+      boot_subscription:off()
+      config_subscription:off()
     end,
   })
 

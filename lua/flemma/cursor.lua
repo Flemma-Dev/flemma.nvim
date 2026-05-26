@@ -4,6 +4,7 @@
 ---@class flemma.Cursor
 local M = {}
 
+local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 
@@ -257,9 +258,8 @@ function M.setup()
     end,
   })
 
-  -- Register cleanup hook for buffer teardown
-  state.register_cleanup("cursor", function(bufnr)
-    local buffer_state = state.get_buffer_state(bufnr)
+  hooks.on("buffer:destroyed", function(data)
+    local buffer_state = state.get_buffer_state(data.bufnr)
     local timer = buffer_state.cursor_idle_timer
     if timer then
       ---@cast timer uv.uv_timer_t
@@ -268,7 +268,7 @@ function M.setup()
         timer:close()
       end
       buffer_state.cursor_idle_timer = nil
-      log.trace("cursor: cleanup timer for buf " .. bufnr)
+      log.trace("cursor: cleanup timer for buf " .. data.bufnr)
     end
   end)
 end

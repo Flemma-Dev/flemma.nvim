@@ -202,8 +202,9 @@ describe("flemma.usage.prefetch (debounce + fetch)", function()
   end)
 end)
 
-describe("flemma.usage.prefetch (FlemmaConfigUpdated)", function()
+describe("flemma.usage.prefetch (config:updated)", function()
   local prefetch
+  local hooks
   local client = require("flemma.client")
   local bufnr
 
@@ -211,6 +212,7 @@ describe("flemma.usage.prefetch (FlemmaConfigUpdated)", function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.usage.prefetch"] = nil
     require("flemma").setup({ parameters = { thinking = false } })
+    hooks = require("flemma.hooks")
     prefetch = require("flemma.usage.prefetch")
     prefetch._DEBOUNCE_MS = 10
 
@@ -226,7 +228,7 @@ describe("flemma.usage.prefetch (FlemmaConfigUpdated)", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("wipes cache and schedules a refetch on FlemmaConfigUpdated", function()
+  it("wipes cache and schedules a refetch on config:updated", function()
     client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
     prefetch.start_tracking(bufnr)
 
@@ -235,7 +237,7 @@ describe("flemma.usage.prefetch (FlemmaConfigUpdated)", function()
     end, 10)
     assert.equals(5432, prefetch.get_tokens(bufnr))
 
-    vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaConfigUpdated" })
+    hooks.dispatch("config:updated")
 
     -- The wipe must happen synchronously (before the refetch lands).
     assert.is_nil(prefetch.get_tokens(bufnr))
@@ -250,6 +252,7 @@ end)
 
 describe("flemma.usage.prefetch (request lifecycle)", function()
   local prefetch
+  local hooks
   local client = require("flemma.client")
   local bufnr
 
@@ -257,6 +260,7 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.usage.prefetch"] = nil
     require("flemma").setup({ parameters = { thinking = false } })
+    hooks = require("flemma.hooks")
     prefetch = require("flemma.usage.prefetch")
     prefetch._DEBOUNCE_MS = 10
 
@@ -290,40 +294,33 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
     }
   end
 
-  it("FlemmaRequestSending sets request_active", function()
+  it("request:sending sets request_active", function()
     prefetch.start_tracking(bufnr)
     assert.is_false(prefetch._is_request_active(bufnr))
 
-    vim.api.nvim_exec_autocmds("User", {
-      pattern = "FlemmaRequestSending",
-      data = { bufnr = bufnr },
-    })
+    hooks.dispatch("request:sending", { bufnr = bufnr })
 
     assert.is_true(prefetch._is_request_active(bufnr))
   end)
 
-  it("FlemmaRequestFinished with a request payload seeds the cache", function()
+  it("request:finished with a request payload seeds the cache", function()
     prefetch.start_tracking(bufnr)
-    -- No fixture registered; initial fetch errors silently → cache stays nil.
     vim.wait(100, function()
       return false
     end)
     assert.is_nil(prefetch.get_tokens(bufnr))
 
-    vim.api.nvim_exec_autocmds("User", {
-      pattern = "FlemmaRequestFinished",
-      data = {
-        bufnr = bufnr,
-        status = "completed",
-        request = make_request(7777),
-      },
+    hooks.dispatch("request:finished", {
+      bufnr = bufnr,
+      status = "completed",
+      request = make_request(7777),
     })
 
     assert.equals(7777, prefetch.get_tokens(bufnr))
     assert.is_false(prefetch._is_request_active(bufnr))
   end)
 
-  it("FlemmaRequestFinished sums cached+uncached input tokens to match count_tokens semantics", function()
+  it("request:finished sums cached+uncached input tokens to match count_tokens semantics", function()
     prefetch.start_tracking(bufnr)
     vim.wait(100, function()
       return false
@@ -333,17 +330,12 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
     req.cache_read_input_tokens = 11591
     req.cache_creation_input_tokens = 0
 
-    vim.api.nvim_exec_autocmds("User", {
-      pattern = "FlemmaRequestFinished",
-      data = { bufnr = bufnr, status = "completed", request = req },
-    })
+    hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = req })
 
-    -- Total must include cache-read tokens so the display matches what
-    -- count_tokens would return (it doesn't know about cache).
     assert.equals(11597, prefetch.get_tokens(bufnr))
   end)
 
-  it("FlemmaRequestFinished without request clears request_active but leaves cache untouched", function()
+  it("request:finished without request clears request_active but leaves cache untouched", function()
     client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
     prefetch.start_tracking(bufnr)
     vim.wait(2000, function()
@@ -351,16 +343,10 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
     end, 10)
     assert.equals(5432, prefetch.get_tokens(bufnr))
 
-    vim.api.nvim_exec_autocmds("User", {
-      pattern = "FlemmaRequestSending",
-      data = { bufnr = bufnr },
-    })
+    hooks.dispatch("request:sending", { bufnr = bufnr })
     assert.is_true(prefetch._is_request_active(bufnr))
 
-    vim.api.nvim_exec_autocmds("User", {
-      pattern = "FlemmaRequestFinished",
-      data = { bufnr = bufnr, status = "errored" },
-    })
+    hooks.dispatch("request:finished", { bufnr = bufnr, status = "errored" })
 
     assert.is_false(prefetch._is_request_active(bufnr))
     assert.equals(5432, prefetch.get_tokens(bufnr))
@@ -373,15 +359,12 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
       return prefetch.get_tokens(bufnr) ~= nil
     end, 10)
 
-    -- Wipe cache + schedule a refetch via FlemmaConfigUpdated,
+    -- Wipe cache + schedule a refetch via config:updated,
     -- then immediately enter request_active to cancel the pending timer.
-    vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaConfigUpdated" })
+    hooks.dispatch("config:updated")
     assert.is_nil(prefetch.get_tokens(bufnr))
 
-    vim.api.nvim_exec_autocmds("User", {
-      pattern = "FlemmaRequestSending",
-      data = { bufnr = bufnr },
-    })
+    hooks.dispatch("request:sending", { bufnr = bufnr })
 
     -- Wait well past the debounce window; the cancelled timer must not fire.
     vim.wait(100, function()

@@ -3,7 +3,6 @@
 ---@class flemma.tools.Executor
 local M = {}
 
-local registry = require("flemma.tools.registry")
 local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local config_facade = require("flemma.config")
@@ -24,6 +23,13 @@ local indicators = require("flemma.ui.indicators")
 local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
+local messages = require("flemma.messages")
+local tools_module = require("flemma.tools")
+local readiness = require("flemma.readiness")
+local notify = require("flemma.notify")
+
+local JOB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+local JOB_ID_LENGTH = 8
 
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
@@ -35,6 +41,23 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field started_at integer timestamp
 ---@field completed boolean
 ---@field placeholder_modified boolean
+---@field job_id string|nil Background job ID; presence implies this is a background execution
+
+---@class flemma.tools.JobDelivery
+---@field job_id string
+---@field tool_id string
+---@field tool_name string
+---@field result flemma.tools.ExecutionResult
+---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
+
+---Check whether a named tool is available for a buffer's resolved tool set.
+---@param name string Tool name to check
+---@param bufnr integer Buffer number
+---@return boolean
+local function is_tool_available(name, bufnr)
+  local available = tools_module.get_for_prompt(bufnr)
+  return available[name] ~= nil
+end
 
 ---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
@@ -45,6 +68,96 @@ local function get_buffer_pending(bufnr)
     buffer_state.pending_executions = {}
   end
   return buffer_state.pending_executions
+end
+
+---Get or initialize the completion queue for a buffer.
+---@param bufnr integer
+---@return flemma.tools.JobDelivery[]
+local function get_delivery_queue(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.delivery_queue then
+    buffer_state.delivery_queue = {}
+  end
+  return buffer_state.delivery_queue
+end
+
+---Collect all job IDs referenced in the buffer (tool_result meta.job + job_result IDs).
+---@param bufnr integer
+---@return table<string, true>
+function M.collect_buffer_job_ids(bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+  local ids = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ids[seg.meta.job] = true
+      elseif seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
+        ids[seg.job_id] = true
+      end
+    end
+  end
+  return ids
+end
+
+local MAX_JOB_ID_ATTEMPTS = 100
+
+---Generate a single random job ID candidate using OS-level randomness.
+---@return string
+local function generate_raw_job_id()
+  local bytes = vim.uv.random(JOB_ID_LENGTH) --[[@as string]]
+  local parts = { "job_" }
+  for i = 1, JOB_ID_LENGTH do
+    local idx = (
+      bytes:byte(i) --[[@as integer]]
+      % #JOB_ID_CHARS
+    ) + 1
+    parts[#parts + 1] = JOB_ID_CHARS:sub(idx, idx)
+  end
+  return table.concat(parts)
+end
+
+---Generate a random job identifier (e.g. "job_k7x2m") that does not collide
+---with any ID already present in the buffer or the provided exclusion set.
+---@param existing_ids? table<string, true>
+---@return string
+function M.generate_job_id(existing_ids)
+  for _ = 1, MAX_JOB_ID_ATTEMPTS do
+    local id = generate_raw_job_id()
+    if not existing_ids or not existing_ids[id] then
+      return id
+    end
+    log.debug("executor: job ID collision detected (" .. id .. "), regenerating")
+  end
+  return generate_raw_job_id()
+end
+
+---Enqueue a completed job result for later delivery.
+---@param bufnr integer
+---@param item flemma.tools.JobDelivery
+function M.enqueue_job_completion(bufnr, item)
+  local queue = get_delivery_queue(bufnr)
+  item.completed_at = item.completed_at or os.time()
+  table.insert(queue, item)
+end
+
+---Check whether any job completions are waiting for delivery.
+---@param bufnr integer
+---@return boolean
+function M.has_job_completions(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local queue = buffer_state.delivery_queue
+  return queue ~= nil and #queue > 0
+end
+
+---Drain and return all queued job completions in FIFO order.
+---@param bufnr integer
+---@return flemma.tools.JobDelivery[]
+function M.drain_job_completions(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local queue = buffer_state.delivery_queue or {}
+  buffer_state.delivery_queue = {}
+  return queue
 end
 
 ---Count tools currently occupying execution slots for a buffer.
@@ -61,8 +174,31 @@ function M.count_running(bufnr)
     return 0
   end
   local n = 0
-  for _ in pairs(pending) do
-    n = n + 1
+  for _, entry in pairs(pending) do
+    if not entry.job_id then
+      n = n + 1
+    end
+  end
+  return n
+end
+
+---Count background jobs still in progress for a buffer.
+---Includes jobs that are executing and jobs whose results are queued but not yet
+---drained into the buffer. This is the user-facing "active" count: a job is
+---active until its result is visible in the conversation.
+---@param bufnr integer
+---@return integer
+function M.count_active_jobs(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
+  if not pending then
+    return 0
+  end
+  local n = 0
+  for _, entry in pairs(pending) do
+    if entry.job_id then
+      n = n + 1
+    end
   end
   return n
 end
@@ -151,6 +287,50 @@ local function do_completion(bufnr, tool_id, result, opts)
   local pending = get_buffer_pending(bufnr)
   local entry = pending[tool_id]
 
+  if entry and entry.job_id then
+    entry.completed = true
+    indicators.update_tool_indicator(bufnr, tool_id, result.success)
+    indicators.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
+    M.enqueue_job_completion(bufnr, {
+      job_id = entry.job_id,
+      tool_id = tool_id,
+      tool_name = entry.tool_name,
+      result = result,
+    })
+    hooks.dispatch("tool:completed", {
+      bufnr = bufnr,
+      tool_name = entry.tool_name,
+      tool_id = tool_id,
+      status = result.success and "success" or "error",
+    })
+    log.debug("executor: job " .. entry.job_id .. " (tool=" .. tool_id .. ") completed, queued for delivery")
+
+    maybe_unlock_buffer(bufnr)
+
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local bs = state.get_buffer_state(bufnr)
+      local fg_count = M.count_running(bufnr)
+      if not bs.current_request and fg_count == 0 then
+        log.debug("executor: conversation idle, triggering job drain for buffer " .. bufnr)
+        bridge.drain_job_completions(bufnr)
+      else
+        log.debug(
+          "executor: deferring job drain for buffer "
+            .. bufnr
+            .. " (request_active="
+            .. tostring(bs.current_request ~= nil)
+            .. " foreground_tools="
+            .. fg_count
+            .. ")"
+        )
+      end
+    end)
+    return
+  end
+
   -- For async tools, join with placeholder injection as a single undo step
   -- only when the placeholder actually modified the buffer.
   -- For sync tools, all changes are already in one undo block (same handler),
@@ -166,7 +346,7 @@ local function do_completion(bufnr, tool_id, result, opts)
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
-  hooks.dispatch("tool:finished", {
+  hooks.dispatch("tool:completed", {
     bufnr = bufnr,
     tool_name = entry and entry.tool_name or "unknown",
     tool_id = tool_id,
@@ -204,6 +384,23 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- Auto-write after tool result injection so the buffer is saved between
   -- tool executions, not only after the next send_to_provider() completes.
   editing.auto_write(bufnr)
+
+  if M.has_job_completions(bufnr) then
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local bs = state.get_buffer_state(bufnr)
+      local fg_count = M.count_running(bufnr)
+      if not bs.current_request and fg_count == 0 then
+        log.debug(
+          "executor: foreground tool done, conversation idle with pending job completions, triggering drain for buffer "
+            .. bufnr
+        )
+        bridge.drain_job_completions(bufnr)
+      end
+    end)
+  end
 end
 
 ---Handle completion of a tool execution (success or error)
@@ -262,6 +459,11 @@ function M.build_execution_context(params)
     __dirname = dirname,
     __filename = params.__filename,
   }
+
+  ---@return flemma.ast.DocumentNode
+  function context:get_parsed_document()
+    return parser.get_parsed_document(bufnr)
+  end
 
   ---Get tool-specific config subtree (read-only copy).
   ---Returns config.tools[tool_name] via vim.deepcopy, or nil if no subtree exists.
@@ -332,6 +534,15 @@ function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
+  -- Extract execution directives from the tool input so that both the normal
+  -- flow (core.lua) and manual approval (execute_at_cursor) share one path.
+  local is_background = context.input and context.input.background == true
+  if is_background then
+    context.input = vim.tbl_extend("keep", {}, context.input)
+    context.input.background = nil
+    log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested background execution")
+  end
+
   -- Check for API request in flight (mutually exclusive)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
@@ -341,21 +552,59 @@ function M.execute(bufnr, context)
   -- Check for duplicate execution
   local pending = get_buffer_pending(bufnr)
   if pending[tool_id] then
+    local existing_entry = pending[tool_id]
+    if existing_entry.job_id then
+      -- Background job already running for this tool_id (undo + resend scenario).
+      -- Re-adopt: link the fresh (approved) placeholder to the existing job.
+      log.debug(
+        "executor: re-adopting existing job "
+          .. existing_entry.job_id
+          .. " for "
+          .. tool_id
+          .. " ("
+          .. existing_entry.tool_name
+          .. ") — started_at="
+          .. existing_entry.started_at
+          .. " completed="
+          .. tostring(existing_entry.completed)
+      )
+      injector.clear_header_status(bufnr, tool_id)
+      local header_ok, header_err = injector.set_header_modeline(bufnr, tool_id, "job=" .. existing_entry.job_id)
+      if not header_ok then
+        log.warn("executor: failed to set re-adopt header for " .. tool_id .. ": " .. (header_err or "unknown"))
+      end
+      local placeholder_text
+      if is_tool_available("flemma.jobs.status", bufnr) then
+        placeholder_text = messages.render("job-executing--tracked", { job_id = existing_entry.job_id })
+      else
+        placeholder_text = messages.render("job-executing--untracked")
+      end
+      local fence_ok, fence_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+      if not fence_ok then
+        log.warn("executor: failed to set re-adopt placeholder for " .. tool_id .. ": " .. (fence_err or "unknown"))
+      end
+      return true, nil
+    end
     return false, "Tool " .. tool_id .. " is already executing"
   end
 
-  -- Validate tool exists and is executable
-  if not registry.is_executable(tool_name) then
-    local tool = registry.get(tool_name)
-    if not tool then
-      return false, "Unknown tool: " .. tool_name
-    end
+  -- Validate tool exists and is executable.
+  -- Use tools_module.get() so pending third-party modules are loaded first.
+  if not tools_module.get(tool_name) then
+    return false, "Unknown tool: " .. tool_name
+  end
+  if not tools_module.is_executable(tool_name) then
     return false, "Tool '" .. tool_name .. "' is not executable"
   end
 
-  local executor_fn, is_async = registry.get_executor(tool_name)
+  local executor_fn, is_async = tools_module.get_executor(tool_name)
   if not executor_fn then
     return false, "No executor found for tool: " .. tool_name
+  end
+
+  local job_status_tool_available = false
+  if is_background then
+    job_status_tool_available = is_tool_available("flemma.jobs.status", bufnr)
   end
 
   -- Create pending entry
@@ -370,6 +619,29 @@ function M.execute(bufnr, context)
     completed = false,
     placeholder_modified = false,
   }
+  if is_background then
+    -- Reuse existing job_id from the tool_result header when re-executing, so that
+    -- the completed result replaces the existing Job Result block in-place.
+    local existing_job_id = nil
+    local doc = parser.get_parsed_document(bufnr)
+    local sibling = ast.find_tool_sibling(doc, context.node)
+    if sibling and sibling.kind == "tool_result" then
+      ---@cast sibling flemma.ast.ToolResultSegment
+      existing_job_id = sibling.meta and sibling.meta.job --[[@as string|nil]]
+    end
+    pending[tool_id].job_id = existing_job_id or M.generate_job_id(M.collect_buffer_job_ids(bufnr))
+    log.debug(
+      "executor: "
+        .. (existing_job_id and "reusing" or "allocated")
+        .. " job_id "
+        .. pending[tool_id].job_id
+        .. " for "
+        .. tool_id
+        .. " ("
+        .. tool_name
+        .. ")"
+    )
+  end
 
   -- Lock buffer to prevent user edits during execution
   state.lock_buffer(bufnr)
@@ -399,6 +671,32 @@ function M.execute(bufnr, context)
   -- clear_header_status is a no-op when the header has no suffix.
   if placeholder_opts and not placeholder_opts.modified then
     injector.clear_header_status(bufnr, tool_id)
+  end
+
+  if is_background and pending[tool_id] and pending[tool_id].job_id then
+    local job_id = pending[tool_id].job_id --[[@as string]]
+    local h_ok, h_err = injector.set_header_modeline(bufnr, tool_id, "job=" .. job_id)
+    if not h_ok then
+      log.warn("executor: failed to set background header for " .. tool_id .. ": " .. (h_err or "unknown"))
+    end
+    local placeholder_text
+    if job_status_tool_available then
+      placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
+    else
+      placeholder_text = messages.render("job-executing--untracked")
+    end
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+    if not f_ok then
+      log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
+    end
+    log.debug("executor: wrote background placeholder for " .. tool_id .. " (job=" .. job_id .. ")")
+    hooks.dispatch("job:submitted", {
+      bufnr = bufnr,
+      job_id = job_id,
+      tool_id = tool_id,
+      tool_name = tool_name,
+      active_count = M.count_active_jobs(bufnr),
+    })
   end
 
   -- Show execution indicator
@@ -467,6 +765,12 @@ function M.execute(bufnr, context)
     if type(cancel_or_err) == "function" then
       pending[tool_id].cancel_fn = cancel_or_err
     end
+
+    -- Background tools are dispatched — unlock immediately so autopilot can
+    -- resume without waiting for the job to finish.
+    if is_background then
+      maybe_unlock_buffer(bufnr)
+    end
   else
     -- Sync execution — complete inline for reliable undojoin
     local ok, result = pcall(executor_fn, context.input, exec_context)
@@ -499,20 +803,29 @@ function M.cancel(tool_id)
     end
     local entry = pending[tool_id]
     if entry and not entry.completed then
-      -- Call cancel function if available
+      local is_background = entry.job_id ~= nil
+      log.info(
+        "executor: cancelling "
+          .. (is_background and "background" or "foreground")
+          .. " tool "
+          .. tool_id
+          .. (entry.job_id and (" (job=" .. entry.job_id .. ")") or "")
+          .. " in buffer "
+          .. bufnr
+      )
       if entry.cancel_fn then
         pcall(entry.cancel_fn)
       end
 
-      -- Record cancellation as error result (cancel is always called from main thread)
       handle_completion(bufnr, tool_id, {
         success = false,
-        error = "User aborted tool execution.",
+        error = messages.render("tool-aborted"),
       }, { async = false })
       return true
     end
     ::continue::
   end
+  log.debug("executor: cancel(" .. tool_id .. ") — tool not found or already completed")
   return false
 end
 
@@ -525,12 +838,15 @@ function M.cancel_all(bufnr)
     return
   end
 
-  -- Collect tool_ids to cancel (don't modify during iteration)
   local to_cancel = {}
   for tool_id, entry in pairs(pending) do
     if not entry.completed then
       table.insert(to_cancel, tool_id)
     end
+  end
+
+  if #to_cancel > 0 then
+    log.info("executor: cancel_all() — cancelling " .. #to_cancel .. " tool(s) in buffer " .. bufnr)
   end
 
   for _, tool_id in ipairs(to_cancel) do
@@ -553,39 +869,42 @@ function M.get_pending(bufnr)
 
   local result = {}
   for _, entry in pairs(pending) do
-    if not entry.completed then
+    if not entry.completed and not entry.job_id then
       table.insert(result, entry)
     end
   end
   return result
 end
 
----Cancel the active operation for a buffer (API request or first pending tool)
+---Cancel the active operation for a buffer: API request, queued send, or tool under cursor.
+---Does NOT fall back to "oldest pending tool" — if the cursor isn't on a tool, the caller
+---should handle the miss (e.g., double-tap RAGE cancel).
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
+    log.debug("cancel_for_buffer(): cancelling active API request in buffer " .. bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
   if buffer_state.pending_send then
+    log.debug("cancel_for_buffer(): cancelling queued send in buffer " .. bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
-  local pending = M.get_pending(bufnr)
-  if #pending > 0 then
-    table.sort(pending, function(a, b)
-      return a.started_at < b.started_at
-    end)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, _ = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if ctx then
+    log.debug("cancel_for_buffer(): cursor on tool " .. ctx.tool_id .. ", attempting cancel")
     autopilot.disarm(bufnr)
-    M.cancel(pending[1].tool_id)
-    return true
+    return M.cancel(ctx.tool_id)
   end
+  log.debug("cancel_for_buffer(): nothing to cancel in buffer " .. bufnr)
   return false
 end
 
----Cancel the tool at cursor position, or the first pending tool if no cursor match
+---Cancel the tool at cursor position (foreground or background).
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
@@ -595,15 +914,143 @@ function M.cancel_at_cursor(bufnr)
     autopilot.disarm(bufnr)
     return M.cancel(ctx.tool_id)
   end
-  local pending = M.get_pending(bufnr)
-  if #pending > 0 then
-    table.sort(pending, function(a, b)
-      return a.started_at < b.started_at
-    end)
-    autopilot.disarm(bufnr)
-    return M.cancel(pending[1].tool_id)
-  end
   return false
+end
+
+---Background the foreground tool at cursor position.
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
+function M.background_at_cursor(bufnr)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, err = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if not ctx then
+    return false, err or "No tool call found at cursor"
+  end
+
+  local pending = get_buffer_pending(bufnr)
+  local entry = pending[ctx.tool_id]
+  if not entry then
+    return false, "Tool " .. ctx.tool_id .. " is not currently executing"
+  end
+  if entry.completed then
+    return false, "Tool " .. ctx.tool_id .. " has already completed"
+  end
+  if entry.job_id then
+    return false, "Tool " .. ctx.tool_id .. " is already running in background"
+  end
+
+  entry.job_id = M.generate_job_id(M.collect_buffer_job_ids(bufnr))
+  local job_id = entry.job_id --[[@as string]]
+
+  local header_ok, header_err = injector.set_header_modeline(bufnr, ctx.tool_id, "job=" .. job_id)
+  if not header_ok then
+    log.warn(
+      "executor: background_at_cursor failed to update header for " .. ctx.tool_id .. ": " .. (header_err or "unknown")
+    )
+    entry.job_id = nil
+    return false, "Failed to update header: " .. (header_err or "unknown")
+  end
+
+  local job_placeholder_text
+  if is_tool_available("flemma.jobs.status", bufnr) then
+    job_placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
+  else
+    job_placeholder_text = messages.render("job-executing--untracked")
+  end
+  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text)
+  if not content_ok then
+    log.warn(
+      "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
+    )
+    injector.clear_header_status(bufnr, ctx.tool_id)
+    entry.job_id = nil
+    return false, content_err
+  end
+
+  indicators.reposition_tool_indicators(bufnr)
+  maybe_unlock_buffer(bufnr)
+  ui.update_ui(bufnr)
+  log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)
+
+  local ap_state = autopilot.get_state(bufnr)
+  if M.count_running(bufnr) == 0 and ap_state ~= "sending" then
+    log.debug(
+      "executor: all foreground tools clear after backgrounding (autopilot="
+        .. ap_state
+        .. "), scheduling send for buffer "
+        .. bufnr
+    )
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        bridge.send_or_execute({ bufnr = bufnr })
+      end
+    end)
+  end
+
+  return true, nil
+end
+
+---Resolve orphaned job results by injecting error blocks.
+---@param bufnr integer
+---@return integer count Number of orphans resolved
+function M.resolve_orphaned_jobs(bufnr)
+  log.debug("executor: scanning for orphaned background jobs in buffer " .. bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+
+  local completed_jobs = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "job_result" then
+        ---@cast seg flemma.ast.JobResultSegment
+        completed_jobs[seg.job_id] = true
+      end
+    end
+  end
+
+  local buffer_state = state.get_buffer_state(bufnr)
+  local active_jobs = {}
+  if buffer_state.pending_executions then
+    for _, entry in pairs(buffer_state.pending_executions) do
+      if entry.job_id then
+        active_jobs[entry.job_id] = true
+      end
+    end
+  end
+
+  ---@type { job_id: string, tool_use_id: string }[]
+  local orphans = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ---@cast seg flemma.ast.ToolResultSegment
+        local job_id = seg.meta.job --[[@as string]]
+        if not completed_jobs[job_id] and not active_jobs[job_id] then
+          table.insert(orphans, {
+            job_id = job_id,
+            tool_use_id = seg.tool_use_id,
+          })
+        end
+      end
+    end
+  end
+
+  if #orphans > 0 then
+    log.info("executor: found " .. #orphans .. " orphaned background job(s) in buffer " .. bufnr)
+  else
+    log.trace("executor: no orphaned background jobs in buffer " .. bufnr)
+  end
+
+  for _, orphan in ipairs(orphans) do
+    log.debug("executor: resolving orphan " .. orphan.job_id .. " with error completion")
+    injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
+    injector.append_job_result(bufnr, orphan.job_id, {
+      success = false,
+      error = messages.render("job-lost"),
+    })
+  end
+
+  return #orphans
 end
 
 ---Locate the tool_result placeholder for the tool at the cursor position. Returns
@@ -636,8 +1083,91 @@ local function resolve_lifecycle_tool_at_cursor(bufnr)
   return ctx, result_seg, nil
 end
 
+---Validate that a tool_result placeholder exists and is in a lifecycle state
+---(pending/approved/denied/rejected) — not already completed or errored.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean ok
+---@return string|nil error
+local function validate_lifecycle_status(bufnr, tool_id)
+  local doc = parser.get_parsed_document(bufnr)
+  local tool_use_seg = nil
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" and seg.id == tool_id then
+        tool_use_seg = seg
+        break
+      end
+    end
+    if tool_use_seg then
+      break
+    end
+  end
+  if not tool_use_seg then
+    return false, "Tool not found: " .. tool_id
+  end
+  local result_seg = ast.find_tool_sibling(doc, tool_use_seg)
+  if not result_seg or result_seg.kind ~= "tool_result" then
+    return false, "No tool result placeholder for " .. tool_id
+  end
+  ---@cast result_seg flemma.ast.ToolResultSegment
+  if not result_seg.status or result_seg.status == "error" then
+    return false, "Tool " .. tool_id .. " has already completed"
+  end
+  return true, nil
+end
+
+---Set the `(approved)` header suffix on a tool_result placeholder by tool ID.
+---Re-engages autopilot if it was paused waiting for approval.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error
+function M.approve(bufnr, tool_id)
+  local valid, validate_err = validate_lifecycle_status(bufnr, tool_id)
+  if not valid then
+    return false, validate_err
+  end
+  local ok, update_err = injector.set_header_status(bufnr, tool_id, "approved")
+  if not ok then
+    return false, update_err
+  end
+  editing.auto_write(bufnr)
+  autopilot.nudge(bufnr)
+  return true, nil
+end
+
+---Set the `(rejected)` header suffix on a tool_result placeholder by tool ID,
+---optionally replacing the fence body with a user-supplied message that the
+---model will see as the rejection reason.
+---Re-engages autopilot if it was paused waiting for approval.
+---@param bufnr integer
+---@param tool_id string
+---@param message string|nil Optional rejection message written into the fence
+---@return boolean success
+---@return string|nil error
+function M.reject(bufnr, tool_id, message)
+  local valid, validate_err = validate_lifecycle_status(bufnr, tool_id)
+  if not valid then
+    return false, validate_err
+  end
+  local ok, update_err = injector.set_header_status(bufnr, tool_id, "rejected")
+  if not ok then
+    return false, update_err
+  end
+  if message and message ~= "" then
+    local content_ok, content_err = injector.set_fence_content(bufnr, tool_id, message)
+    if not content_ok then
+      return false, content_err
+    end
+  end
+  editing.auto_write(bufnr)
+  autopilot.nudge(bufnr)
+  return true, nil
+end
+
 ---Set the `(approved)` header suffix on the tool_result placeholder at cursor.
----The tool is not executed here — the next `<C-]>` advances the cycle.
+---Resolves the tool ID from cursor position, then delegates to approve().
 ---@param bufnr integer
 ---@return boolean success
 ---@return string|nil error
@@ -646,17 +1176,11 @@ function M.approve_at_cursor(bufnr)
   if not ctx then
     return false, err
   end
-  local ok, update_err = injector.set_header_status(bufnr, ctx.tool_id, "approved")
-  if not ok then
-    return false, update_err
-  end
-  editing.auto_write(bufnr)
-  return true, nil
+  return M.approve(bufnr, ctx.tool_id)
 end
 
----Set the `(rejected)` header suffix on the tool_result placeholder at cursor,
----optionally replacing the fence body with a user-supplied message that the
----model will see as the rejection reason.
+---Set the `(rejected)` header suffix on the tool_result placeholder at cursor.
+---Resolves the tool ID from cursor position, then delegates to reject().
 ---@param bufnr integer
 ---@param message string|nil Optional rejection message written into the fence
 ---@return boolean success
@@ -666,18 +1190,7 @@ function M.reject_at_cursor(bufnr, message)
   if not ctx then
     return false, err
   end
-  local ok, update_err = injector.set_header_status(bufnr, ctx.tool_id, "rejected")
-  if not ok then
-    return false, update_err
-  end
-  if message and message ~= "" then
-    local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, message)
-    if not content_ok then
-      return false, content_err
-    end
-  end
-  editing.auto_write(bufnr)
-  return true, nil
+  return M.reject(bufnr, ctx.tool_id, message)
 end
 
 ---Resolve and execute the tool at cursor position.
@@ -721,9 +1234,22 @@ function M.execute_at_cursor(bufnr)
   -- manually executing tools without an autopilot loop running.
   if autopilot.get_state(bufnr) == "paused" then
     autopilot.arm(bufnr)
+  elseif autopilot.get_state(bufnr) == "idle" then
+    autopilot.disarm(bufnr)
   end
 
-  return M.execute(bufnr, ctx)
+  local ok, success_or_err, err_msg = pcall(M.execute, bufnr, ctx)
+  if not ok then
+    local raised = success_or_err --[[@as flemma.readiness.Suspense|string]]
+    if readiness.is_suspense(raised) then
+      local suspense = raised --[[@as flemma.readiness.Suspense]]
+      notify.warn(suspense.message)
+      return false, suspense.message
+    end
+    error(raised)
+  end
+  return success_or_err, --[[@as boolean]]
+    err_msg --[[@as string|nil]]
 end
 
 ---Clean up all state for a buffer (called on buffer close)
@@ -741,9 +1267,21 @@ function M.cleanup_buffer(bufnr)
   buffer_state.pending_executions = nil
 end
 
--- Register cleanup hook with state (breaks circular dependency: state cannot require executor)
-state.register_cleanup("executor", function(bufnr)
-  M.cleanup_buffer(bufnr)
-end)
+function M.setup()
+  hooks.on("buffer:destroyed", function(data)
+    M.cleanup_buffer(data.bufnr)
+  end)
+end
+
+---@private
+---@param bufnr integer
+---@param tool_id string
+---@param result flemma.tools.ExecutionResult
+---@param opts? { async?: boolean }
+function M._test_complete_execution(bufnr, tool_id, result, opts)
+  do_completion(bufnr, tool_id, result, opts)
+end
+
+bridge.register("resolve_orphaned_jobs", M.resolve_orphaned_jobs)
 
 return M

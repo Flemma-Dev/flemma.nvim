@@ -96,11 +96,11 @@ local function compute_geometry(position, W, H, G, T, icon_width, icon_in_gutter
   local row = is_bottom and (H - 1) or 0
 
   if is_right then
-    -- Width = leading-pad(1) + icon_width + body(T). Mirrors the trailing
-    -- breathing of left-anchored bars: instead of wasting the +1 against
-    -- the window's right border, we put it on the left so the icon does
-    -- not sit flush against buffer text at col W-width-1.
-    local width = math.min(T + icon_width + 1, W)
+    -- Width = leading-pad(1) + icon_width + body(T) + trailing-pad(1).
+    -- The leading space keeps the icon from sitting flush against buffer
+    -- text; the trailing space keeps the body from jamming against the
+    -- window's right border.
+    local width = math.min(T + icon_width + 2, W)
     return {
       row = row,
       main_col = W - width,
@@ -281,15 +281,37 @@ function Bar:dismiss()
   -- suppressed), or :tabclose's cascade close firing WinClosed only for the
   -- tab's current window. Clearing the namespace is redundant: buf_delete
   -- discards extmarks with the buffer.
-  for _, scratch_bufnr in ipairs({ self._float_bufnr, self._gutter_bufnr }) do
-    if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
-      pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
-    end
-  end
+  --
+  -- E11: nvim_buf_delete fails inside the command-line window (q:, q/, q?).
+  -- Capture the bufnr values and defer deletion to CmdwinLeave, mirroring the
+  -- pattern in bash tool's destroy_terminal_buffer.
+  local float_bufnr = self._float_bufnr
+  local gutter_bufnr = self._gutter_bufnr
   self._float_bufnr = nil
   self._gutter_bufnr = nil
   self._float_winid = nil
   self._gutter_winid = nil
+
+  if vim.fn.getcmdwintype() ~= "" then
+    vim.api.nvim_create_autocmd("CmdwinLeave", {
+      once = true,
+      callback = function()
+        vim.schedule(function()
+          for _, scratch_bufnr in ipairs({ float_bufnr, gutter_bufnr }) do
+            if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
+              pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
+            end
+          end
+        end)
+      end,
+    })
+  else
+    for _, scratch_bufnr in ipairs({ float_bufnr, gutter_bufnr }) do
+      if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
+        pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
+      end
+    end
+  end
 
   if bars[self.bufnr] and bars[self.bufnr][self.position] == self then
     bars[self.bufnr][self.position] = nil
@@ -417,7 +439,7 @@ function Bar:_render()
     text = string.rep(" ", G) .. text
   end
   if geom.lead_pad_for_right then
-    text = " " .. text
+    text = " " .. text .. " "
   end
 
   -- Ensure main float buffer.

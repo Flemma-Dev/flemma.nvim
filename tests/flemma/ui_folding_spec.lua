@@ -178,11 +178,11 @@ describe("UI Folding", function()
 
       local lines = {
         "@You:",
-        "question", -- lines 1-2: >1, =
-        "more content", -- line 3: =
-        "", -- line 4: <1 (end of message, trailing empty line)
+        "question",
+        "more content",
+        "",
         "@Assistant:",
-        "answer", -- lines 5-6: >1
+        "answer",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -223,6 +223,91 @@ describe("UI Folding", function()
       parser.clear_ast_snapshot_before_send(bufnr)
     end)
 
+    it("should show blank separator as gap in streaming scenario when fold.gap is enabled", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { fold = { gap = true } } })
+      folding = require("flemma.ui.folding")
+
+      local parser = require("flemma.parser")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hi!" })
+      parser.create_ast_snapshot_before_send(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant:" })
+
+      assert.are.equal(">1", folding.get_fold_level(1), "@You: should start message fold")
+      assert.are.equal("=", folding.get_fold_level(2), "Hi! should be inside fold")
+      assert.are.equal("0", folding.get_fold_level(3), "blank separator should be visible gap")
+      assert.are.equal(">1", folding.get_fold_level(4), "@Assistant: should start message fold")
+
+      parser.clear_ast_snapshot_before_send(bufnr)
+    end)
+
+    it("should leave trailing blank as gap when fold.gap is enabled", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { fold = { gap = true } } })
+      folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "more content",
+        "",
+        "@Assistant:",
+        "answer",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">1", folding.get_fold_level(1))
+      assert.are.equal("=", folding.get_fold_level(2))
+      assert.are.equal("=", folding.get_fold_level(3))
+      assert.are.equal("0", folding.get_fold_level(4))
+      assert.are.equal(">1", folding.get_fold_level(5))
+    end)
+
+    it("should leave exactly one blank line visible with multiple trailing blanks when fold.gap is enabled", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { fold = { gap = true } } })
+      folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "",
+        "",
+        "@Assistant:",
+        "answer",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">1", folding.get_fold_level(1))
+      assert.are.equal("=", folding.get_fold_level(3))
+      assert.are.equal("0", folding.get_fold_level(4))
+      assert.are.equal(">1", folding.get_fold_level(5))
+    end)
+
     it("should return >2 for frontmatter on line 1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
@@ -259,7 +344,7 @@ describe("UI Folding", function()
       assert.are.equal("<2", folding.get_fold_level(3))
     end)
 
-    it("should skip frontmatter fold when conceallevel >= 1", function()
+    it("should fold frontmatter at any conceallevel", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
@@ -274,30 +359,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("=", folding.get_fold_level(1), "opening fence should not start a fold when conceallevel>=1")
-      assert.are.equal("=", folding.get_fold_level(3), "closing fence should not end a fold when conceallevel>=1")
-    end)
-
-    it("should invalidate fold cache when conceallevel toggles", function()
-      local bufnr = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.wo.conceallevel = 0
-
-      local lines = {
-        "```lua",
-        "x = 5",
-        "```",
-        "@You:",
-        "question",
-      }
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-
-      assert.are.equal(">2", folding.get_fold_level(1), "sanity: fold present at conceallevel=0")
-
-      vim.wo.conceallevel = 2
-
-      assert.are.equal("=", folding.get_fold_level(1), "fold should disappear once conceallevel flips to 2")
+      assert.are.equal(">2", folding.get_fold_level(1), "opening fence should start a fold at conceallevel=2")
+      assert.are.equal("<2", folding.get_fold_level(3), "closing fence should end a fold at conceallevel=2")
     end)
 
     it("should return >2 for completed tool_use block start", function()
@@ -519,6 +582,113 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       assert.are.equal(">2", folding.get_fold_level(11))
+    end)
+
+    it("should NOT fold tool_result with background job and no completion", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 10" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_abc12)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- tool_result has content and a job modeline but no JobResult
+      local fold_level = folding.get_fold_level(11)
+      assert.are_not.equal(">2", fold_level, "Background job without completion should NOT fold")
+    end)
+
+    it("should fold tool_result with background job once completion exists", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 10" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_abc12)",
+        "",
+        "```",
+        "actual result here",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "actual result here",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      local fold_level = folding.get_fold_level(11)
+      assert.are.equal(">2", fold_level, "Background job with completion should fold")
+    end)
+
+    it("should fold a standalone job_result block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Done.",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_fold1`",
+        "",
+        "```",
+        "47 passed, 0 failed",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      local fold_level = folding.get_fold_level(6)
+      assert.are.equal(">2", fold_level, "Job result should fold")
+    end)
+
+    it("should fold a job_result with error status", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "**Job Result:** `job_fold2` (error)",
+        "",
+        "```",
+        "Exit code 1",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      local fold_level = folding.get_fold_level(2)
+      assert.are.equal(">2", fold_level, "Job result with error should fold")
     end)
 
     it("should NOT fold tool_use without a matching tool_result", function()
@@ -821,7 +991,7 @@ describe("UI Folding", function()
       assert.are.equal(6, foldclosed, "Thinking block should be folded at line 6")
     end)
 
-    it("should handle multiple thinking blocks and only fold the last one", function()
+    it("should fold thinking blocks from all completed assistant messages", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -855,13 +1025,54 @@ describe("UI Folding", function()
       -- Call the function
       folding.fold_completed_blocks(bufnr)
 
-      -- The second thinking block (line 11) should be folded
+      -- Both thinking blocks should be folded (both are in completed messages)
+      local foldclosed_first = vim.fn.foldclosed(3)
+      assert.are.equal(3, foldclosed_first, "First thinking block should be folded")
+
       local foldclosed_second = vim.fn.foldclosed(11)
       assert.are.equal(11, foldclosed_second, "Second thinking block should be folded")
+    end)
 
-      -- The first thinking block (line 3) should remain open
-      local foldclosed_first = vim.fn.foldclosed(3)
-      assert.are.equal(-1, foldclosed_first, "First thinking block should remain open")
+    it("should fold earlier thinking block even after conversation advances past it", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      -- Simulate the bug scenario: a multi-turn conversation where the first
+      -- thinking block's auto-close failed (e.g., foldexpr not yet evaluated),
+      -- and the conversation has since advanced with new messages.
+      local lines = {
+        "@Assistant:", -- 1 (msg 1)
+        "first response",
+        "<thinking>", -- 3
+        "first thought content that is quite long",
+        "</thinking>", -- 5
+        "first answer",
+        "@You:", -- 7 (msg 2)
+        "question",
+        "@Assistant:", -- 9 (msg 3)
+        "second response",
+        "@You:", -- 11 (msg 4)
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- The thinking block at line 3 is in message 1 — no longer the
+      -- second-to-last message. Previously this would never get folded.
+      folding.fold_completed_blocks(bufnr)
+
+      assert.are.equal(3, vim.fn.foldclosed(3), "Thinking in earlier message should still be auto-closed")
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      assert.is_truthy(
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:1:3"],
+        "Earlier thinking block should be tracked in auto_closed_folds"
+      )
     end)
 
     it("should fold <thinking redacted> block", function()
@@ -1074,7 +1285,7 @@ describe("UI Folding", function()
       -- Verify highlight groups
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+      assert.are.equal("FlemmaToolIconSuccess", icon_chunk[2])
       assert.is_nil(find_chunk(chunks, "⬡"), "tool_result should not use the tool_use icon")
 
       local title_chunk = find_chunk(chunks, "Tool Result:")
@@ -1084,6 +1295,376 @@ describe("UI Folding", function()
       local meta_chunk = chunks[#chunks]
       assert.is_truthy(meta_chunk[1]:match("%(6 lines%)"), "Last chunk should be line count")
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
+    end)
+
+    it("should use FlemmaToolError highlight for error tool_result icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (error)",
+        "",
+        "```",
+        "Command failed: permission denied",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2])
+    end)
+
+    it("should use FlemmaToolIcon highlight for denied tool_result icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "rm -rf /" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (denied)",
+        "",
+        "```",
+        "Tool execution was denied by user.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIcon", icon_chunk[2], "Denied should keep default FlemmaToolIcon")
+    end)
+
+    it("should inherit FlemmaToolIconError from failed job_result", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 999" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_fail1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_fail1` (error)",
+        "",
+        "```",
+        "Exit code 1",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2], "tool_result linked to failed job should show error icon")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("%(error%)"), "Fold text should show (error) prefix")
+    end)
+
+    it("should show FlemmaToolIconSuccess for tool_result with successful job", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_ok1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_ok1`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal(
+        "FlemmaToolIconSuccess",
+        icon_chunk[2],
+        "tool_result linked to successful job should show success icon"
+      )
+    end)
+
+    it("should keep FlemmaToolIconSuccess for tool_result with pending job", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 999" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_pend1)",
+        "",
+        "```",
+        "Running as a background job.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      -- This tool_result is not terminal (pending job), but force fold it for fold text testing
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal(
+        "FlemmaToolIconSuccess",
+        icon_chunk[2],
+        "Pending job should not change icon (content is non-empty)"
+      )
+    end)
+
+    it("should return chunk list for folded job_result block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "file1.txt",
+        "file2.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("3,8 foldclose")
+
+      vim.v.foldstart = 3
+      vim.v.foldend = 8
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("Job Result: "), "Fold text should contain 'Job Result: '")
+      assert.is_truthy(text:match("job_abc12"), "Fold text should contain job ID")
+      assert.is_truthy(text:match("file1%.txt"), "Fold text should preview result content")
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have job_result icon chunk")
+      assert.are.equal("FlemmaToolIconSuccess", icon_chunk[2])
+
+      local title_chunk = find_chunk(chunks, "Job Result:")
+      assert.is_not_nil(title_chunk, "Should have title chunk")
+      assert.are.equal("FlemmaJobResultTitle", title_chunk[2])
+
+      local id_chunk = find_chunk(chunks, "job_abc12")
+      assert.is_not_nil(id_chunk, "Should have job ID chunk")
+      assert.are.equal("FlemmaToolName", id_chunk[2])
+    end)
+
+    it("should use FlemmaToolIconError for error job_result fold text", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "",
+        "**Job Result:** `job_abc12` (error)",
+        "",
+        "```",
+        "Job lost: session ended",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("3,7 foldclose")
+
+      vim.v.foldstart = 3
+      vim.v.foldend = 7
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have job_result icon chunk")
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2])
+
+      local error_chunk = find_chunk(chunks, "%(error%)")
+      assert.is_not_nil(error_chunk, "Should have error marker chunk")
+      assert.are.equal("FlemmaToolResultError", error_chunk[2])
+    end)
+
+    it("should propagate job_result error to linked tool_result fold icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{"command": "sleep 999"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_err1)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_err1` (error)",
+        "",
+        "```",
+        "Job failed: timeout",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("9,13 foldclose")
+
+      vim.v.foldstart = 9
+      vim.v.foldend = 13
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2], "Should propagate error from linked job_result")
+
+      local error_chunk = find_chunk(chunks, "%(error%)")
+      assert.is_not_nil(error_chunk, "Should have (error) prefix from effective status")
+      assert.are.equal("FlemmaToolResultError", error_chunk[2])
     end)
 
     it("should return chunk list for folded message", function()
@@ -1239,6 +1820,48 @@ describe("UI Folding", function()
       local meta_chunk = chunks[#chunks]
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
     end)
+
+    it("should not include trailing fence delimiter in frontmatter fold text", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "model = 'claude-sonnet-4-20250514'",
+        "temperature = 0.7",
+        "```",
+        "",
+        "@You:",
+        "Hello",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("1,4 foldclose")
+
+      vim.v.foldstart = 1
+      vim.v.foldend = 4
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("```lua"), "Fold text should start with ```lua prefix")
+      assert.is_truthy(text:match("%(4 lines%)"), "Fold text should show line count")
+
+      -- The trailing ``` fence should not appear in the fold text
+      local backtick_count = 0
+      for _ in text:gmatch("```") do
+        backtick_count = backtick_count + 1
+      end
+      assert.are.equal(1, backtick_count, "Should have exactly one ``` (prefix only, no trailing fence)")
+    end)
   end)
 
   describe("fold_completed_blocks", function()
@@ -1316,6 +1939,36 @@ describe("UI Folding", function()
       -- Pending tool result should NOT be folded
       local foldclosed = vim.fn.foldclosed(10)
       assert.are.equal(-1, foldclosed, "Pending tool result should not be folded")
+    end)
+
+    it("should fold job_result blocks", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Done.",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_autoclose1`",
+        "",
+        "```",
+        "47 passed, 0 failed",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      folding.fold_completed_blocks(bufnr)
+
+      local foldclosed = vim.fn.foldclosed(6)
+      assert.are.equal(6, foldclosed, "Job result block should be folded at line 6")
     end)
 
     it("should not escalate fold when block is already closed", function()
@@ -1945,7 +2598,7 @@ describe("UI Folding", function()
 
       -- Critical: the fold should NOT be in auto_closed_folds
       local buffer_state = state.get_buffer_state(bufnr)
-      local fold_id = "thinking:1" -- message_index for second-to-last message
+      local fold_id = "thinking:1:3"
       assert.is_falsy(
         buffer_state.auto_closed_folds and buffer_state.auto_closed_folds[fold_id],
         "Failed foldclose should NOT mark fold as closed in auto_closed_folds"
@@ -1995,7 +2648,7 @@ describe("UI Folding", function()
 
       -- Now it should be in auto_closed_folds
       local buffer_state = state.get_buffer_state(bufnr)
-      local fold_id = "thinking:1"
+      local fold_id = "thinking:1:3"
       assert.is_truthy(
         buffer_state.auto_closed_folds and buffer_state.auto_closed_folds[fold_id],
         "Successfully closed fold should be marked in auto_closed_folds"
@@ -2070,6 +2723,109 @@ describe("UI Folding", function()
       -- It should NOT skip even though changedtick hasn't changed.
       folding.fold_completed_blocks(bufnr)
       assert.are.equal(3, vim.fn.foldclosed(3), "Thinking fold should be closed after returning to buffer")
+    end)
+
+    it("should auto-close job_result blocks injected mid-session", function()
+      -- Reproduces the real-world bug: background jobs complete while the
+      -- user is typing, job_result blocks are injected into the buffer, then
+      -- update_ui calls invalidate_folds + fold_completed_blocks. Because
+      -- foldexpr evaluation is lazy (only on redraw), the newly inserted
+      -- lines have foldlevel=0 when safe_foldclose checks them, so the
+      -- job_result folds fail to close.
+      --
+      -- The fix: fold_completed_blocks schedules a deferred retry when
+      -- pending folds remain. This test verifies the fold closes within a
+      -- short window after the initial (failed) attempt.
+      local injector = require("flemma.tools.injector")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      -- Initial buffer: completed tool results with background job placeholders,
+      -- then user typing in the last @You block.
+      local lines = {
+        "@Assistant:",
+        "Here are the results.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{"command":"sleep 10 && df -h","background":true}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_fold1)",
+        "",
+        "```",
+        "Running as a background job `job_fold1`.",
+        "```",
+        "",
+        "@You:",
+        "I'm typing here while jobs run",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- Baseline: tool_use and tool_result are NOT terminal yet (job pending)
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(4), "Sanity: tool_use should not fold while job is pending")
+      assert.are.equal(-1, vim.fn.foldclosed(11), "Sanity: tool_result should not fold while job is pending")
+
+      -- Simulate job completion: inject a job_result block before the user's @You
+      -- (case 3: user is typing). This is what injector.append_job_result does.
+      injector.append_job_result(bufnr, "job_fold1", {
+        success = true,
+        output = "Filesystem  Size  Used Avail\n/dev/sda1   900G  281G  573G",
+      })
+
+      -- Verify job result was inserted
+      local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local found_job = false
+      local job_result_line = nil
+      for i, line in ipairs(buf_lines) do
+        if line:match("%*%*Job Result:%*%*%s*`job_fold1`") then
+          found_job = true
+          job_result_line = i
+          break
+        end
+      end
+      assert.is_true(found_job, "Job result should be in the buffer after injection")
+
+      -- Sabotage foldmethod to simulate the race: after injection + invalidation,
+      -- Vim hasn't re-evaluated foldexpr yet, so foldlevel() returns 0 for
+      -- the new lines. We simulate this by switching to manual + deleting folds.
+      vim.wo.foldmethod = "manual"
+      vim.cmd("normal! zE")
+
+      -- Now call fold_completed_blocks — safe_foldclose will fail for the new
+      -- job_result (foldlevel=0), putting it in pending_folds.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(
+        -1,
+        vim.fn.foldclosed(job_result_line),
+        "Sanity: job_result fold should fail on first attempt (simulated lazy eval)"
+      )
+
+      -- Restore proper foldmethod (simulates Vim completing fold evaluation
+      -- on the next redraw cycle).
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- The deferred retry should close the pending job_result fold.
+      -- Wait for the scheduled callback to fire.
+      vim.wait(100, function()
+        return vim.fn.foldclosed(job_result_line) ~= -1
+      end)
+
+      assert.are.not_equal(
+        -1,
+        vim.fn.foldclosed(job_result_line),
+        "Job result block should be auto-folded after deferred retry (line " .. tostring(job_result_line) .. ")"
+      )
     end)
   end)
 
@@ -2233,7 +2989,7 @@ describe("UI Folding", function()
 
       local buffer_state = state.get_buffer_state(bufnr)
       assert.is_truthy(
-        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:2"],
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:2:7"],
         "Tracker must retain the fold ID across forward edits"
       )
     end)
@@ -2460,14 +3216,7 @@ describe("UI Folding", function()
       folding.toggle_message_fold()
     end)
 
-    it("should notify (not error) when toggling frontmatter at conceallevel>=1", function()
-      local notify = require("flemma.notify")
-      local captured = {}
-      notify._set_impl(function(notification)
-        table.insert(captured, notification)
-        return notification
-      end)
-
+    it("should toggle frontmatter fold at conceallevel>=1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -2489,28 +3238,9 @@ describe("UI Folding", function()
 
       vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-      -- Must not throw Vim(foldclose):E490
       assert.has_no.errors(function()
         folding.toggle_message_fold()
       end)
-
-      -- Give the scheduled dispatch time to run
-      vim.wait(10, function()
-        return false
-      end)
-
-      assert.are.equal(1, #captured, "expected one notify dispatch")
-      assert.are.equal(vim.log.levels.INFO, captured[1].level)
-      assert.is_truthy(
-        captured[1].message:find("conceallevel=2"),
-        "notify message should cite the active conceallevel: " .. captured[1].message
-      )
-      assert.is_truthy(
-        captured[1].message:find("Neovim limitation"),
-        "notify message should attribute to Neovim: " .. captured[1].message
-      )
-
-      notify._reset_impl()
     end)
   end)
 end)

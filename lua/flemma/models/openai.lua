@@ -109,17 +109,6 @@ return {
     },
 
     -- GPT-5.3 models
-    ["gpt-5.3-chat-latest"] = {
-      pricing = {
-        input = 1.75,
-        output = 14.0,
-        cache_read = 0.175,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
-    },
     ["gpt-5.3-codex"] = {
       pricing = {
         input = 1.75,
@@ -142,6 +131,15 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
+    ["gpt-5.3-chat-latest"] = { -- (deprecated, retiring Aug 10, 2026)
+      pricing = {
+        input = 1.75,
+        output = 14.0,
+        cache_read = 0.175,
+      },
+      max_input_tokens = 128000,
+      max_output_tokens = 16384,
+    },
 
     -- GPT-5.2 models
     ["gpt-5.2"] = {
@@ -155,7 +153,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
-    ["gpt-5.2-chat-latest"] = {
+    ["gpt-5.2-chat-latest"] = { -- (deprecated, retiring Aug 10, 2026)
       pricing = {
         input = 1.75,
         output = 14.0,
@@ -163,10 +161,8 @@ return {
       },
       max_input_tokens = 128000,
       max_output_tokens = 16384,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
-    ["gpt-5.2-codex"] = {
+    ["gpt-5.2-codex"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 1.75,
         output = 14.0,
@@ -189,7 +185,7 @@ return {
       thinking_effort_map = { minimal = "medium", low = "medium", medium = "medium", high = "high", max = "xhigh" },
     },
 
-    -- GPT-5.1 models
+    -- GPT-5.1 models (deprecated, retiring Jul 23, 2026)
     ["gpt-5.1"] = {
       pricing = {
         input = 1.25,
@@ -201,7 +197,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["gpt-5.1-chat-latest"] = {
+    ["gpt-5.1-chat-latest"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 1.25,
         output = 10.0,
@@ -212,7 +208,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["gpt-5.1-codex"] = {
+    ["gpt-5.1-codex"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 1.25,
         output = 10.0,
@@ -223,7 +219,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["gpt-5.1-codex-max"] = {
+    ["gpt-5.1-codex-max"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 1.25,
         output = 10.0,
@@ -234,7 +230,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["gpt-5.1-codex-mini"] = {
+    ["gpt-5.1-codex-mini"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 0.25,
         output = 2.0,
@@ -258,18 +254,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["gpt-5-chat-latest"] = {
-      pricing = {
-        input = 1.25,
-        output = 10.0,
-        cache_read = 0.125,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
-    },
-    ["gpt-5-codex"] = {
+    ["gpt-5-codex"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 1.25,
         output = 10.0,
@@ -313,15 +298,6 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "high", low = "high", medium = "high", high = "high", max = "high" },
     },
-    ["gpt-5-search-api"] = {
-      pricing = {
-        input = 1.25,
-        output = 10.0,
-        cache_read = 0.125,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-    },
 
     -- GPT-4.1 models
     ["gpt-4.1"] = {
@@ -360,7 +336,7 @@ return {
       max_input_tokens = 1047576,
       max_output_tokens = 32768,
     },
-    ["gpt-4.1-nano"] = {
+    ["gpt-4.1-nano"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 0.10,
         output = 0.40,
@@ -369,7 +345,7 @@ return {
       max_input_tokens = 1047576,
       max_output_tokens = 32768,
     },
-    ["gpt-4.1-nano-2025-04-14"] = {
+    ["gpt-4.1-nano-2025-04-14"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 0.10,
         output = 0.40,
@@ -407,7 +383,7 @@ return {
       max_input_tokens = 128000,
       max_output_tokens = 16384,
     },
-    ["gpt-4o-2024-05-13"] = {
+    ["gpt-4o-2024-05-13"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 5.0,
         output = 15.0,
@@ -436,7 +412,7 @@ return {
     },
 
     -- o-series models
-    ["o1"] = {
+    ["o1"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 15.0,
         output = 60.0,
@@ -447,7 +423,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["o1-pro"] = {
+    ["o1-pro"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 150.0,
         output = 600.0,
@@ -476,7 +452,7 @@ return {
       max_input_tokens = 200000,
       max_output_tokens = 100000,
     },
-    ["o3-deep-research"] = {
+    ["o3-deep-research"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 10.0,
         output = 40.0,
@@ -487,7 +463,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["o3-mini"] = {
+    ["o3-mini"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 1.10,
         output = 4.40,
@@ -498,7 +474,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["o4-mini"] = {
+    ["o4-mini"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
         input = 1.10,
         output = 4.40,
@@ -509,7 +485,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["o4-mini-deep-research"] = {
+    ["o4-mini-deep-research"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 2.0,
         output = 8.0,
@@ -521,7 +497,7 @@ return {
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
 
-    -- Search and specialized models
+    -- Search and specialized models (deprecated, retiring Jul 23, 2026)
     ["gpt-4o-mini-search-preview"] = {
       pricing = {
         input = 0.15,
@@ -540,7 +516,7 @@ return {
       max_input_tokens = 128000,
       max_output_tokens = 16384,
     },
-    ["computer-use-preview"] = {
+    ["computer-use-preview"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 3.0,
         output = 12.0,
@@ -550,7 +526,7 @@ return {
       max_output_tokens = 16384,
     },
 
-    -- GPT-4 Turbo models (legacy)
+    -- GPT-4 Turbo models (deprecated, retiring Oct 23, 2026)
     ["gpt-4-turbo"] = {
       pricing = {
         input = 10.0,
@@ -569,7 +545,7 @@ return {
       max_input_tokens = 128000,
       max_output_tokens = 4096,
     },
-    -- GPT-4 models (legacy)
+    -- GPT-4 models (deprecated, retiring Oct 23, 2026)
     ["gpt-4"] = {
       pricing = {
         input = 30.0,
@@ -588,7 +564,7 @@ return {
       max_input_tokens = 8192,
       max_output_tokens = 8192,
     },
-    -- GPT-3.5 Turbo models (legacy)
+    -- GPT-3.5 Turbo models (deprecated, retiring Oct 23, 2026)
     ["gpt-3.5-turbo"] = {
       pricing = {
         input = 0.50,

@@ -5,21 +5,27 @@
 ---@class flemma.Presets
 local M = {}
 
+local bridge = require("flemma.bridge")
 local log = require("flemma.logging")
 local modeline = require("flemma.utilities.modeline")
 local notify = require("flemma.notify")
 local registry = require("flemma.provider.registry")
+local string_utils = require("flemma.utilities.string")
 local tools_registry = require("flemma.tools.registry")
 
 ---@class flemma.presets.Preset
 ---@field provider? string Resolved provider name
 ---@field model? string Model name (nil = use provider default)
 ---@field parameters table<string, any> Provider parameters
----@field auto_approve? string[] Concrete list of tool names to auto-approve
+---@field auto_approve? string[] Tool names/ops for auto-approval
+---@field tools? string[] Tool names/ops for the tools list
 
 ---@type table<string, flemma.presets.Preset>
 local BUILTIN = {
-  ["$standard"] = { parameters = {}, auto_approve = { "read", "write", "edit", "find", "grep", "ls" } },
+  ["$standard"] = {
+    parameters = {},
+    auto_approve = { "read", "write", "edit", "find", "grep", "ls", "flemma.*" },
+  },
   ["$readonly"] = { parameters = {}, auto_approve = { "read", "find", "grep", "ls" } },
 }
 
@@ -49,14 +55,22 @@ local function normalize_definition(name, definition)
     return nil, ("Preset '%s' must be a table or string, received %s"):format(name, definition_type)
   end
 
-  -- Extract auto_approve before extract_switch_arguments consumes the table,
-  -- since it's not a provider/model/parameter field.
+  -- Extract auto_approve and tools before extract_switch_arguments consumes
+  -- the table, since they're not provider/model/parameter fields.
   local auto_approve = nil
   if definition_type == "table" and type(definition.auto_approve) == "table" then
     auto_approve = definition.auto_approve
     definition.auto_approve = nil
   elseif definition_type == "table" and definition.auto_approve ~= nil then
     return nil, ("Preset '%s' auto_approve must be a string[], got %s"):format(name, type(definition.auto_approve))
+  end
+
+  local tools = nil
+  if definition_type == "table" and type(definition.tools) == "table" then
+    tools = definition.tools
+    definition.tools = nil
+  elseif definition_type == "table" and definition.tools ~= nil then
+    return nil, ("Preset '%s' tools must be a string[], got %s"):format(name, type(definition.tools))
   end
 
   local extracted = registry.extract_switch_arguments(definition)
@@ -100,6 +114,7 @@ local function normalize_definition(name, definition)
     model = model,
     parameters = parameters,
     auto_approve = auto_approve,
+    tools = tools,
   },
     nil
 end
@@ -125,6 +140,8 @@ function M.setup(user_presets)
 
     if not vim.startswith(name, "$") then
       log.warn(("presets: preset '%s' ignored — keys must start with '$'"):format(name))
+    elseif not name:sub(2, 2):match("[a-z]") then
+      warn(("Preset '%s' ignored — name must start with '$' followed by a lowercase letter"):format(name))
     else
       local normalized, err = normalize_definition(name, definition)
       if not normalized then
@@ -136,14 +153,32 @@ function M.setup(user_presets)
   end
 end
 
----Post-registration validation. Validates auto_approve entries against the
----tool registry. Advisory warnings only — does not fail.
+---Post-registration validation. Validates tool names in auto_approve and tools
+---fields against the tool registry. Strips op prefixes (+, ^, !) before lookup;
+---skips $-prefixed entries (preset references, not tool names).
+---Advisory warnings only — does not fail.
 function M.finalize()
   for name, preset in pairs(normalized_presets) do
-    if preset.auto_approve then
-      for _, tool_name in ipairs(preset.auto_approve) do
-        if not tools_registry.has(tool_name) then
-          warn(("Preset '%s' references unknown tool '%s' in auto_approve"):format(name, tool_name))
+    local fields = {
+      { list = preset.auto_approve, label = "auto_approve" },
+      { list = preset.tools, label = "tools" },
+    }
+    for _, field in ipairs(fields) do
+      if field.list then
+        for _, entry in ipairs(field.list) do
+          local tool_name = entry
+          if type(entry) == "string" and #entry > 1 then
+            local prefix = entry:sub(1, 1)
+            if prefix == "+" or prefix == "^" or prefix == "!" then
+              tool_name = entry:sub(2)
+            elseif prefix == "$" and entry:sub(2, 2):match("[a-z]") then
+              goto continue
+            end
+          end
+          if type(tool_name) == "string" and not tool_name:find("*", 1, true) and not tools_registry.has(tool_name) then
+            warn(("Preset '%s' references unknown tool '%s' in %s"):format(name, tool_name, field.label))
+          end
+          ::continue::
         end
       end
     end
@@ -163,6 +198,7 @@ function M.get(name)
     model = preset.model,
     parameters = vim.deepcopy(preset.parameters),
     auto_approve = preset.auto_approve and vim.deepcopy(preset.auto_approve) or nil,
+    tools = preset.tools and vim.deepcopy(preset.tools) or nil,
   }
 end
 
@@ -212,9 +248,19 @@ function M.list()
   return keys
 end
 
+---Find the closest matching preset name for typo suggestions.
+---@param name string Preset name to match against
+---@return string|nil closest The closest preset name, or nil if none is close enough
+function M.closest_match(name)
+  return string_utils.closest_match(name, normalized_presets)
+end
+
 ---Clear all presets (for testing)
 function M.clear()
   normalized_presets = {}
 end
+
+bridge.register("get_preset", M.get)
+bridge.register("closest_match_preset", M.closest_match)
 
 return M

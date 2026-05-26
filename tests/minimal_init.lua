@@ -1,8 +1,9 @@
 -- Add the project root to the runtime path to find the 'lua' directory
 vim.opt.rtp:prepend(os.getenv("PROJECT_ROOT"))
 
--- Turn off swapfile during tests
+-- Turn off swapfile and ShaDa during tests
 vim.opt.swapfile = false
+vim.opt.shadafile = "NONE"
 
 -- === Test output filtering ===
 -- Each spec file runs in its own child nvim process. We buffer all stdout,
@@ -99,6 +100,10 @@ end
 
 -- Initialize the plugin with default settings
 require("flemma").setup({})
+
+-- Hooks dispatch asynchronously in production. Force synchronous dispatch
+-- in tests so assertions can follow dispatch calls immediately.
+require("flemma.hooks")._force_sync(true)
 
 -- Suppress flemma.notify dispatches by default. Specs that want to inspect
 -- notifications override this by calling _set_impl in their before_each.

@@ -5,43 +5,17 @@ describe("mcporter", function()
   local mcporter
 
   before_each(function()
-    package.loaded["flemma.tools.definitions.mcporter"] = nil
-    mcporter = require("flemma.tools.definitions.mcporter")
-  end)
-
-  describe("_glob_match", function()
-    it("matches exact names", function()
-      assert.is_true(mcporter._glob_match("slack:channels_list", "slack:channels_list"))
-    end)
-
-    it("matches wildcard suffix", function()
-      assert.is_true(mcporter._glob_match("slack:channels_list", "slack:*"))
-    end)
-
-    it("matches wildcard prefix", function()
-      assert.is_true(mcporter._glob_match("slack:channels_list", "*:channels_list"))
-    end)
-
-    it("matches standalone wildcard", function()
-      assert.is_true(mcporter._glob_match("anything", "*"))
-    end)
-
-    it("rejects non-matching pattern", function()
-      assert.is_false(mcporter._glob_match("slack:channels_list", "github:*"))
-    end)
-
-    it("rejects partial mismatch", function()
-      assert.is_false(mcporter._glob_match("slack:channels_list", "slack:users_*"))
-    end)
+    package.loaded["flemma.tools.definitions.builtin.mcporter"] = nil
+    mcporter = require("flemma.tools.definitions.builtin.mcporter")
   end)
 
   describe("_filter_tools", function()
     local tools = {
-      { name = "slack:channels_list" },
-      { name = "slack:users_search" },
-      { name = "slack:usergroups_create" },
-      { name = "github:search_code" },
-      { name = "github:create_pull_request" },
+      { name = "slack.channels_list" },
+      { name = "slack.users_search" },
+      { name = "slack.usergroups_create" },
+      { name = "github.search_code" },
+      { name = "github.create_pull_request" },
     }
 
     it("returns all disabled when include is empty", function()
@@ -53,7 +27,7 @@ describe("mcporter", function()
     end)
 
     it("enables matching include patterns", function()
-      local result = mcporter._filter_tools(tools, { "slack:*" }, {})
+      local result = mcporter._filter_tools(tools, { "slack.*" }, {})
       local enabled = vim.tbl_filter(function(t)
         return t.enabled
       end, result)
@@ -65,11 +39,11 @@ describe("mcporter", function()
     end)
 
     it("excludes matching exclude patterns", function()
-      local result = mcporter._filter_tools(tools, { "slack:*" }, { "slack:usergroups_*" })
+      local result = mcporter._filter_tools(tools, { "slack.*" }, { "slack.usergroups_*" })
       local names = vim.tbl_map(function(t)
         return t.name
       end, result)
-      assert.is_false(vim.tbl_contains(names, "slack:usergroups_create"))
+      assert.is_false(vim.tbl_contains(names, "slack.usergroups_create"))
       assert.equals(4, #result)
     end)
 
@@ -81,7 +55,7 @@ describe("mcporter", function()
     end)
 
     it("exclude removes before include sees them", function()
-      local result = mcporter._filter_tools(tools, { "*" }, { "github:*" })
+      local result = mcporter._filter_tools(tools, { "*" }, { "github.*" })
       local names = vim.tbl_map(function(t)
         return t.name
       end, result)
@@ -208,7 +182,7 @@ describe("mcporter", function()
         timeout = 60,
       })
 
-      assert.equals("slack:" .. tool_data.name, def.name)
+      assert.equals("slack." .. tool_data.name, def.name)
       assert.equals(tool_data.description, def.description)
       assert.is_true(def.async)
       assert.is_function(def.execute)
@@ -216,24 +190,24 @@ describe("mcporter", function()
       assert.equals("object", def.input_schema.type)
     end)
 
-    it("uses colon separator in name", function()
+    it("uses dot separator in name", function()
       local def = mcporter._build_tool_definition("my-server", {
         name = "my_tool",
         description = "test",
         inputSchema = { type = "object", properties = {} },
       }, { path = "mcporter", timeout = 60 })
 
-      assert.equals("my-server:my_tool", def.name)
+      assert.equals("my-server.my_tool", def.name)
     end)
 
-    it("sanitizes dots in server names to hyphens", function()
+    it("preserves dots in server names", function()
       local def = mcporter._build_tool_definition("my.dotted.server", {
         name = "my_tool",
         description = "test",
         inputSchema = { type = "object", properties = {} },
       }, { path = "mcporter", timeout = 60 })
 
-      assert.equals("my-dotted-server:my_tool", def.name)
+      assert.equals("my.dotted.server.my_tool", def.name)
     end)
   end)
 
@@ -279,8 +253,8 @@ describe("mcporter", function()
     local tools = require("flemma.tools")
 
     before_each(function()
-      package.loaded["flemma.tools.definitions.mcporter"] = nil
-      mcporter = require("flemma.tools.definitions.mcporter")
+      package.loaded["flemma.tools.definitions.builtin.mcporter"] = nil
+      mcporter = require("flemma.tools.definitions.builtin.mcporter")
       tools.clear()
       vim.env.MCPORTER_FIXTURE_DIR = vim.fn.fnamemodify("tests/fixtures/mcporter", ":p")
     end)
@@ -299,7 +273,7 @@ describe("mcporter", function()
         path = mock_path,
         timeout = 10,
         startup = { concurrency = 2 },
-        include = { "slack:*" },
+        include = { "slack.*" },
         exclude = {},
       }, function(name, def)
         registered[name] = def
@@ -314,7 +288,7 @@ describe("mcporter", function()
 
       local has_slack = false
       for name, def in pairs(registered) do
-        if name:find("^slack:") then
+        if name:find("^slack.") then
           has_slack = true
           assert.is_true(def.enabled)
         end
@@ -322,7 +296,7 @@ describe("mcporter", function()
       assert.is_true(has_slack)
 
       for name, def in pairs(registered) do
-        if name:find("^github:") then
+        if name:find("^github.") then
           assert.is_false(def.enabled)
         end
       end
@@ -417,6 +391,82 @@ describe("mcporter", function()
       assert.is_not_nil(result)
       assert.is_true(result.success)
       assert.is_string(result.output)
+    end)
+
+    it("omits --args for empty input", function()
+      local echo_path = vim.fn.fnamemodify("tests/fixtures/mcporter/echo-args.sh", ":p")
+
+      local def = mcporter._build_tool_definition("trello", {
+        name = "list_workspaces",
+        description = "List workspaces",
+        inputSchema = { type = "object", properties = {} },
+      }, { path = echo_path, timeout = 10 })
+
+      local result = nil
+      local ctx = {
+        cwd = vim.fn.getcwd(),
+        timeout = 10,
+        get_config = function()
+          return nil
+        end,
+        truncate = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = 0
+            return tools_truncate.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = tools_truncate }),
+      }
+
+      def.execute({}, ctx, function(r)
+        result = r
+      end)
+
+      vim.wait(5000, function()
+        return result ~= nil
+      end)
+      assert.is_not_nil(result)
+      assert.is_true(result.success)
+      assert.is_not_nil(result.output:find("--output"))
+      assert.is_nil(result.output:find("--args"))
+    end)
+
+    it("includes --args for non-empty input", function()
+      local echo_path = vim.fn.fnamemodify("tests/fixtures/mcporter/echo-args.sh", ":p")
+
+      local def = mcporter._build_tool_definition("slack", {
+        name = "channels_list",
+        description = "List channels",
+        inputSchema = {
+          type = "object",
+          properties = { channel_types = { type = "string" } },
+        },
+      }, { path = echo_path, timeout = 10 })
+
+      local result = nil
+      local ctx = {
+        cwd = vim.fn.getcwd(),
+        timeout = 10,
+        get_config = function()
+          return nil
+        end,
+        truncate = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = 0
+            return tools_truncate.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = tools_truncate }),
+      }
+
+      def.execute({ channel_types = "public_channel" }, ctx, function(r)
+        result = r
+      end)
+
+      vim.wait(5000, function()
+        return result ~= nil
+      end)
+      assert.is_not_nil(result)
+      assert.is_true(result.success)
+      assert.is_not_nil(result.output:find("--args"))
     end)
 
     it("handles non-zero exit from mock", function()

@@ -45,7 +45,7 @@ Enter
 Type "G"
 Sleep 1000ms
 Type "i"
-Type "We're cutting {{ version }} today."
+Type "We're cutting a new version today."
 Enter
 Sleep 200ms
 Type "Can you draft a short tagline announcement for the GitHub release page - just one sentence?"

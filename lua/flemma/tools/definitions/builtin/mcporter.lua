@@ -4,59 +4,51 @@
 --- Exports `{ resolve, timeout }` for the async source pattern consumed by
 --- `tools.init.register_async()`. Discovery is gated behind
 --- `tools.mcporter.enabled` (default false).
----@class flemma.tools.definitions.MCPorter
+---@class flemma.tools.definitions.builtin.MCPorter
 local M = {}
 
 local config_facade = require("flemma.config")
+local glob = require("flemma.utilities.glob")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
 
 local SEPARATOR = tool_names.INTERNAL_SEPARATOR
 
+---@class flemma.tools.definitions.builtin.MCPorter.Metadata
+---@field name string
+---@field config_schema flemma.schema.ObjectNode
+
+---@type flemma.tools.definitions.builtin.MCPorter.Metadata
+M.metadata = {
+  name = "mcporter",
+  config_schema = s.object({
+    enabled = s.boolean(false),
+    path = s.string("mcporter"),
+    timeout = s.integer(60),
+    startup = s.object({
+      concurrency = s.integer(4),
+    }),
+    include = s.list(s.string(), {}),
+    exclude = s.list(s.string(), {}),
+  }),
+}
+
 --------------------------------------------------------------------------------
 -- Internal helpers
 --------------------------------------------------------------------------------
 
----Replace dots with hyphens in server names (dots are not allowed in tool names).
----@param name string
----@return string
-local function sanitize_server_name(name)
-  local sanitized = name:gsub("%.", "-")
-  return sanitized
-end
-
----Convert a glob pattern (with `*` wildcards) to a Lua pattern.
----@param glob string
----@return string
-local function glob_to_pattern(glob)
-  local escaped = glob:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1")
-  return "^" .. escaped:gsub("%*", ".*") .. "$"
-end
-
----Test whether a name matches any pattern in a list.
----@param name string
----@param patterns string[]
----@return boolean
-local function matches_any(name, patterns)
-  for _, pattern in ipairs(patterns) do
-    if M._glob_match(name, pattern) then
-      return true
-    end
-  end
-  return false
-end
-
 ---Check whether all possible tools from a server would be excluded.
 ---Used to skip the schema fetch entirely for fully-excluded servers.
----Only triggers for whole-server wildcard patterns (e.g., `slack:*`).
----Narrower patterns like `slack:a*` are not treated as full-server excludes.
+---Only triggers for whole-server wildcard patterns (e.g., `slack.*`).
+---Narrower patterns like `slack.a*` are not treated as full-server excludes.
 ---@param server_name string
 ---@param exclude string[]
 ---@return boolean
 local function server_fully_excluded(server_name, exclude)
-  local prefix = sanitize_server_name(server_name) .. SEPARATOR
+  local prefix = server_name .. SEPARATOR
   for _, pattern in ipairs(exclude) do
     if pattern == prefix .. "*" then
       return true
@@ -68,15 +60,6 @@ end
 --------------------------------------------------------------------------------
 -- Exported test helpers (prefixed with _ for test access)
 --------------------------------------------------------------------------------
-
----Test whether a name matches a single glob pattern.
----@param name string
----@param glob string
----@return boolean
-function M._glob_match(name, glob)
-  local pattern = glob_to_pattern(glob)
-  return name:find(pattern) ~= nil
-end
 
 ---Apply include/exclude filtering to a list of tool stubs.
 ---
@@ -91,8 +74,8 @@ end
 function M._filter_tools(tools, include, exclude)
   local result = {}
   for _, tool in ipairs(tools) do
-    if not matches_any(tool.name, exclude) then
-      local enabled = matches_any(tool.name, include)
+    if not glob.matches_any(tool.name, exclude) then
+      local enabled = glob.matches_any(tool.name, include)
       table.insert(result, { name = tool.name, enabled = enabled })
     end
   end
@@ -172,7 +155,7 @@ end
 ---@param exec_opts { path: string, timeout: integer }
 ---@return flemma.tools.ToolDefinition
 function M._build_tool_definition(server_name, tool_data, exec_opts)
-  local safe_server = sanitize_server_name(server_name)
+  local safe_server = server_name
   local tool_name = safe_server .. SEPARATOR .. tool_data.name
   local selector = server_name .. "." .. tool_data.name
   local mcporter_path = exec_opts.path
@@ -186,8 +169,15 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
     async = true,
     execute = function(input, ctx, callback)
       ---@cast callback -nil
+      local cmd = { mcporter_path, "call", selector }
       local args_json = json.encode(input)
-      local cmd = { mcporter_path, "call", selector, "--args", args_json, "--output", "json" }
+      if args_json ~= "{}" and args_json ~= "[]" then
+        table.insert(cmd, "--args")
+        table.insert(cmd, args_json)
+      end
+      table.insert(cmd, "--output")
+      table.insert(cmd, "json")
+      log.debug("mcporter: call " .. selector .. " → " .. table.concat(cmd, " "))
 
       local output_sink = sink_module.create({
         name = "mcporter/" .. tool_name,
@@ -235,6 +225,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
 
             if code ~= 0 then
               local err_msg = stderr_text or ("mcporter call failed with exit code " .. code)
+              log.warn("mcporter: call " .. selector .. " failed (exit " .. code .. "): " .. err_msg)
               callback({ success = false, error = err_msg })
               return
             end
@@ -245,6 +236,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
               if stderr_text then
                 diagnostic = diagnostic .. "\nstderr: " .. stderr_text
               end
+              log.warn("mcporter: call " .. selector .. " parse error: " .. diagnostic)
               callback({ success = false, error = diagnostic })
               return
             end
@@ -534,7 +526,7 @@ function M._resolve_with_config(cfg, register, done)
           -- Build and register tools for this server
           local tool_stubs = {}
           for _, tool_data in ipairs(tool_defs) do
-            local safe_server = sanitize_server_name(server_name)
+            local safe_server = server_name
             local tool_name = safe_server .. SEPARATOR .. tool_data.name
             table.insert(tool_stubs, { name = tool_name })
           end

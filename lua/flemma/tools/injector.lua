@@ -6,13 +6,11 @@ local M = {}
 local buffer = require("flemma.utilities.buffer")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
+local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local ast = require("flemma.ast")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
-
---- Error messages for tool status resolution
-M.DENIED_MESSAGE = "The tool was denied by a policy."
-M.REJECTED_MESSAGE = "This tool has been rejected by the user."
 
 ---Resolve the error message for a denied or rejected tool status.
 ---For rejected: uses user-provided content if non-empty, otherwise the default message.
@@ -22,9 +20,9 @@ M.REJECTED_MESSAGE = "This tool has been rejected by the user."
 ---@return string
 function M.resolve_error_message(status, content)
   if status == "rejected" then
-    return (content and content ~= "") and content or M.REJECTED_MESSAGE
+    return (content and content ~= "") and content or messages.render("tool-rejected")
   end
-  return M.DENIED_MESSAGE
+  return messages.render("tool-denied")
 end
 
 ---Find the tool_use segment for a given tool ID
@@ -74,6 +72,31 @@ local function get_tool_results_in_message(msg)
   return results
 end
 
+--- Get all job_result segments in a message
+---@param msg flemma.ast.MessageNode
+---@return flemma.ast.JobResultSegment[]
+local function get_job_results_in_message(msg)
+  local results = {}
+  for _, seg in ipairs(msg.segments) do
+    if seg.kind == "job_result" then
+      table.insert(results, seg)
+    end
+  end
+  return results
+end
+
+--- Check whether a message contains non-whitespace user-authored text
+---@param msg flemma.ast.MessageNode
+---@return boolean
+local function message_has_user_content(msg)
+  for _, seg in ipairs(msg.segments) do
+    if seg.kind == "text" and seg.value:match("%S") then
+      return true
+    end
+  end
+  return false
+end
+
 --- Format result content into lines for buffer insertion
 --- @param result table ExecutionResult {success, output, error}
 --- @return string[] lines, boolean is_error
@@ -82,7 +105,7 @@ local function format_result_lines(result)
   local content
 
   if is_error then
-    content = result.error or "Unknown error"
+    content = result.error or messages.render("tool-error--unknown")
     if result.output and result.output ~= "" then
       content = content .. "\n\nPartial output:\n" .. result.output
     end
@@ -362,6 +385,32 @@ function M.clear_header_status(bufnr, tool_id)
   return M.set_header_status(bufnr, tool_id, nil)
 end
 
+---Set a modeline suffix on a tool_result header with arbitrary key=value content.
+---@param bufnr integer
+---@param tool_id string
+---@param modeline_content string Raw modeline content (e.g. "job=job_k7x2m")
+---@return boolean success
+---@return string|nil error_message
+function M.set_header_modeline(bufnr, tool_id, modeline_content)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false, "Buffer is no longer valid"
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+
+  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
+  if not seg or seg.kind ~= "tool_result" then
+    return false, "Tool result not found: " .. tool_id
+  end
+  ---@cast seg flemma.ast.ToolResultSegment
+
+  local header_line_0 = seg.position.start_line - 1
+  local header_text = ("**Tool Result:** `%s` (%s)"):format(tool_id, modeline_content)
+  set_lines(bufnr, header_line_0, header_line_0 + 1, { header_text })
+  return true, nil
+end
+
 ---Replace the fenced body of a tool_result block with new content, leaving the
 ---`**Tool Result:**` header (and its `(status)` suffix) untouched. Fence size
 ---is recomputed for the new content so nested backticks stay safe.
@@ -397,6 +446,110 @@ function M.set_fence_content(bufnr, tool_id, content)
   local end_line = seg.position.end_line --[[@as integer]]
   set_lines(bufnr, header_line_0 + 1, end_line, new_lines)
   return true, nil
+end
+
+---@alias flemma.tools.injector.Placement "appended"|"created"|"displaced"|"replaced"
+
+---Append a **Job Result:** block to the buffer.
+---@param bufnr integer
+---@param job_id string
+---@param result flemma.tools.ExecutionResult
+---@return flemma.tools.injector.Placement
+function M.append_job_result(bufnr, job_id, result)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    log.warn("injector: append_job_result skipped, buffer " .. bufnr .. " invalid")
+    return "appended"
+  end
+
+  local content_lines, is_error = format_result_lines(result)
+  local header = ("**Job Result:** `%s`"):format(job_id)
+  if is_error then
+    header = header .. " (error)"
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Replace in-place when a Job Result with this ID already exists (re-execution)
+  local existing_seg = ast.find_job_result(doc, job_id)
+  if existing_seg then
+    local new_lines = { header }
+    for _, line in ipairs(content_lines) do
+      table.insert(new_lines, line)
+    end
+    set_lines(bufnr, existing_seg.position.start_line - 1, existing_seg.position.end_line, new_lines)
+    log.debug(
+      "injector: replaced existing job_result " .. job_id .. " in-place at line " .. existing_seg.position.start_line
+    )
+    return "replaced"
+  end
+
+  local last_msg = #doc.messages > 0 and doc.messages[#doc.messages] or nil
+
+  if last_msg and roles.is_user(last_msg.role) then
+    if message_has_user_content(last_msg) then
+      local prev_msg = #doc.messages >= 2 and doc.messages[#doc.messages - 1] or nil
+      if
+        prev_msg
+        and roles.is_user(prev_msg.role)
+        and #get_job_results_in_message(prev_msg) > 0
+        and not message_has_user_content(prev_msg)
+      then
+        local prev_end = prev_msg.position.end_line --[[@as integer]]
+        local block = { header }
+        for _, line in ipairs(content_lines) do
+          table.insert(block, line)
+        end
+        table.insert(block, "")
+        set_lines(bufnr, prev_end, prev_end, block)
+        log.debug(
+          "injector: appended " .. job_id .. " (displaced, merged into job-result @You at line " .. prev_end .. ")"
+        )
+        return "displaced"
+      end
+
+      local insert_at = last_msg.position.start_line - 1
+      local block = { "@You:", "", header }
+      for _, line in ipairs(content_lines) do
+        table.insert(block, line)
+      end
+      table.insert(block, "")
+      set_lines(bufnr, insert_at, insert_at, block)
+      log.debug(
+        "injector: appended " .. job_id .. " (displaced, user-typing, inserted before @You at line " .. insert_at .. ")"
+      )
+      return "displaced"
+    end
+
+    local you_end = last_msg.position.end_line --[[@as integer]]
+    local block = {}
+    if #get_job_results_in_message(last_msg) > 0 then
+      table.insert(block, "")
+    end
+    table.insert(block, header)
+    for _, line in ipairs(content_lines) do
+      table.insert(block, line)
+    end
+    set_lines(bufnr, you_end, you_end, block)
+    log.debug("injector: appended " .. job_id .. " (appended into existing @You at line " .. you_end .. ")")
+    return "appended"
+  end
+
+  local total = vim.api.nvim_buf_line_count(bufnr)
+  local last_content = buffer.get_last_line(bufnr)
+  local separator = last_content == "" and {} or { "" }
+  local block = {}
+  for _, line in ipairs(separator) do
+    table.insert(block, line)
+  end
+  table.insert(block, "@You:")
+  table.insert(block, "")
+  table.insert(block, header)
+  for _, line in ipairs(content_lines) do
+    table.insert(block, line)
+  end
+  set_lines(bufnr, total, total, block)
+  log.debug("injector: appended " .. job_id .. " (created new @You block at line " .. total .. ")")
+  return "created"
 end
 
 return M

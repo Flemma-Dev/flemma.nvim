@@ -179,14 +179,11 @@ describe("Lualine component", function()
     it("should handle conditionals in custom format", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        {
-          ui = {
-            statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" },
-          },
-        }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" },
+        },
+      })
 
       -- Act
       local status = flemma_component:update_status()
@@ -197,14 +194,11 @@ describe("Lualine component", function()
 
     it("should collapse conditional when thinking is off", function()
       -- Arrange
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        {
-          ui = {
-            statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" },
-          },
-        }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" },
+        },
+      })
       core.switch_provider("openai", "gpt-4o", {})
 
       -- Act

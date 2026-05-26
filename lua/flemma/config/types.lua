@@ -20,7 +20,7 @@
 ---@field lsp flemma.config.Lsp
 ---@field model? string
 ---@field parameters flemma.config.Parameters
----@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string }>
+---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string, tools: string[] }>
 ---@field provider string
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
@@ -39,15 +39,18 @@
 ---@field auto_write boolean
 ---@field conceal? string|integer|false
 ---@field disable_textwidth boolean
----@field foldlevel integer
+---@field fold flemma.config.EditingFold
 ---@field manage_updatetime boolean
 
 ---@class flemma.config.Experimental
+---@field patch_markdown_conceal boolean
 
 ---@class flemma.config.Highlights
 ---@field assistant flemma.config.HighlightValue
 ---@field busy flemma.config.HighlightValue
 ---@field defaults flemma.config.HighlightsDefaults
+---@field fence_bar flemma.config.HighlightValue
+---@field fence_label flemma.config.HighlightValue
 ---@field fold_meta flemma.config.HighlightValue
 ---@field fold_preview flemma.config.HighlightValue
 ---@field lua_code_block flemma.config.HighlightValue
@@ -134,7 +137,7 @@
 ---@field grep? flemma.config.ToolsGrep
 ---@field ls? flemma.config.ToolsLs
 ---@field max_concurrent integer
----@field mcporter flemma.config.ToolsMcporter
+---@field mcporter? flemma.config.ToolsMcporter
 ---@field modules string[]
 ---@field require_approval boolean
 ---@field show_spinner boolean
@@ -147,6 +150,7 @@
 ---@field padding { left: integer, right: integer }|integer
 
 ---@class flemma.config.Ui
+---@field jobs flemma.config.UiJobs
 ---@field pricing flemma.config.UiPricing
 ---@field progress flemma.config.UiProgress
 ---@field statusline flemma.config.UiStatusline
@@ -154,9 +158,14 @@
 
 ---@class flemma.config.EditingAutoClose
 ---@field frontmatter boolean
+---@field job_result boolean
 ---@field thinking boolean
 ---@field tool_result boolean
 ---@field tool_use boolean
+
+---@class flemma.config.EditingFold
+---@field gap boolean
+---@field level integer
 
 ---@class flemma.config.HighlightsDefaults
 ---@field dark flemma.config.HighlightsDefaultsDark
@@ -171,11 +180,16 @@
 
 ---@class flemma.config.KeymapsNormal
 ---@field cancel string
+---@field conceal_off string|false
+---@field conceal_on string|false
 ---@field conceal_toggle string|false
 ---@field fold_toggle string|false
+---@field fold_turn string|false
+---@field fold_turns string|false
 ---@field message_next string
 ---@field message_prev string
 ---@field send string
+---@field tool_background string
 ---@field tool_execute string
 
 ---@class flemma.config.ParametersAnthropic : flemma.config.ParametersBase
@@ -210,6 +224,7 @@
 ---@class flemma.config.ToolsAutopilot
 ---@field enabled boolean
 ---@field max_turns integer
+---@field resume_delay integer
 
 ---@class flemma.config.ToolsBash
 ---@field cwd? string
@@ -237,6 +252,9 @@
 
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
+
+---@class flemma.config.UiJobs
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 
 ---@class flemma.config.UiPricing
 ---@field enabled boolean

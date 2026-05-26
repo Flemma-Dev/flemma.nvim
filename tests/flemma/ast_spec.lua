@@ -689,6 +689,17 @@ describe("AST to Parts Mapper", function()
     assert.equals("hello", parts[4].text)
   end)
 
+  it("treats SVG as text despite image/* MIME prefix", function()
+    local svg_content = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>'
+    local parts = ast.to_generic_parts({
+      { kind = "file", filename = "icon.svg", mime_type = "image/svg+xml", data = svg_content },
+    })
+    assert.equals(1, #parts)
+    assert.equals("text_file", parts[1].kind)
+    assert.equals("image/svg+xml", parts[1].mime_type)
+    assert.equals(svg_content, parts[1].text)
+  end)
+
   it("preserves redacted flag on thinking parts", function()
     local parts = ast.to_generic_parts({
       { kind = "thinking", content = "normal thought", signature = { value = "sig1", provider = "anthropic" } },

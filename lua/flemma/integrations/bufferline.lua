@@ -1,6 +1,11 @@
 --- Optional bufferline.nvim integration — shows a busy icon on .chat tabs
 --- while a request or tool execution is in-flight.
 ---
+--- USER-ACTIVATED MODULE — loaded by the user's bufferline config, not by
+--- Flemma's init. Hook registrations at module scope are intentional: they
+--- fire on require(), which only happens when the user wires this into their
+--- bufferline get_element_icon callback.
+---
 --- Usage (one line in bufferline config):
 ---   get_element_icon = require("flemma.integrations.bufferline").get_element_icon
 ---
@@ -8,6 +13,8 @@
 ---   get_element_icon = require("flemma.integrations.bufferline").get_element_icon({ icon = "+" })
 ---@class flemma.integrations.Bufferline
 local M = {}
+
+local hooks = require("flemma.hooks")
 
 local DEFAULT_ICON = "󰔟"
 local HIGHLIGHT = "FlemmaBusy"
@@ -42,36 +49,25 @@ end
 -- apply_syntax() will re-register it from config, but this ensures the group is always defined.
 vim.api.nvim_set_hl(0, HIGHLIGHT, { link = "DiagnosticWarn", default = true })
 
-local augroup = vim.api.nvim_create_augroup("FlemmaBufferlineIntegration", { clear = true })
+hooks.on("request:sending", function(data)
+  increment(data.bufnr)
+end)
 
-vim.api.nvim_create_autocmd("User", {
-  group = augroup,
-  pattern = { "FlemmaRequestSending", "FlemmaToolExecuting" },
-  callback = function(ev)
-    if not ev.data or not ev.data.bufnr then
-      return
-    end
-    increment(ev.data.bufnr)
-  end,
-})
+hooks.on("tool:executing", function(data)
+  increment(data.bufnr)
+end)
 
-vim.api.nvim_create_autocmd("User", {
-  group = augroup,
-  pattern = { "FlemmaRequestFinished", "FlemmaToolFinished" },
-  callback = function(ev)
-    if not ev.data or not ev.data.bufnr then
-      return
-    end
-    decrement(ev.data.bufnr)
-  end,
-})
+hooks.on("request:finished", function(data)
+  decrement(data.bufnr)
+end)
 
-vim.api.nvim_create_autocmd("BufWipeout", {
-  group = augroup,
-  callback = function(ev)
-    busy_count[ev.buf] = nil
-  end,
-})
+hooks.on("tool:completed", function(data)
+  decrement(data.bufnr)
+end)
+
+hooks.on("buffer:destroyed", function(data)
+  busy_count[data.bufnr] = nil
+end)
 
 ---Check whether opts represent a bufferline callback invocation (has path or filetype)
 ---versus a Flemma factory invocation (has icon or is empty).

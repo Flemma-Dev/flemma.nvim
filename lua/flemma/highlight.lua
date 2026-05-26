@@ -28,6 +28,11 @@ local function get_hl_color(group_name, attr)
   return nil
 end
 
+local FENCE_CURSORLINE_CONTRAST = 4.5
+
+---@type table<string, table<string, string>>
+local fence_cursorline_map = {}
+
 ---Walk a chain of highlight group names and return the first group whose
 ---resolved highlight definition provides BOTH a foreground and a background
 ---colour. Matches the "complete" criterion used by the usage bar and
@@ -326,6 +331,44 @@ local function setup_cursorline_highlights()
     hl_opts.default = true
     vim.api.nvim_set_hl(0, cl_group_name, hl_opts)
   end
+
+  -- Precompute contrast-adjusted fence highlight groups for CursorLine overlays.
+  -- For each role's CursorLine variant bg, check if the fence fg meets WCAG 4.5:1.
+  -- Only create adjusted groups where contrast fails — the map stays empty when
+  -- the colorscheme already provides sufficient contrast, making runtime cost zero.
+  fence_cursorline_map = {}
+  local fence_source_groups = { "FlemmaFenceBar", "FlemmaFenceLabel" }
+  ---@type table<string, string|nil>
+  local fence_fgs = {}
+  for _, group in ipairs(fence_source_groups) do
+    fence_fgs[group] = get_hl_color(group, "fg")
+  end
+
+  for _, base_group in ipairs(base_groups) do
+    local cl_group_name = base_group .. "CursorLine"
+    local cl_variant_bg = get_hl_color(cl_group_name, "bg")
+    if not cl_variant_bg then
+      goto continue_fence
+    end
+
+    ---@type table<string, string>
+    local variants = {}
+    for _, fence_group in ipairs(fence_source_groups) do
+      local fg = fence_fgs[fence_group]
+      if fg and color.contrast_ratio(fg, cl_variant_bg) < FENCE_CURSORLINE_CONTRAST then
+        local adjusted_fg = color.ensure_contrast(fg, cl_variant_bg, FENCE_CURSORLINE_CONTRAST)
+        local variant_name = fence_group .. "On" .. cl_group_name
+        vim.api.nvim_set_hl(0, variant_name, { fg = adjusted_fg, default = true })
+        variants[fence_group] = variant_name
+      end
+    end
+
+    if next(variants) then
+      fence_cursorline_map[cl_group_name] = variants
+    end
+
+    ::continue_fence::
+  end
 end
 
 -- Valid boolean style attributes for nvim_set_hl (used in role_style validation)
@@ -412,6 +455,8 @@ M.apply_syntax = function()
 
   -- Set ruler highlight group
   set_highlight("FlemmaRuler", syntax_config.ruler.hl)
+  set_highlight("FlemmaFenceLabel", syntax_config.highlights.fence_label)
+  set_highlight("FlemmaFenceBar", syntax_config.highlights.fence_bar)
 
   -- Set highlight for thinking tags and blocks
   set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
@@ -440,6 +485,15 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolResultAborted", syntax_config.highlights.tool_result_aborted)
   set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
 
+  -- Job result syntax highlights (linked to tool result counterparts)
+  set_highlight("FlemmaJobResultTitle", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaJobResultError", { link = "FlemmaToolResultError", default = true })
+  set_highlight("FlemmaJobResultPending", { link = "FlemmaToolResultPending", default = true })
+  set_highlight("FlemmaJobResultApproved", { link = "FlemmaToolResultApproved", default = true })
+  set_highlight("FlemmaJobResultRejected", { link = "FlemmaToolResultRejected", default = true })
+  set_highlight("FlemmaJobResultDenied", { link = "FlemmaToolResultDenied", default = true })
+  set_highlight("FlemmaJobResultAborted", { link = "FlemmaToolResultAborted", default = true })
+
   -- Set highlight for fold text segments
   set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
   set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
@@ -453,8 +507,14 @@ M.apply_syntax = function()
   -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
   set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
 
-  -- Tool execution indicator highlights
-  set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
+  -- Tool indicator icon highlights (inline ⬢ prefix and fold icon)
+  set_highlight("FlemmaToolIconPending", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconExecuting", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconSuccess", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconError", { link = "DiagnosticError", default = true })
+  -- Tool indicator status highlights (EOL text)
+  set_highlight("FlemmaToolPending", { link = "DiagnosticHint", default = true })
+  set_highlight("FlemmaToolExecuting", { link = "DiagnosticInfo", default = true })
   set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
@@ -572,6 +632,136 @@ local function setup_line_highlights()
       set_highlight(group_name, role_config, "bg")
     end
   end
+end
+
+---Read and strip fenced code block conceal directives from a treesitter
+---highlights query. Concatenates all query files for the language/query pair
+---(matching the composition that `vim.treesitter.query.get()` would parse)
+---and returns both the original and stripped texts.
+---
+---Neovim's treesitter highlighter registers a `_on_conceal_line` callback
+---when a query contains `(#set! conceal_lines "")`. On every buffer change,
+---all conceal_lines marks are cleared and the `_conceal_checked` cache is
+---wiped. The next redraw then calls `_on_conceal_line` for every visible
+---line, each of which re-parses the tree and evaluates the query — O(visible
+---lines) per keystroke. On a 5000-line .chat buffer with ~128 fenced code
+---blocks, this costs ~30ms per keystroke at conceallevel>=2.
+---
+---Strips both `conceal_lines` (line hiding) and `conceal ""` (character
+---hiding) from the fenced_code_block_delimiter and info_string captures.
+---Flemma's UI replaces fence lines with styled overlay extmarks instead.
+---
+---Returns nil, nil when no query files exist or none contain `conceal_lines`.
+---@param lang string Treesitter language name
+---@param query_name string Query name (e.g., "highlights")
+---@return string|nil original, string|nil stripped
+local function read_fence_conceal_directives(lang, query_name)
+  local files = vim.treesitter.query.get_files(lang, query_name)
+  if #files == 0 then
+    return nil, nil
+  end
+  local parts = {}
+  for _, file in ipairs(files) do
+    local f = io.open(file, "r")
+    if f then
+      table.insert(parts, f:read("*a"))
+      f:close()
+    end
+  end
+  local text = table.concat(parts, "\n")
+  if not text:find("conceal_lines") then
+    return nil, nil
+  end
+  local stripped = text:gsub('%s*%(#set! conceal_lines ""%)', "")
+  stripped = stripped:gsub('%s*%(#set! conceal ""%)', "")
+  return text, stripped
+end
+
+local fence_conceal_patched = false
+
+---@type string|nil
+local original_markdown_query
+
+---@type string|nil
+local stripped_markdown_query
+
+---@return boolean
+function M.is_fence_conceal_patched()
+  return fence_conceal_patched
+end
+
+---@return table<string, table<string, string>>
+function M.get_fence_cursorline_map()
+  return fence_cursorline_map
+end
+
+---Strip fenced code block conceal from the markdown treesitter highlights query.
+---Idempotent — safe to call on every .chat BufRead; only patches once.
+---Gated by `experimental.patch_markdown_conceal` config flag.
+---
+---Must be called BEFORE the treesitter highlighter is constructed for the
+---buffer (i.e., at BufRead before `vim.bo.filetype = "chat"` triggers the
+---highlighter constructor), so that the highlighter never sets
+---`_conceal_line = true`. The `_conceal_line` flag is read once at
+---construction from the query's `has_conceal_line` metadata; it is never
+---re-evaluated when the query changes after construction.
+---
+---**Side effect**: patches the global `markdown` highlights query. Markdown
+---buffers opened after the patch get a highlighter without `_conceal_line`,
+---losing fence concealing at `conceallevel>=2`. Call `restore_highlighter_conceal`
+---on those buffers (via BufWinEnter) to reconstruct their highlighter with the
+---original query. Sessions that never open `.chat` files are unaffected.
+---
+---Fence delimiter lines with an odd count (malformed/unclosed fences) may
+---cause the open/close bracket overlay to swap for subsequent blocks. This is
+---a visual-only effect that self-corrects on the next `update_ui` cycle.
+function M.strip_fence_conceal()
+  if fence_conceal_patched then
+    return
+  end
+  local cfg = config_facade.get()
+  if cfg.experimental and cfg.experimental.patch_markdown_conceal == false then
+    return
+  end
+  local original, stripped = read_fence_conceal_directives("markdown", "highlights")
+  if not original or not stripped then
+    return
+  end
+  fence_conceal_patched = true
+  original_markdown_query = original
+  stripped_markdown_query = stripped
+  vim.treesitter.query.set("markdown", "highlights", stripped)
+  -- If any highlighter was constructed before we stripped the query, clear its
+  -- cached _conceal_line flag so the _on_conceal_line callback stops firing.
+  for _, hl in pairs(vim.treesitter.highlighter.active) do
+    if hl._conceal_line then
+      hl._conceal_line = false
+      hl._conceal_checked = {}
+    end
+  end
+end
+
+---Restore the original markdown highlights query for a non-chat buffer's
+---treesitter highlighter. Performs a "sandwich restart": temporarily sets
+---the original query globally, restarts the buffer's highlighter (which
+---eagerly caches the query and sets `_conceal_line` from its metadata),
+---then re-sets the stripped query for future .chat highlighter construction.
+---
+---Idempotent — only restarts when the highlighter has `_conceal_line` unset,
+---meaning it was constructed while the stripped query was active.
+---@param bufnr integer
+function M.restore_highlighter_conceal(bufnr)
+  if not fence_conceal_patched or not original_markdown_query or not stripped_markdown_query then
+    return
+  end
+  local hl = vim.treesitter.highlighter.active[bufnr]
+  if not hl or hl._conceal_line then
+    return
+  end
+  vim.treesitter.query.set("markdown", "highlights", original_markdown_query)
+  vim.treesitter.stop(bufnr)
+  vim.treesitter.start(bufnr)
+  vim.treesitter.query.set("markdown", "highlights", stripped_markdown_query)
 end
 
 ---Setup function to initialize highlighting functionality

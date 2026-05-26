@@ -185,16 +185,16 @@ function M.format_tool_preview(tool_name, input, max_length)
     }
   end
 
-  -- Build body: "label — detail" or just label or just detail
+  -- Build body: "detail — label" or just detail or just label
   local label = structured.label
   local detail = structured.detail
   local body
-  if label and detail and detail ~= "" then
-    body = label .. " — " .. detail
-  elseif label then
-    body = label
+  if detail and detail ~= "" and label then
+    body = detail .. " — " .. label
   elseif detail and detail ~= "" then
     body = detail
+  elseif label then
+    body = label
   else
     return tool_name
   end
@@ -236,7 +236,7 @@ function M.format_tool_result_preview(tool_name, content, is_error, max_length)
   return name_prefix .. body
 end
 
----@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil}
+---@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result"|"job_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.JobResultSegment|nil}
 
 ---Coalesce raw AST segments into logical preview entries.
 ---The parser emits each line as a separate text segment; this merges consecutive
@@ -278,6 +278,12 @@ local function coalesce_segments(segments)
       table.insert(entries, {
         kind = "tool_result",
         segment = seg --[[@as flemma.ast.ToolResultSegment]],
+      })
+    elseif seg.kind == "job_result" then
+      flush_text()
+      table.insert(entries, {
+        kind = "job_result",
+        segment = seg --[[@as flemma.ast.JobResultSegment]],
       })
     end
     -- Skip thinking segments (they have their own level-2 fold)
@@ -404,26 +410,25 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         entry_width = entry_width + #": "
 
         local remaining = after_name
-        if label then
-          local label_text = str.truncate(label, remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
-          table.insert(entry_chunks, { label_text, "FlemmaToolLabel" })
-          entry_width = entry_width + str.strwidth(label_text)
-          remaining = remaining - str.strwidth(label_text)
-
-          local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
-          if detail and remaining > separator_width then
-            local detail_text =
-              str.truncate(detail --[[@as string]], remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
-            if detail_text ~= "" then
-              table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
-              entry_width = entry_width + separator_width + str.strwidth(detail_text)
-            end
-          end
-        else
-          -- No label: show detail only
+        if detail then
           local detail_text = str.truncate(detail --[[@as string]], remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
           table.insert(entry_chunks, { detail_text, "FlemmaToolDetail" })
           entry_width = entry_width + str.strwidth(detail_text)
+          remaining = remaining - str.strwidth(detail_text)
+
+          local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+          if label and remaining > separator_width then
+            local label_text =
+              str.truncate(label --[[@as string]], remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
+              entry_width = entry_width + separator_width + str.strwidth(label_text)
+            end
+          end
+        else
+          local label_text = str.truncate(label --[[@as string]], remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(entry_chunks, { label_text, "FlemmaToolLabel" })
+          entry_width = entry_width + str.strwidth(label_text)
         end
       end
     elseif entry.kind == "tool_result" then
@@ -431,6 +436,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       local tool_info = tool_use_index and tool_use_index[result_seg.tool_use_id]
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
+      local effective_status = doc and query.effective_tool_result_status(result_seg, doc) or result_seg.status
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
@@ -438,7 +444,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
       local name_result_width = str.strwidth(tool_name)
       local prefix_width = name_result_width + #": "
-      if result_seg.status == "error" then
+      if effective_status == "error" then
         prefix_width = prefix_width + #"(error) "
       end
 
@@ -448,36 +454,71 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
       entry_width = entry_width + #": "
 
-      if result_seg.status == "error" then
+      if effective_status == "error" then
         table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
         entry_width = entry_width + #"(error) "
       end
 
       local remaining = width_for_result - prefix_width
 
+      local body = M.format_content_preview(result_seg.content, remaining)
       if tool_label then
-        local label_text = str.truncate(tool_label, remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
-        table.insert(entry_chunks, { label_text, "FlemmaToolLabel" })
-        entry_width = entry_width + str.strwidth(label_text)
-        remaining = remaining - str.strwidth(label_text)
+        if body ~= "" then
+          local body_text = str.truncate(body, remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(entry_chunks, { body_text, "FlemmaFoldPreview" })
+          entry_width = entry_width + str.strwidth(body_text)
+          remaining = remaining - str.strwidth(body_text)
 
-        local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
-        if remaining > separator_width then
-          local body = M.format_content_preview(result_seg.content, remaining - separator_width)
-          if body ~= "" then
-            table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
-            entry_width = entry_width + separator_width + str.strwidth(body)
+          local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+          if remaining > separator_width then
+            local label_text = str.truncate(tool_label, remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
+              entry_width = entry_width + separator_width + str.strwidth(label_text)
+            end
           end
+        else
+          local label_text = str.truncate(tool_label, remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(entry_chunks, { label_text, "FlemmaToolLabel" })
+          entry_width = entry_width + str.strwidth(label_text)
         end
       else
-        -- No label: show content only (backward-compat highlight)
-        local body = M.format_content_preview(result_seg.content, remaining)
-        if body ~= "" or result_seg.status == "error" then
+        if body ~= "" or effective_status == "error" then
           if body ~= "" then
             table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
             entry_width = entry_width + str.strwidth(body)
           end
         end
+      end
+    elseif entry.kind == "job_result" then
+      local job_seg = entry.segment --[[@as flemma.ast.JobResultSegment]]
+      local width_for_result = available - remainder_reserve
+      if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
+        add_overflow(#entries - i + 1)
+        break
+      end
+      local job_id_width = str.strwidth(job_seg.job_id)
+      local prefix_width = job_id_width + #": "
+      if job_seg.status == "error" then
+        prefix_width = prefix_width + #"(error) "
+      end
+
+      table.insert(entry_chunks, { job_seg.job_id, "FlemmaToolName" })
+      entry_width = job_id_width
+
+      table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
+      entry_width = entry_width + #": "
+
+      if job_seg.status == "error" then
+        table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
+        entry_width = entry_width + #"(error) "
+      end
+
+      local remaining = width_for_result - prefix_width
+      local body = M.format_content_preview(job_seg.content, remaining)
+      if body ~= "" then
+        table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
+        entry_width = entry_width + str.strwidth(body)
       end
     else
       local text_preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)

@@ -86,11 +86,10 @@ M.definitions = {
     },
     async = true,
     format_preview = function(input)
-      local parts = { input.expression }
-      if input.delay then
-        table.insert(parts, "# " .. input.delay .. "ms")
-      end
-      return table.concat(parts, "  ")
+      return {
+        detail = input.expression,
+        label = input.delay and ("⏲" .. input.delay .. "ms") or nil,
+      }
     end,
     execute = function(input, _, callback)
       ---@cast callback -nil

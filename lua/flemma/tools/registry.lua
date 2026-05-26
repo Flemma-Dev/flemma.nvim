@@ -33,6 +33,7 @@ local M = {}
 ---@field truncate flemma.tools.Truncate Truncation utilities (lazy-loaded)
 ---@field path flemma.tools.PathContext Path resolution utilities (lazy-loaded)
 ---@field get_config fun(self: flemma.tools.ExecutionContext): table? Tool-specific config subtree (read-only copy of config.tools[tool_name])
+---@field get_parsed_document fun(self: flemma.tools.ExecutionContext): flemma.ast.DocumentNode Parsed AST for the current buffer
 
 ---@class flemma.StructuredToolPreview
 ---@field label? string  Human-readable intent — shown italic, truncated last
@@ -50,6 +51,7 @@ local M = {}
 ---@field input_schema flemma.tools.JSONSchema|flemma.schema.Node JSON Schema table or schema DSL node (serialized via to_json_schema())
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
+---@field backgroundable? boolean Set to false to prevent background execution even though tool is async (default true for async tools)
 ---@field enabled? boolean|fun(config: flemma.Config): boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools). When a function, evaluated at query time with the resolved config.
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
@@ -70,6 +72,9 @@ local string_utils = require("flemma.utilities.string")
 ---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
 
+---@type table<string, flemma.schema.ObjectNode>
+local module_schemas = {}
+
 ---Store a single tool definition
 ---@param name string The tool name
 ---@param definition flemma.tools.ToolDefinition The tool definition
@@ -83,6 +88,28 @@ end
 
 --- Deprecated alias for register()
 M.define = M.register
+
+---Store a module-level config schema for DISCOVER resolution.
+---Used by async tool sources (e.g., mcporter) whose config lives under
+---`tools.<module_name>` but whose individual tools have different names.
+---@param name string Module name (becomes the config key under `tools`)
+---@param config_schema flemma.schema.ObjectNode
+function M.register_module_schema(name, config_schema)
+  module_schemas[name] = config_schema
+end
+
+---Get a module-level config schema by name.
+---@param name string
+---@return flemma.schema.ObjectNode|nil
+function M.get_module_schema(name)
+  return module_schemas[name]
+end
+
+---Get all registered module-level config schemas.
+---@return table<string, flemma.schema.ObjectNode>
+function M.get_all_module_schemas()
+  return module_schemas
+end
 
 ---Check if a tool exists by name
 ---@param name string The tool name
@@ -165,9 +192,10 @@ function M.unregister(name)
   return false
 end
 
----Clear all registered tools
+---Clear all registered tools and module schemas
 function M.clear()
   tools = {}
+  module_schemas = {}
 end
 
 ---Get the count of registered tools

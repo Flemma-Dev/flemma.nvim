@@ -1,5 +1,6 @@
 describe("Bufferline integration", function()
   local bufferline_integration
+  local hooks
 
   before_each(function()
     vim.cmd("silent! %bdelete!")
@@ -7,17 +8,20 @@ describe("Bufferline integration", function()
     -- Invalidate module caches for isolation
     package.loaded["flemma"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.hooks"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.integrations.bufferline"] = nil
 
     -- Initialize flemma
     require("flemma").setup({})
 
-    -- Load the integration module fresh (re-registers autocmds)
+    hooks = require("flemma.hooks")
+    -- Load the integration module fresh (re-registers hook subscribers)
     bufferline_integration = require("flemma.integrations.bufferline")
   end)
 
   after_each(function()
+    hooks._clear_subscribers()
     vim.cmd("silent! %bdelete!")
   end)
 
@@ -72,10 +76,7 @@ describe("Bufferline integration", function()
       vim.bo[bufnr].filetype = "chat"
 
       -- Simulate request sending
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
 
       local icon, hl = bufferline_integration.get_element_icon({
         path = "/tmp/busy.chat",
@@ -93,14 +94,8 @@ describe("Bufferline integration", function()
       vim.bo[bufnr].filetype = "chat"
 
       -- Send then finish
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestFinished",
-        data = { bufnr = bufnr, status = "completed" },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed" })
 
       local icon = bufferline_integration.get_element_icon({
         path = "/tmp/done.chat",
@@ -116,10 +111,7 @@ describe("Bufferline integration", function()
       vim.api.nvim_buf_set_name(bufnr, "/tmp/custom.chat")
       vim.bo[bufnr].filetype = "chat"
 
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
 
       local handler = bufferline_integration.get_element_icon({ icon = "+" })
       local icon, hl = handler({
@@ -137,10 +129,7 @@ describe("Bufferline integration", function()
       vim.api.nvim_buf_set_name(bufnr, "/tmp/chain.chat")
       vim.bo[bufnr].filetype = "chat"
 
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
 
       local handler = bufferline_integration.get_element_icon({ icon = "A" })({ icon = "B" })
       local icon = handler({
@@ -160,10 +149,7 @@ describe("Bufferline integration", function()
       vim.bo[bufnr].filetype = "lua"
 
       -- Mark as busy (shouldn't matter for non-chat)
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
 
       local icon = bufferline_integration.get_element_icon({
         path = "/tmp/test.lua",
@@ -178,10 +164,7 @@ describe("Bufferline integration", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_buf_set_name(bufnr, "/tmp/fallback.chat")
 
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
 
       local icon = bufferline_integration.get_element_icon({
         path = "/tmp/fallback.chat",
@@ -201,29 +184,27 @@ describe("Bufferline integration", function()
       assert.is_nil(icon)
     end)
 
-    it("should handle BufWipeout cleanup", function()
+    it("should handle buffer:destroyed cleanup", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_buf_set_name(bufnr, "/tmp/wiped.chat")
       vim.bo[bufnr].filetype = "chat"
 
       -- Mark as busy
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
 
-      -- Verify busy before wipe
+      -- Verify busy before cleanup
       local icon = bufferline_integration.get_element_icon({
         path = "/tmp/wiped.chat",
         filetype = "chat",
       })
       assert.are.equal("󰔟", icon)
 
-      -- Wipe the buffer (triggers BufWipeout autocmd which clears busy state)
-      vim.api.nvim_buf_delete(bufnr, { force = true })
+      -- Dispatch buffer:destroyed (fired by state.cleanup_buffer_state in production)
+      hooks.dispatch("buffer:destroyed", { bufnr = bufnr })
 
       -- Use the test-only accessor to verify the entry was cleaned up
       assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
     it("should track multiple busy buffers independently", function()
@@ -236,10 +217,7 @@ describe("Bufferline integration", function()
       vim.bo[buf2].filetype = "chat"
 
       -- Only buf1 is busy
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = buf1 },
-      })
+      hooks.dispatch("request:sending", { bufnr = buf1 })
 
       local icon1 = bufferline_integration.get_element_icon({
         path = "/tmp/a.chat",
@@ -265,33 +243,21 @@ describe("Bufferline integration", function()
       local opts = { path = "/tmp/nested.chat", filetype = "chat" }
 
       -- Request starts (count=1)
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
-      })
+      hooks.dispatch("request:sending", { bufnr = bufnr })
       assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
 
       -- Tool starts inside the request (count=2)
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaToolExecuting",
-        data = { bufnr = bufnr, tool_name = "bash", tool_id = "t1" },
-      })
+      hooks.dispatch("tool:executing", { bufnr = bufnr, tool_name = "bash", tool_id = "t1" })
       assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
       assert.are.equal(2, bufferline_integration._get_busy_count()[bufnr])
 
       -- Tool finishes (count=1, still busy)
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaToolFinished",
-        data = { bufnr = bufnr, tool_name = "bash", tool_id = "t1", status = "success" },
-      })
+      hooks.dispatch("tool:completed", { bufnr = bufnr, tool_name = "bash", tool_id = "t1", status = "success" })
       assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
       assert.are.equal(1, bufferline_integration._get_busy_count()[bufnr])
 
       -- Request finishes (count=0, no longer busy)
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestFinished",
-        data = { bufnr = bufnr, status = "completed" },
-      })
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed" })
       assert.is_nil(bufferline_integration.get_element_icon(opts))
       assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
 
@@ -304,10 +270,7 @@ describe("Bufferline integration", function()
       vim.bo[bufnr].filetype = "chat"
 
       -- Finish without a prior send
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestFinished",
-        data = { bufnr = bufnr, status = "completed" },
-      })
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed" })
 
       -- Counter should be nil (cleaned up), not negative
       assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
@@ -322,16 +285,10 @@ describe("Bufferline integration", function()
 
       local opts = { path = "/tmp/tool.chat", filetype = "chat" }
 
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaToolExecuting",
-        data = { bufnr = bufnr, tool_name = "read", tool_id = "t2" },
-      })
+      hooks.dispatch("tool:executing", { bufnr = bufnr, tool_name = "read", tool_id = "t2" })
       assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
 
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaToolFinished",
-        data = { bufnr = bufnr, tool_name = "read", tool_id = "t2", status = "success" },
-      })
+      hooks.dispatch("tool:completed", { bufnr = bufnr, tool_name = "read", tool_id = "t2", status = "success" })
       assert.is_nil(bufferline_integration.get_element_icon(opts))
 
       vim.api.nvim_buf_delete(bufnr, { force = true })

@@ -66,7 +66,9 @@ end
 ---@field kind "aborted"
 ---@field message string
 
----@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart|flemma.processor.AbortedPart
+---@alias flemma.processor.JobResultPart flemma.ast.JobResultSegment
+
+---@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart|flemma.processor.AbortedPart|flemma.processor.JobResultPart
 
 ---@class flemma.processor.EvaluatedMessage
 ---@field role "You"|"Assistant"|"System"
@@ -348,6 +350,8 @@ function M.evaluate(doc, base_context, opts)
               })
             )
           end
+        elseif seg.kind == "job_result" then
+          table.insert(prepared, seg)
         else
           table.insert(prepared, seg)
         end

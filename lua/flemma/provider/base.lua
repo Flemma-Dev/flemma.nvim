@@ -749,6 +749,9 @@ end
 ---@param arguments_json string JSON string of tool arguments
 ---@param callbacks flemma.provider.Callbacks
 function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
+  if arguments_json == "" or arguments_json == "[]" then
+    arguments_json = "{}"
+  end
   local decoded_name = M.decode_tool_name(name)
   local max_ticks = 0
   for ticks in arguments_json:gmatch("`+") do
@@ -867,7 +870,7 @@ end
 ---@param callbacks flemma.provider.Callbacks
 function M._warn_truncated(self, callbacks)
   log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
-  notify.warn("Response truncated \u{2013} model reached max output tokens")
+  notify.warn("Response truncated – model reached max output tokens")
   if callbacks.on_response_complete then
     callbacks.on_response_complete()
   end

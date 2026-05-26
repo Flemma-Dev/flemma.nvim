@@ -11,10 +11,14 @@ describe("config.schema.definition", function()
   before_each(function()
     package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.presets"] = nil
     config_facade = require("flemma.config")
     schema = require("flemma.config.schema")
+    local presets = require("flemma.presets")
+    presets.setup({})
     config_facade.init(schema)
   end)
 
@@ -100,10 +104,9 @@ describe("config.schema.definition", function()
       assert.truthy(cfg.ui.statusline.format:find("model.name", 1, true))
     end)
 
-    it("materializes tools auto_approve default as unexpanded preset", function()
-      -- Before finalize/presets setup, $standard is stored as-is
+    it("materializes tools auto_approve default from $standard preset", function()
       local cfg = config_facade.get()
-      assert.same({ "$standard" }, cfg.tools.auto_approve)
+      assert.same({ "read", "write", "edit", "find", "grep", "ls", "flemma.*" }, cfg.tools.auto_approve)
     end)
 
     it("materializes tools defaults", function()
@@ -140,7 +143,8 @@ describe("config.schema.definition", function()
       assert.is_true(cfg.editing.disable_textwidth)
       assert.is_false(cfg.editing.auto_write)
       assert.is_true(cfg.editing.manage_updatetime)
-      assert.equals(1, cfg.editing.foldlevel)
+      assert.equals(1, cfg.editing.fold.level)
+      assert.is_false(cfg.editing.fold.gap)
       assert.is_true(cfg.editing.auto_close.thinking)
       assert.is_true(cfg.editing.auto_close.tool_use)
       assert.is_true(cfg.editing.auto_close.tool_result)
@@ -164,7 +168,9 @@ describe("config.schema.definition", function()
       assert.equals("]m", cfg.keymaps.normal.message_next)
       assert.equals("[m", cfg.keymaps.normal.message_prev)
       assert.equals("<Space>", cfg.keymaps.normal.fold_toggle)
-      assert.equals("<Space><Space>", cfg.keymaps.normal.conceal_toggle)
+      assert.equals("yoe", cfg.keymaps.normal.conceal_toggle)
+      assert.equals("]oe", cfg.keymaps.normal.conceal_on)
+      assert.equals("[oe", cfg.keymaps.normal.conceal_off)
       assert.equals("<C-]>", cfg.keymaps.insert.send)
     end)
 
@@ -512,7 +518,7 @@ describe("config.schema.definition", function()
 
     describe("tool DISCOVER", function()
       it("resolves bash tool config schema", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = "zsh" } },
         })
@@ -520,7 +526,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves bash cwd and env config", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { cwd = "/home", env = { PATH = "/usr/bin" } } },
         })
@@ -530,7 +536,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves grep tool config with exclude list", function()
-        tools_module.register("flemma.tools.definitions.grep")
+        tools_module.register("flemma.tools.definitions.builtin.grep")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { grep = { exclude = { "node_modules", ".git" } } },
         })
@@ -538,7 +544,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves find tool config schema", function()
-        tools_module.register("flemma.tools.definitions.find")
+        tools_module.register("flemma.tools.definitions.builtin.find")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { find = { cwd = "/home" } },
         })
@@ -546,7 +552,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves ls tool config schema", function()
-        tools_module.register("flemma.tools.definitions.ls")
+        tools_module.register("flemma.tools.definitions.builtin.ls")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { ls = { cwd = "/var" } },
         })
@@ -554,7 +560,7 @@ describe("config.schema.definition", function()
       end)
 
       it("rejects unknown field on discovered tool schema", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { nonexistent = "value" } },
         })
@@ -564,7 +570,7 @@ describe("config.schema.definition", function()
       end)
 
       it("rejects invalid type on discovered tool schema field", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = 42 } },
         })
@@ -743,7 +749,7 @@ describe("config.schema.definition", function()
         assert.is_not_nil(deferred)
         assert.equals(1, #deferred)
 
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
 
         local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
@@ -772,8 +778,8 @@ describe("config.schema.definition", function()
         assert.is_not_nil(deferred)
         assert.equals(2, #deferred)
 
-        tools_module.register("flemma.tools.definitions.bash")
-        tools_module.register("flemma.tools.definitions.grep")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
+        tools_module.register("flemma.tools.definitions.builtin.grep")
 
         local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
@@ -834,93 +840,6 @@ describe("config.schema.definition", function()
         assert.is_nil(failures)
         assert.equals("restricted", config_facade.get().sandbox.backends.firejail.profile)
       end)
-    end)
-  end)
-
-  -- ---------------------------------------------------------------------------
-  -- auto_approve coerce — preset expansion
-  -- ---------------------------------------------------------------------------
-
-  describe("auto_approve coerce", function()
-    local unified_presets
-
-    before_each(function()
-      package.loaded["flemma.presets"] = nil
-      unified_presets = require("flemma.presets")
-    end)
-
-    it("passes through non-$ strings unchanged", function()
-      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-      w.tools.auto_approve:append("bash")
-      local cfg = config_facade.get()
-      assert.truthy(vim.tbl_contains(cfg.tools.auto_approve, "bash"))
-    end)
-
-    it("passes through functions unchanged", function()
-      local fn = function() end
-      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-      w.tools.auto_approve = fn
-      local cfg = config_facade.get()
-      assert.equals(fn, cfg.tools.auto_approve)
-    end)
-
-    it("expands $standard preset when presets are registered", function()
-      unified_presets.setup(nil)
-      -- The L10 default has { "$standard" }. Finalize expands it.
-      config_facade.finalize(config_facade.LAYERS.SETUP)
-      local cfg = config_facade.get()
-      local approve = cfg.tools.auto_approve
-      assert.is_table(approve)
-      assert.truthy(vim.tbl_contains(approve, "read"))
-      assert.truthy(vim.tbl_contains(approve, "write"))
-      assert.truthy(vim.tbl_contains(approve, "edit"))
-      -- $standard itself is gone (expanded into individual tool names)
-      assert.is_falsy(vim.tbl_contains(approve, "$standard"))
-    end)
-
-    it("leaves $standard unexpanded before presets are registered", function()
-      -- No presets.setup() call — presets registry is empty
-      unified_presets.clear()
-      config_facade.finalize(config_facade.LAYERS.SETUP)
-      local cfg = config_facade.get()
-      -- $standard stays as-is because the preset isn't found
-      assert.truthy(vim.tbl_contains(cfg.tools.auto_approve, "$standard"))
-    end)
-
-    it("expands $preset per-item in list set via write proxy", function()
-      unified_presets.setup({ ["$safe"] = { auto_approve = { "read" } } })
-      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-      w.tools.auto_approve = { "$safe", "bash" }
-      local cfg = config_facade.get()
-      assert.are.same({ "read", "bash" }, cfg.tools.auto_approve)
-    end)
-
-    it("expands $preset in append via write proxy", function()
-      unified_presets.setup(nil)
-      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-      w.tools.auto_approve:append("$standard")
-      local ops = config_facade.dump_layer(config_facade.LAYERS.SETUP)
-      -- Should have expanded into individual append ops
-      local appended = {}
-      for _, op in ipairs(ops) do
-        if op.op == "append" and op.path == "tools.auto_approve" then
-          table.insert(appended, op.value)
-        end
-      end
-      assert.truthy(vim.tbl_contains(appended, "read"))
-      assert.truthy(vim.tbl_contains(appended, "write"))
-      assert.truthy(vim.tbl_contains(appended, "edit"))
-    end)
-
-    it("expands $preset in remove via write proxy", function()
-      unified_presets.setup(nil)
-      -- Start with all $standard tools
-      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-      w.tools.auto_approve = { "read", "write", "edit", "bash" }
-      -- Remove the $standard preset (should expand to individual remove ops)
-      w.tools.auto_approve:remove("$standard")
-      local cfg = config_facade.get()
-      assert.are.same({ "bash" }, cfg.tools.auto_approve)
     end)
   end)
 
