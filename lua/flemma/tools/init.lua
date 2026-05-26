@@ -250,7 +250,7 @@ end
 --- If it's already a plain table, pass it through unchanged.
 ---@param definition flemma.tools.ToolDefinition
 ---@return flemma.tools.JSONSchema
-function M.to_json_schema(definition)
+local function to_json_schema(definition)
   local schema = definition.input_schema
   if type(schema.to_json_schema) == "function" then
     return schema:to_json_schema()
@@ -263,7 +263,7 @@ end
 ---@param definition flemma.tools.ToolDefinition
 ---@return flemma.tools.JSONSchema
 function M.to_json_schema_for_prompt(definition)
-  local schema = M.to_json_schema(definition)
+  local schema = to_json_schema(definition)
   if definition.async and definition.backgroundable ~= false then
     schema = vim.deepcopy(schema)
     schema.properties = schema.properties or {}
