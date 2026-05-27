@@ -31,12 +31,20 @@ describe("UI Tool Previews", function()
   end)
 
   local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
+  local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
 
   --- Helper: get all virt_lines extmarks in the tool_preview namespace
   ---@param bufnr integer
   ---@return table[]
   local function get_preview_extmarks(bufnr)
     return vim.api.nvim_buf_get_extmarks(bufnr, tool_preview_ns, 0, -1, { details = true })
+  end
+
+  --- Helper: get all virt_lines extmarks in the tool_approval namespace
+  ---@param bufnr integer
+  ---@return table[]
+  local function get_approval_extmarks(bufnr)
+    return vim.api.nvim_buf_get_extmarks(bufnr, tool_approval_ns, 0, -1, { details = true })
   end
 
   --- Helper: set up a buffer with a tool use + tool result placeholder
@@ -191,6 +199,245 @@ describe("UI Tool Previews", function()
       local anchor_row = marks[1][2]
       local lines = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)
       assert.are.equal("```", lines[1], "anchor row should be the opening fence line")
+    end)
+
+    it("renders multi-line virt_lines for multi-line tool input", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_ml`)",
+        "",
+        "```json",
+        '{"command":"echo line1\\necho line2\\necho line3"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_ml` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_preview_extmarks(bufnr)
+      assert.are.equal(1, #marks, "should have one preview extmark")
+      local virt_lines = marks[1][4].virt_lines
+      -- 3 content lines + 1 approval prompt = 4 virt_lines
+      assert.is_true(#virt_lines >= 3, "multi-line tool should produce multiple virt_lines")
+    end)
+
+    it("renders approval prompt when cursor is within pending tool_result range", function()
+      local bufnr = setup_buffer({ status = "pending" })
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(lines) do
+        if line:find("Tool Result") then
+          vim.api.nvim_win_set_cursor(0, { i, 0 })
+          break
+        end
+      end
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(1, #marks, "should have one approval extmark")
+      local virt_lines = marks[1][4].virt_lines
+      local first_text = virt_lines[1][1][1]
+      assert.is_truthy(first_text:find("⏸"), "approval virt_line should contain ┕ connector")
+    end)
+
+    it("shows hint instead of keybinds when cursor is outside tool_result range", function()
+      local bufnr = setup_buffer({ status = "pending" })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(1, #marks, "should still render approval extmark")
+      local virt_lines = marks[1][4].virt_lines
+      local text = table.concat(
+        vim.tbl_map(function(c)
+          return c[1]
+        end, virt_lines[1]),
+        ""
+      )
+      assert.is_truthy(text:find("⏸"), "should contain ┕ connector")
+      assert.is_truthy(text:find("awaiting approval"), "should show hint text")
+      assert.is_falsy(text:find("<M%-a>"), "should not show keybinds")
+    end)
+
+    it("does not render approval prompt when ui.approval.enabled is false", function()
+      local cfg = require("flemma.config")
+      cfg.writer(nil, cfg.LAYERS.RUNTIME).ui.approval.enabled = false
+
+      local bufnr = setup_buffer({ status = "pending" })
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(lines) do
+        if line:find("Tool Result") then
+          vim.api.nvim_win_set_cursor(0, { i, 0 })
+          break
+        end
+      end
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(0, #marks, "should not render approval when disabled")
+
+      cfg.writer(nil, cfg.LAYERS.RUNTIME).ui.approval.enabled = true
+    end)
+
+    it("does not render approval prompt for approved tools", function()
+      local bufnr = setup_buffer({ status = "approved" })
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(lines) do
+        if line:find("Tool Result") then
+          vim.api.nvim_win_set_cursor(0, { i, 0 })
+          break
+        end
+      end
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(0, #marks, "approved tool should not have approval prompt")
+    end)
+
+    it("shows queue counter when cursor is on one of multiple pending tools", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(buf_lines) do
+        if line:find("tool_a.*pending") then
+          vim.api.nvim_win_set_cursor(0, { i, 0 })
+          break
+        end
+      end
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(2, #marks, "should have two approval extmarks")
+
+      local first_vl = marks[1][4].virt_lines
+      local first_text = table.concat(
+        vim.tbl_map(function(c)
+          return c[1]
+        end, first_vl[1]),
+        ""
+      )
+      assert.is_truthy(first_text:find("1/2"), "first tool should show 1/2")
+      assert.is_truthy(first_text:find("<M%-a>"), "focused tool should show keybinds")
+
+      local second_vl = marks[2][4].virt_lines
+      local second_text = table.concat(
+        vim.tbl_map(function(c)
+          return c[1]
+        end, second_vl[1]),
+        ""
+      )
+      assert.is_truthy(second_text:find("2/2"), "second tool should show 2/2")
+      assert.is_truthy(second_text:find("awaiting approval"), "unfocused tool should show hint")
+    end)
+
+    it("counts all non-executed tools in queue counter, not just pending", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (approved)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(buf_lines) do
+        if line:find("tool_b.*pending") then
+          vim.api.nvim_win_set_cursor(0, { i, 0 })
+          break
+        end
+      end
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(1, #marks, "only pending tool gets an approval prompt")
+
+      local text = table.concat(
+        vim.tbl_map(function(c)
+          return c[1]
+        end, marks[1][4].virt_lines[1]),
+        ""
+      )
+      assert.is_truthy(text:find("2/2"), "should show 2/2 (position among all non-executed tools)")
     end)
 
     it("paints role line bg across the virt_line text and padding", function()

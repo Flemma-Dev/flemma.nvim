@@ -695,6 +695,197 @@ describe("CursorLine overlay highlights", function()
   end)
 end)
 
+describe("!attr exclusion syntax", function()
+  local flemma
+  local highlight
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.core"] = nil
+
+    -- Clear Flemma groups so `default = true` doesn't leak between tests
+    for _, group in ipairs({
+      "FlemmaToolName",
+      "FlemmaApprovalLine",
+      "FlemmaApprovalIndicator",
+      "FlemmaApprovalLabel",
+      "FlemmaApprovalKey",
+      "FlemmaApprovalAction",
+    }) do
+      vim.cmd("highlight clear " .. group)
+    end
+
+    vim.api.nvim_set_hl(0, "TestExclusion", { fg = 0xaabbcc, bg = 0x112233, italic = true, bold = true })
+    vim.api.nvim_set_hl(0, "TestExclFgOnly", { fg = 0xff0000 })
+
+    flemma = require("flemma")
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    vim.api.nvim_set_hl(0, "TestExclusion", {})
+    vim.api.nvim_set_hl(0, "TestExclFgOnly", {})
+    for _, group in ipairs({
+      "FlemmaToolName",
+      "FlemmaApprovalLine",
+      "FlemmaApprovalIndicator",
+      "FlemmaApprovalLabel",
+      "FlemmaApprovalKey",
+      "FlemmaApprovalAction",
+    }) do
+      vim.cmd("highlight clear " .. group)
+    end
+  end)
+
+  describe("set_highlight via config", function()
+    it("should resolve instead of link when exclusion is present", function()
+      flemma.setup({
+        highlights = { tool_name = "TestExclusion!bg" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName", link = false })
+      assert.are.equal(0xaabbcc, hl.fg, "should keep fg from TestExclusion")
+      assert.is_nil(hl.bg, "should exclude bg")
+      assert.is_true(hl.italic, "should keep italic from TestExclusion")
+      assert.is_true(hl.bold, "should keep bold from TestExclusion")
+    end)
+
+    it("should exclude multiple attributes", function()
+      flemma.setup({
+        highlights = { tool_name = "TestExclusion!bg!italic" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName", link = false })
+      assert.are.equal(0xaabbcc, hl.fg, "should keep fg")
+      assert.is_nil(hl.bg, "should exclude bg")
+      assert.is_nil(hl.italic, "should exclude italic")
+      assert.is_true(hl.bold, "should keep bold")
+    end)
+
+    it("should link normally when no exclusion is present", function()
+      flemma.setup({
+        highlights = { tool_name = "TestExclusion" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName" })
+      assert.are.equal("TestExclusion", hl.link, "should link without exclusions")
+    end)
+  end)
+
+  describe("approval group highlights", function()
+    it("should use approval_bg fallback when sub-group excludes bg", function()
+      flemma.setup({
+        highlights = { approval_indicator = "TestExclusion!bg" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
+      assert.are.equal(0xaabbcc, hl.fg, "should keep fg from TestExclusion")
+      -- !bg strips the group's own bg; approval_bg fills in as ambient fallback
+      local approval_hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLine", link = false })
+      assert.is_not_nil(hl.bg, "should have bg from approval_line fallback")
+      assert.are.equal(approval_hl.bg, hl.bg, "bg should match approval_line bg")
+    end)
+
+    it("should fall back to approval_bg when group lacks bg", function()
+      flemma.setup({
+        highlights = { approval_indicator = "TestExclFgOnly" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
+      assert.is_not_nil(hl.bg, "should fall back to approval_bg when group has no bg")
+    end)
+
+    it("should preserve group's own bg instead of overriding with approval_bg", function()
+      flemma.setup({
+        highlights = { approval_indicator = "TestExclusion" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
+      assert.are.equal(0x112233, hl.bg, "should keep group's own bg, not approval_bg")
+    end)
+
+    it("should inherit italic from group when present", function()
+      flemma.setup({
+        highlights = { approval_label = "TestExclusion" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLabel", link = false })
+      assert.is_true(hl.italic, "should keep group's own italic")
+    end)
+
+    it("should drop approval_line bg when approval_line excludes bg", function()
+      flemma.setup({
+        highlights = { approval_line = "Normal!bg" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLine", link = false })
+      assert.is_nil(hl.bg, "should not set bg when approval_line excludes it")
+    end)
+  end)
+
+  describe("expression exclusions", function()
+    it("should exclude attrs from expression results", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xeeeeee, bg = 0x111111 })
+      flemma.setup({
+        highlights = { tool_name = "Normal+bg:#101010!bg" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName", link = false })
+      assert.is_nil(hl.bg, "should exclude bg even from expression result")
+    end)
+  end)
+end)
+
 describe("flemma.highlight.resolve_first_complete", function()
   local highlight
 

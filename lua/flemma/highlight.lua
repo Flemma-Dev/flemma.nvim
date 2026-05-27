@@ -186,6 +186,27 @@ local function parse_highlight_expression(value, contrast_bg)
   return nil
 end
 
+---Parse `!attr` exclusion suffixes from a highlight value string.
+---E.g., `"Folded!bg!italic"` → `"Folded"`, `{ bg = true, italic = true }`.
+---Exclusions are stripped from the string so the remainder can be parsed
+---normally by expression, hex, or group-name resolution.
+---@param value string
+---@return string base The value with exclusion suffixes stripped
+---@return table<string, true> exclusions Set of excluded attribute names
+local function parse_exclusions(value)
+  ---@type table<string, true>
+  local exclusions = {}
+  local base = value:gsub("!(%w+)", function(attr)
+    exclusions[attr] = true
+    return ""
+  end)
+  return base, exclusions
+end
+
+-- Forward declaration: resolve_hl_value is defined below but called by set_highlight's ! fast-path.
+---@type fun(config_value: string|table): vim.api.keyset.highlight, table<string, true>
+local resolve_hl_value
+
 ---Set highlight groups.
 ---Accepts a highlight group name to link to, a hex color string,
 ---a highlight expression, or a table with highlight attributes.
@@ -209,7 +230,15 @@ local function set_highlight(group_name, value, type_, contrast_bg)
       vim.api.nvim_set_hl(0, group_name, hl_opts)
     end
   elseif type(value) == "string" then
-    if value:match("[%+%-^][fbs][gp]:") then
+    if value:find("!", 1, true) then
+      local hl_opts = resolve_hl_value(value)
+      if type_ then
+        local attr_val = hl_opts[type_]
+        hl_opts = attr_val and { [type_] = attr_val } or {}
+      end
+      hl_opts.default = true
+      vim.api.nvim_set_hl(0, group_name, hl_opts)
+    elseif value:match("[%+%-^][fbs][gp]:") then
       -- Highlight expression (e.g., "Normal+fg:#101010-bg:#303030" or "Group^fg:4.5")
       local hl_opts = parse_highlight_expression(value, contrast_bg)
       if hl_opts then
@@ -251,6 +280,51 @@ end
 ---@return flemma.highlight.ResolvedAttrs|nil
 function M.resolve_expression(value, contrast_bg)
   return parse_highlight_expression(value, contrast_bg)
+end
+
+---Resolve a HighlightValue config into highlight attributes.
+---Handles dark/light tables, expressions, bare hex (as fg), group names,
+---and `!attr` exclusion suffixes (e.g., `"Folded!bg"` drops the `bg` attr).
+---Unlike set_highlight(), returns attrs directly without setting a group or
+---adding default=true — intended for derived highlights that must re-resolve
+---on each call.
+---@param config_value string|table HighlightValue from config
+---@return vim.api.keyset.highlight attrs
+---@return table<string, true> exclusions
+function resolve_hl_value(config_value)
+  local value = config_value
+  if type(value) == "table" and (value.dark ~= nil or value.light ~= nil) then
+    value = (vim.o.background == "dark") and value.dark or value.light
+  end
+  if type(value) ~= "string" then
+    return {}, {}
+  end
+  local base, exclusions = parse_exclusions(value)
+  local expr_result = parse_highlight_expression(base)
+  ---@type vim.api.keyset.highlight
+  local attrs
+  if expr_result then
+    attrs = expr_result --[[@as vim.api.keyset.highlight]]
+  elseif base:sub(1, 1) == "#" then
+    attrs = { fg = base }
+  else
+    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = base, link = false })
+    if not ok or not hl then
+      return {}, exclusions
+    end
+    attrs = {}
+    for k, v in pairs(hl) do
+      if k == "fg" or k == "bg" or k == "sp" then
+        attrs[k] = string.format("#%06x", v)
+      elseif k ~= "link" then
+        attrs[k] = v
+      end
+    end
+  end
+  for attr in pairs(exclusions) do
+    attrs[attr] = nil
+  end
+  return attrs, exclusions
 end
 
 ---Setup CursorLine blend highlight groups for line-highlighted chat buffers.
@@ -507,11 +581,31 @@ M.apply_syntax = function()
   -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
   set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
 
+  local approval_resolved, approval_excl = resolve_hl_value(syntax_config.highlights.approval_line)
+  local approval_bg = not approval_excl.bg and (approval_resolved.bg or get_default_color("bg")) or nil
+  vim.api.nvim_set_hl(0, "FlemmaApprovalLine", approval_bg and { bg = approval_bg } or {})
+  local approval_sub_groups = {
+    { "FlemmaApprovalIndicator", syntax_config.highlights.approval_indicator },
+    { "FlemmaApprovalLabel", syntax_config.highlights.approval_label },
+    { "FlemmaApprovalKey", syntax_config.highlights.approval_key },
+    { "FlemmaApprovalAction", syntax_config.highlights.approval_action },
+  }
+  for _, entry in ipairs(approval_sub_groups) do
+    local attrs = resolve_hl_value(entry[2])
+    if approval_bg and not attrs.bg then
+      attrs.bg = approval_bg
+    end
+    vim.api.nvim_set_hl(0, entry[1], attrs)
+  end
+
   -- Tool indicator icon highlights (inline ⬢ prefix and fold icon)
-  set_highlight("FlemmaToolIconPending", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconPending", { link = "DiagnosticInfo", default = true })
   set_highlight("FlemmaToolIconExecuting", { link = "FlemmaToolResultTitle", default = true })
   set_highlight("FlemmaToolIconSuccess", { link = "FlemmaToolResultTitle", default = true })
   set_highlight("FlemmaToolIconError", { link = "DiagnosticError", default = true })
+  set_highlight("FlemmaToolIconRejected", { link = "FlemmaToolResultRejected", default = true })
+  set_highlight("FlemmaToolIconDenied", { link = "FlemmaToolResultDenied", default = true })
+  set_highlight("FlemmaToolIconAborted", { link = "FlemmaToolResultAborted", default = true })
   -- Tool indicator status highlights (EOL text)
   set_highlight("FlemmaToolPending", { link = "DiagnosticHint", default = true })
   set_highlight("FlemmaToolExecuting", { link = "DiagnosticInfo", default = true })

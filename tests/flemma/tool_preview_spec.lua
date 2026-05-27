@@ -635,6 +635,135 @@ describe("get_tool_use_body structured return", function()
   end)
 end)
 
+describe("format_tool_preview_multiline", function()
+  local registry
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    ui_preview = require("flemma.ui.preview")
+    registry = require("flemma.tools.registry")
+  end)
+
+  after_each(function()
+    registry.clear()
+  end)
+
+  it("returns single-line array for simple input", function()
+    local lines = ui_preview.format_tool_preview_multiline("edit", { path = "src/main.lua" }, 80)
+    assert.are.equal(1, #lines)
+    assert.is_truthy(lines[1]:find("edit:"), "first line should have tool name prefix")
+    assert.is_truthy(lines[1]:find("src/main.lua"), "first line should have detail")
+  end)
+
+  it("splits multi-line detail into separate entries", function()
+    registry.register("multiline_tool", {
+      name = "multiline_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("multiline_tool", {
+      body = "line1\nline2\nline3",
+    }, 80)
+    assert.are.equal(3, #lines)
+    assert.is_truthy(lines[1]:find("multiline_tool:"), "first line should have tool name prefix")
+    assert.is_falsy(lines[2]:find("multiline_tool:"), "second line should not have prefix")
+  end)
+
+  it("caps at 13 lines with head/tail truncation", function()
+    local content_lines = {}
+    for i = 1, 25 do
+      content_lines[i] = "line" .. i
+    end
+
+    registry.register("big_tool", {
+      name = "big_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("big_tool", {}, 80)
+    assert.are.equal(13, #lines)
+    assert.is_truthy(lines[7]:find("more lines"), "middle line should be truncation indicator")
+  end)
+
+  it("shows all lines when content fits in 13 or fewer", function()
+    local content_lines = {}
+    for i = 1, 10 do
+      content_lines[i] = "line" .. i
+    end
+
+    registry.register("medium_tool", {
+      name = "medium_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("medium_tool", {}, 80)
+    assert.are.equal(10, #lines)
+  end)
+
+  it("returns label separately from lines", function()
+    registry.register("labeled_tool", {
+      name = "labeled_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { label = input.label, detail = "content" }
+      end,
+    })
+
+    local lines, label = ui_preview.format_tool_preview_multiline("labeled_tool", {
+      label = "greeting",
+    }, 80)
+    assert.are.equal(1, #lines)
+    assert.are.equal("greeting", label)
+  end)
+
+  it("returns label-only line when detail is empty", function()
+    registry.register("label_only_tool", {
+      name = "label_only_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { label = "my label" }
+      end,
+    })
+
+    local lines, label = ui_preview.format_tool_preview_multiline("label_only_tool", {}, 80)
+    assert.are.equal(1, #lines)
+    assert.is_truthy(lines[1]:find("label_only_tool:"), "should have tool name prefix")
+    assert.is_truthy(lines[1]:find("my label"), "should contain label text")
+    assert.is_nil(label)
+  end)
+
+  it("handles trailing newlines without producing empty trailing lines", function()
+    registry.register("trailing_tool", {
+      name = "trailing_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = "hello\n\n" }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("trailing_tool", {}, 80)
+    assert.is_true(#lines <= 13)
+    assert.is_truthy(lines[1]:find("trailing_tool:"), "first line should have tool name prefix")
+  end)
+end)
+
 describe("format_tool_preview_body", function()
   it("formats single scalar key", function()
     local result = ui_preview.format_tool_preview_body({ command = "ls -la" })
@@ -1318,6 +1447,80 @@ describe("format_message_fold_preview with tool results", function()
     local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
     local error_chunk = find_chunk(chunks, "%(error%)")
     assert.is_nil(error_chunk, "Should NOT show error when linked job_result succeeded")
+  end)
+
+  it("shows rejected marker for rejected tool_result", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "rm -rf /" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "Tool was rejected.", status = "rejected", start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("%(rejected%)"), "Should contain (rejected) status")
+
+    local rejected_chunk = find_chunk(chunks, "%(rejected%)")
+    assert.is_not_nil(rejected_chunk, "Should have rejected marker chunk")
+    assert.are.equal("FlemmaToolResultRejected", rejected_chunk[2])
+  end)
+
+  it("shows denied marker for denied tool_result", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "rm -rf /" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", {
+        content = "Tool execution was denied.",
+        status = "denied",
+        start_line = 7,
+        end_line = 12,
+      }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("%(denied%)"), "Should contain (denied) status")
+
+    local denied_chunk = find_chunk(chunks, "%(denied%)")
+    assert.is_not_nil(denied_chunk, "Should have denied marker chunk")
+    assert.are.equal("FlemmaToolResultDenied", denied_chunk[2])
+  end)
+
+  it("shows aborted marker for aborted tool_result", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "sleep 999" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "Aborted by user.", status = "aborted", start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("%(aborted%)"), "Should contain (aborted) status")
+
+    local aborted_chunk = find_chunk(chunks, "%(aborted%)")
+    assert.is_not_nil(aborted_chunk, "Should have aborted marker chunk")
+    assert.are.equal("FlemmaToolResultAborted", aborted_chunk[2])
+  end)
+
+  it("shows status marker even when tool_result content is empty", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "rm -rf /" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "", status = "denied", start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local denied_chunk = find_chunk(chunks, "%(denied%)")
+    assert.is_not_nil(denied_chunk, "Should show status marker even with empty content")
+    assert.are.equal("FlemmaToolResultDenied", denied_chunk[2])
   end)
 end)
 

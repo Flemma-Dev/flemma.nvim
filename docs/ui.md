@@ -106,6 +106,33 @@ Composes with blend operations – blends are applied first, then contrast is en
 
 > **Scope:** The `^` operator requires a background context provided by the caller. Currently only the usage bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
 
+### Attribute exclusion
+
+The `!` operator strips individual attributes from a resolved highlight group. Append `!attr` to exclude that attribute from the result:
+
+```
+"HighlightGroup!attr"
+```
+
+Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.). Multiple exclusions can be chained:
+
+```lua
+-- Use Folded's fg and styles, but not its bg (approval_bg fills in as fallback)
+highlights = { approval_indicator = "Folded!bg" }
+
+-- Use Folded's fg, drop both bg and italic
+highlights = { approval_label = "Folded!bg!italic" }
+```
+
+When a highlight value has exclusions, Flemma resolves the group to its concrete attributes (instead of creating a `:link`) and removes the excluded keys before any fallback logic runs. In composite highlights like the approval line, sub-groups that lack `bg` receive the `approval_line` background as a fallback — so `!bg` on a sub-group strips the group's own background and lets the shared approval background show through.
+
+Exclusions compose with blend and contrast operations. The exclusions are applied after all other operators:
+
+```lua
+-- Blend bg, but exclude fg from the final result
+"Normal+bg:#101010!fg"
+```
+
 **Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
 
 ```lua

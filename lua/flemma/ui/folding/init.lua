@@ -20,6 +20,14 @@ local LABEL_DETAIL_SEPARATOR = " — "
 local TOOL_USE_ICON = "⬡"
 local TOOL_RESULT_ICON = "⬢"
 
+---@type table<string, {icon_hl: string, text: string, text_hl: string}>
+local STATUS_DISPLAY = {
+  error = { icon_hl = "FlemmaToolIconError", text = "(error) ", text_hl = "FlemmaToolResultError" },
+  rejected = { icon_hl = "FlemmaToolIconRejected", text = "(rejected) ", text_hl = "FlemmaToolResultRejected" },
+  denied = { icon_hl = "FlemmaToolIconDenied", text = "(denied) ", text_hl = "FlemmaToolResultDenied" },
+  aborted = { icon_hl = "FlemmaToolIconAborted", text = "(aborted) ", text_hl = "FlemmaToolResultAborted" },
+}
+
 ---@class flemma.ui.folding.FoldRule
 ---@field name string
 ---@field auto_close boolean
@@ -380,12 +388,9 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
       local tool_label = tool_info and tool_info.label
       local effective_status = query.effective_tool_result_status(tool_seg, doc)
 
-      local icon_hl = "FlemmaToolIcon"
-      if effective_status == "error" then
-        icon_hl = "FlemmaToolIconError"
-      elseif not effective_status and tool_seg.content ~= "" then
-        icon_hl = "FlemmaToolIconSuccess"
-      end
+      local status_info = effective_status and STATUS_DISPLAY[effective_status]
+      local icon_hl = status_info and status_info.icon_hl
+        or (not effective_status and tool_seg.content ~= "" and "FlemmaToolIconSuccess" or "FlemmaToolIcon")
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
@@ -400,15 +405,15 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
         + str.strwidth(": ")
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
-      if effective_status == "error" then
-        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
+      if status_info then
+        fixed_chrome = fixed_chrome + str.strwidth(status_info.text)
       end
       local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
       local available = text_width - fixed_chrome
 
       table.insert(chunks, { ": ", "FlemmaFoldPreview" })
-      if effective_status == "error" then
-        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      if status_info then
+        table.insert(chunks, { status_info.text, status_info.text_hl })
       end
 
       local body = preview.format_content_preview(tool_seg.content, available)
@@ -441,12 +446,9 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
       return chunks
     elseif tool_kind == "job_result" then
       ---@cast tool_seg flemma.ast.JobResultSegment
-      local icon_hl = "FlemmaToolIcon"
-      if tool_seg.status == "error" then
-        icon_hl = "FlemmaToolIconError"
-      elseif tool_seg.content ~= "" then
-        icon_hl = "FlemmaToolIconSuccess"
-      end
+      local job_status_info = tool_seg.status and STATUS_DISPLAY[tool_seg.status]
+      local icon_hl = job_status_info and job_status_info.icon_hl
+        or (tool_seg.content ~= "" and "FlemmaToolIconSuccess" or "FlemmaToolIcon")
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
@@ -461,14 +463,14 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
         + str.strwidth(": ")
         + str.strwidth(" ")
         + str.strwidth(suffix)
-      if tool_seg.status == "error" then
-        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
+      if job_status_info then
+        fixed_chrome = fixed_chrome + str.strwidth(job_status_info.text)
       end
       local available = text_width - fixed_chrome
 
       table.insert(chunks, { ": ", "FlemmaFoldPreview" })
-      if tool_seg.status == "error" then
-        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      if job_status_info then
+        table.insert(chunks, { job_status_info.text, job_status_info.text_hl })
       end
 
       local body = preview.format_content_preview(tool_seg.content, available)

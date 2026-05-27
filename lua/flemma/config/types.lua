@@ -46,6 +46,11 @@
 ---@field patch_markdown_conceal boolean
 
 ---@class flemma.config.Highlights
+---@field approval_action flemma.config.HighlightValue
+---@field approval_indicator flemma.config.HighlightValue
+---@field approval_key flemma.config.HighlightValue
+---@field approval_label flemma.config.HighlightValue
+---@field approval_line flemma.config.HighlightValue
 ---@field assistant flemma.config.HighlightValue
 ---@field busy flemma.config.HighlightValue
 ---@field defaults flemma.config.HighlightsDefaults
@@ -150,6 +155,7 @@
 ---@field padding { left: integer, right: integer }|integer
 
 ---@class flemma.config.Ui
+---@field approval flemma.config.UiApproval
 ---@field jobs flemma.config.UiJobs
 ---@field pricing flemma.config.UiPricing
 ---@field progress flemma.config.UiProgress
@@ -189,8 +195,11 @@
 ---@field message_next string
 ---@field message_prev string
 ---@field send string
+---@field tool_approve string
+---@field tool_approve_all string
 ---@field tool_background string
 ---@field tool_execute string
+---@field tool_reject string
 
 ---@class flemma.config.ParametersAnthropic : flemma.config.ParametersBase
 ---@field effort? "low"|"medium"|"high"|"xhigh"|"max"
@@ -252,6 +261,10 @@
 
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
+
+---@class flemma.config.UiApproval
+---@field enabled boolean
+---@field preview_lines { head: integer, tail: integer }|integer
 
 ---@class flemma.config.UiJobs
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"

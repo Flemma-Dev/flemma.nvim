@@ -250,6 +250,14 @@ return s.object({
     fold_meta = highlight("Comment"),
     tool_detail = highlight("Comment"),
     busy = highlight("DiagnosticWarn"),
+    approval_line = highlight({
+      dark = "FlemmaLineUser+bg:#101112,Normal+bg:#101112",
+      light = "FlemmaLineUser-bg:#101112,Normal-bg:#101112",
+    }),
+    approval_indicator = highlight("Folded!bg"),
+    approval_label = highlight("Folded!bg"),
+    approval_key = highlight("MoreMsg"),
+    approval_action = highlight({ dark = "ModeMsg+fg:#202122", light = "ModeMsg-fg:#202122" }),
     role_style = s.string("bold"),
   }),
 
@@ -321,6 +329,24 @@ return s.object({
         s.func():type_as("flemma.statusline.FormatFunction")
       ),
     }),
+    approval = s.object({
+      enabled = s.boolean(true),
+      preview_lines = s.union(
+        s.object({
+          head = s.integer(6),
+          tail = s.integer(6),
+        }),
+        s.integer()
+      ):coerce(function(value, _)
+        if type(value) == "number" then
+          return { head = value, tail = value }
+        end
+        if type(value) == "table" and value[1] ~= nil then
+          return { head = value[1], tail = value[2] or value[1] }
+        end
+        return value
+      end),
+    }),
   }),
 
   -- ---------------------------------------------------------------------------
@@ -355,6 +381,9 @@ return s.object({
       cancel = s.string("<C-c>"),
       tool_execute = s.string("<M-CR>"),
       tool_background = s.string("<M-b>"),
+      tool_approve = s.string("<M-a>"),
+      tool_reject = s.string("<M-r>"),
+      tool_approve_all = s.string("<M-A>"),
       message_next = s.string("]m"),
       message_prev = s.string("[m"),
       fold_toggle = s.union(s.string("<Space>"), s.literal(false)),

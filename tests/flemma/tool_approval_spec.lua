@@ -2922,3 +2922,139 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
   end)
 end)
+
+-- ============================================================================
+-- Executor Approval Tests
+-- ============================================================================
+
+describe("Executor Approval", function()
+  local executor
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.parser"] = nil
+    package.loaded["flemma.state"] = nil
+    executor = require("flemma.tools.executor")
+    set_config_and_setup({})
+  end)
+
+  after_each(function()
+    approval.clear()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  describe("approve_all_pending", function()
+    it("approves all pending tool results in buffer", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      local ok, err = executor.approve_all_pending(bufnr)
+      assert.is_true(ok)
+      assert.is_nil(err)
+
+      local lines = get_lines(bufnr)
+      local approved_count = 0
+      for _, line in ipairs(lines) do
+        if line:find("%(approved%)") then
+          approved_count = approved_count + 1
+        end
+      end
+      assert.are.equal(2, approved_count, "both tools should be approved")
+    end)
+
+    it("returns false when no pending tools exist", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (approved)",
+        "",
+        "```",
+        "```",
+      })
+
+      local ok, err = executor.approve_all_pending(bufnr)
+      assert.is_false(ok)
+      assert.is_truthy(err)
+    end)
+  end)
+
+  describe("cursor advancement", function()
+    it("advances cursor to next pending tool after approval", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      vim.api.nvim_set_current_buf(bufnr)
+      local tool_a_line = nil
+      for i, line in ipairs(get_lines(bufnr)) do
+        if line:find("tool_a.*pending") then
+          tool_a_line = i
+          break
+        end
+      end
+      assert.is_truthy(tool_a_line, "should find tool_a pending line")
+      vim.api.nvim_win_set_cursor(0, { tool_a_line, 0 })
+
+      executor.approve_at_cursor(bufnr)
+
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local cursor_text = vim.api.nvim_buf_get_lines(bufnr, cursor_line - 1, cursor_line, false)[1]
+      assert.is_truthy(cursor_text:find("tool_b"), "cursor should advance to next pending tool")
+    end)
+  end)
+end)

@@ -619,6 +619,16 @@ local function setup_commands()
           notify.info("All tool executions cancelled")
         end,
       },
+      ["approve-all"] = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = require("flemma.tools.executor").approve_all_pending(bufnr)
+          if not ok then
+            notify.error(err or "No pending tools to approve")
+          end
+        end,
+      },
       list = {
         action = function()
           local bufnr = vim.api.nvim_get_current_buf()

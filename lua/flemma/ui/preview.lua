@@ -31,6 +31,16 @@ local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
 local LABEL_DETAIL_SEPARATOR = " — "
+local DEFAULT_MULTILINE_HEAD = 6
+local DEFAULT_MULTILINE_TAIL = 6
+
+---@type table<string, {text: string, text_hl: string}>
+local STATUS_DISPLAY = {
+  error = { text = "(error) ", text_hl = "FlemmaToolResultError" },
+  rejected = { text = "(rejected) ", text_hl = "FlemmaToolResultRejected" },
+  denied = { text = "(denied) ", text_hl = "FlemmaToolResultDenied" },
+  aborted = { text = "(aborted) ", text_hl = "FlemmaToolResultAborted" },
+}
 
 ---Get the available text area width for a window (total width minus signcolumn, numbercolumn, foldcolumn)
 ---Returns DEFAULT_MAX_LENGTH when the window is invalid (e.g., buffer not displayed or test environment).
@@ -201,6 +211,86 @@ function M.format_tool_preview(tool_name, input, max_length)
 
   local preview = name_prefix .. body
   return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+end
+
+---Format a multi-line preview for a tool call (used by virt_line display).
+---Returns an array of plain strings (one per display line) and the label separately.
+---The tool name prefix appears on the first line only. Lines exceeding the cap
+---are truncated to head + indicator + tail.
+---@param tool_name string
+---@param input table<string, any>
+---@param max_length integer Maximum width per line
+---@param opts? { head?: integer, tail?: integer }
+---@return string[] lines
+---@return string|nil label
+function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
+  local head = (opts and opts.head) or DEFAULT_MULTILINE_HEAD
+  local tail = (opts and opts.tail) or DEFAULT_MULTILINE_TAIL
+  local max_lines = head + 1 + tail
+
+  local name_prefix = tool_name .. ": "
+
+  local tool_def = tools.get(tool_name)
+  local structured
+
+  if tool_def and tool_def.format_preview then
+    local raw = tool_def.format_preview(input, max_length)
+    if type(raw) == "string" then
+      structured = { detail = raw }
+    else
+      structured = raw --[[@as flemma.StructuredToolPreview]]
+      if type(structured.detail) == "table" then
+        structured.detail = table.concat(structured.detail --[[@as string[] ]], "  ")
+      end
+    end
+  else
+    local keys = vim.tbl_keys(input)
+    if #keys == 0 then
+      return { tool_name }, nil
+    end
+    local available = max_length - str.strwidth(name_prefix)
+    structured = {
+      label = type(input.label) == "string" and input.label or nil,
+      detail = M.format_tool_preview_body(input, available),
+    }
+  end
+
+  local label = structured.label
+  local detail = structured.detail --[[@as string|nil]]
+
+  if not detail or detail == "" then
+    if label then
+      return { name_prefix .. label }, nil
+    end
+    return { tool_name }, nil
+  end
+
+  local raw_lines = vim.split(detail, "\n", { plain = true })
+
+  if #raw_lines == 1 then
+    local line = name_prefix .. raw_lines[1]
+    return { str.truncate(line, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER) }, label
+  end
+
+  local result = {}
+  result[1] = str.truncate(name_prefix .. raw_lines[1], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+
+  if #raw_lines <= max_lines then
+    for i = 2, #raw_lines do
+      result[i] = str.truncate(raw_lines[i], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+    end
+  else
+    for i = 2, head do
+      result[#result + 1] = str.truncate(raw_lines[i], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+    end
+    local omitted = #raw_lines - head - tail
+    result[#result + 1] = "… " .. omitted .. " more lines …"
+    for i = #raw_lines - tail + 1, #raw_lines do
+      result[#result + 1] = str.truncate(raw_lines[i], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+    end
+  end
+
+  return result, label
 end
 
 local SEGMENT_SEPARATOR = " | "
@@ -437,6 +527,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
       local effective_status = doc and query.effective_tool_result_status(result_seg, doc) or result_seg.status
+      local result_status_info = effective_status and STATUS_DISPLAY[effective_status]
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
@@ -444,8 +535,8 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
       local name_result_width = str.strwidth(tool_name)
       local prefix_width = name_result_width + #": "
-      if effective_status == "error" then
-        prefix_width = prefix_width + #"(error) "
+      if result_status_info then
+        prefix_width = prefix_width + #result_status_info.text
       end
 
       table.insert(entry_chunks, { tool_name, "FlemmaToolName" })
@@ -454,9 +545,9 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
       entry_width = entry_width + #": "
 
-      if effective_status == "error" then
-        table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
-        entry_width = entry_width + #"(error) "
+      if result_status_info then
+        table.insert(entry_chunks, { result_status_info.text, result_status_info.text_hl })
+        entry_width = entry_width + #result_status_info.text
       end
 
       local remaining = width_for_result - prefix_width
@@ -483,7 +574,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
           entry_width = entry_width + str.strwidth(label_text)
         end
       else
-        if body ~= "" or effective_status == "error" then
+        if body ~= "" or result_status_info then
           if body ~= "" then
             table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
             entry_width = entry_width + str.strwidth(body)
@@ -492,6 +583,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
     elseif entry.kind == "job_result" then
       local job_seg = entry.segment --[[@as flemma.ast.JobResultSegment]]
+      local job_status_info = job_seg.status and STATUS_DISPLAY[job_seg.status]
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
@@ -499,8 +591,8 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
       local job_id_width = str.strwidth(job_seg.job_id)
       local prefix_width = job_id_width + #": "
-      if job_seg.status == "error" then
-        prefix_width = prefix_width + #"(error) "
+      if job_status_info then
+        prefix_width = prefix_width + #job_status_info.text
       end
 
       table.insert(entry_chunks, { job_seg.job_id, "FlemmaToolName" })
@@ -509,9 +601,9 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
       entry_width = entry_width + #": "
 
-      if job_seg.status == "error" then
-        table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
-        entry_width = entry_width + #"(error) "
+      if job_status_info then
+        table.insert(entry_chunks, { job_status_info.text, job_status_info.text_hl })
+        entry_width = entry_width + #job_status_info.text
       end
 
       local remaining = width_for_result - prefix_width

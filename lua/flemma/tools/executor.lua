@@ -16,6 +16,7 @@ local context_module = require("flemma.context")
 local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
+local navigation = require("flemma.navigation")
 local tool_context = require("flemma.tools.context")
 local path_util = require("flemma.utilities.path")
 local truncate_module = require("flemma.tools.truncate")
@@ -1168,6 +1169,7 @@ end
 
 ---Set the `(approved)` header suffix on the tool_result placeholder at cursor.
 ---Resolves the tool ID from cursor position, then delegates to approve().
+---Advances cursor to the next pending tool result if any remain.
 ---@param bufnr integer
 ---@return boolean success
 ---@return string|nil error
@@ -1176,11 +1178,16 @@ function M.approve_at_cursor(bufnr)
   if not ctx then
     return false, err
   end
-  return M.approve(bufnr, ctx.tool_id)
+  local ok, approve_err = M.approve(bufnr, ctx.tool_id)
+  if ok then
+    navigation.advance_to_next_pending(bufnr, ctx.tool_id)
+  end
+  return ok, approve_err
 end
 
 ---Set the `(rejected)` header suffix on the tool_result placeholder at cursor.
 ---Resolves the tool ID from cursor position, then delegates to reject().
+---Advances cursor to the next pending tool result if any remain.
 ---@param bufnr integer
 ---@param message string|nil Optional rejection message written into the fence
 ---@return boolean success
@@ -1190,7 +1197,37 @@ function M.reject_at_cursor(bufnr, message)
   if not ctx then
     return false, err
   end
-  return M.reject(bufnr, ctx.tool_id, message)
+  local ok, reject_err = M.reject(bufnr, ctx.tool_id, message)
+  if ok then
+    navigation.advance_to_next_pending(bufnr, ctx.tool_id)
+  end
+  return ok, reject_err
+end
+
+---Approve all pending tool_result placeholders in the buffer.
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
+function M.approve_all_pending(bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+  local pending_ids = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.status == "pending" then
+        pending_ids[#pending_ids + 1] = seg.tool_use_id
+      end
+    end
+  end
+
+  if #pending_ids == 0 then
+    return false, "No pending tools to approve"
+  end
+
+  for _, tool_id in ipairs(pending_ids) do
+    M.approve(bufnr, tool_id)
+  end
+
+  return true, nil
 end
 
 ---Resolve and execute the tool at cursor position.

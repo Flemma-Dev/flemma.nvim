@@ -16,6 +16,7 @@ local state = require("flemma.state")
 local textobject = require("flemma.textobject")
 local buffer_utils = require("flemma.utilities.buffer")
 local folding = require("flemma.ui.folding")
+local messages = require("flemma.messages")
 local ui = require("flemma.ui")
 
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
@@ -94,6 +95,51 @@ M.setup = function()
             notify.info("Tool moved to background.")
           end
         end, { buffer = true, desc = "Move Flemma tool to background" })
+      end
+
+      if config.keymaps.normal.tool_approve then
+        vim.keymap.set("n", config.keymaps.normal.tool_approve, function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = executor.approve_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Approve failed")
+          end
+        end, { buffer = true, desc = "Approve Flemma tool at cursor" })
+      end
+
+      if config.keymaps.normal.tool_reject then
+        vim.keymap.set("n", config.keymaps.normal.tool_reject, function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          vim.ui.input({ prompt = "Flemma: Rejection reason (optional): " }, function(input)
+            if input == nil then
+              return
+            end
+            if not vim.api.nvim_buf_is_valid(bufnr) then
+              return
+            end
+            local message = nil
+            if input ~= "" then
+              message = messages.render("tool-rejected--feedback", { reason = input })
+            end
+            local ok, err = executor.reject_at_cursor(bufnr, message)
+            if not ok then
+              notify.error(err or "Reject failed")
+            end
+          end)
+        end, { buffer = true, desc = "Reject Flemma tool at cursor" })
+      end
+
+      if config.keymaps.normal.tool_approve_all then
+        vim.keymap.set("n", config.keymaps.normal.tool_approve_all, function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = executor.approve_all_pending(bufnr)
+          if not ok then
+            notify.error(err or "No pending tools to approve")
+          end
+        end, { buffer = true, desc = "Approve all pending Flemma tools" })
       end
 
       if config.keymaps.normal.cancel then
