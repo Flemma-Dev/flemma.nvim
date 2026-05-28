@@ -88,11 +88,32 @@ local function setup_cursorline_highlights()
   end
 end
 
+---Setup line highlight groups for full-line background highlighting
+local function setup_line_highlights()
+  local current_config = config_facade.get()
+  if not current_config.line_highlights or not current_config.line_highlights.enabled then
+    return
+  end
+
+  local line_highlight_keys = { "frontmatter", "user", "system", "assistant" }
+  for _, key in ipairs(line_highlight_keys) do
+    ---@type flemma.hl.HlOp|nil
+    local role_op = current_config.line_highlights[key]
+    if role_op then
+      local group_name = "FlemmaLine" .. roles.capitalize(key)
+      h.coalesce(role_op:pick("bg"), h.default("bg")):set(group_name)
+    end
+  end
+end
+
 ---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
   local syntax_config = config_facade.get()
 
   vim.cmd("runtime! syntax/chat.vim")
+
+  -- Line highlights must be established before any group that reads FlemmaLine*
+  setup_line_highlights()
 
   -- Config-driven highlight groups: each value is an HlOp, call :set() directly
   syntax_config.highlights.system:set("FlemmaSystem")
@@ -240,26 +261,8 @@ M.apply_syntax = function()
   local statusline_base = h.from("StatusLine"):expect("fg", "bg")
   h.coalesce(statusline_base:mute("fg", "#666666"), h.link("Comment")):set("FlemmaStatusTextMuted")
 
-  -- Create CursorLine blend variants after all base groups are defined
+  -- CursorLine highlights depend on FlemmaLine* groups established above
   setup_cursorline_highlights()
-end
-
----Setup line highlight groups for full-line background highlighting
-local function setup_line_highlights()
-  local current_config = config_facade.get()
-  if not current_config.line_highlights or not current_config.line_highlights.enabled then
-    return
-  end
-
-  local line_highlight_keys = { "frontmatter", "user", "system", "assistant" }
-  for _, key in ipairs(line_highlight_keys) do
-    ---@type flemma.hl.HlOp|nil
-    local role_op = current_config.line_highlights[key]
-    if role_op then
-      local group_name = "FlemmaLine" .. roles.capitalize(key)
-      h.coalesce(role_op:pick("bg"), h.default("bg")):set(group_name)
-    end
-  end
 end
 
 ---Read and strip fenced code block conceal directives from a treesitter
@@ -353,8 +356,6 @@ end
 ---Setup function to initialize highlighting functionality
 M.setup = function()
   local augroup = vim.api.nvim_create_augroup("FlemmaHighlight", { clear = true })
-
-  setup_line_highlights()
 
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "FileType" }, {
     group = augroup,
