@@ -554,7 +554,7 @@ describe("CursorLine overlay highlights", function()
       assert.are_not.equal(0x303030, label_variant.fg, "adjusted fg should differ from original")
     end)
 
-    it("should not create variants when contrast already passes", function()
+    it("should preserve fg unchanged when contrast already passes", function()
       -- Set a high-contrast fence fg (white on dark)
       vim.api.nvim_set_hl(0, "FlemmaFenceLabel", { fg = 0xffffff })
       vim.api.nvim_set_hl(0, "FlemmaFenceBar", { fg = 0xffffff })
@@ -562,7 +562,10 @@ describe("CursorLine overlay highlights", function()
       setup_and_apply()
 
       local map = highlight.get_fence_cursorline_map()
-      assert.is_falsy(map["FlemmaLineAssistantCursorLine"], "should not create variants when contrast passes")
+      local assistant_variants = map["FlemmaLineAssistantCursorLine"]
+      assert.is_truthy(assistant_variants, "variants are always created")
+      local label_variant = vim.api.nvim_get_hl(0, { name = assistant_variants.FlemmaFenceLabel, link = false })
+      assert.are.equal(0xffffff, label_variant.fg, "fg should be unchanged when contrast passes")
     end)
 
     it("should return empty map when CursorLine has no attributes", function()

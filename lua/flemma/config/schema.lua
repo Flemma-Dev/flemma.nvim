@@ -208,7 +208,6 @@ return s.object({
     lua_delimiter = s.highlight(h.link("FlemmaLuaExpression")),
     user_file_reference = s.highlight(h.link("Include")),
     thinking_tag = s.highlight(h.link("Comment")),
-    -- was: { dark = "Comment+bg:#000000-fg:#333333", light = "Comment-bg:#000000+fg:#333333" }
     thinking_block = s.highlight(h.themed({
       dark = h.from("Comment"):blend("fg", "-#333333"),
       light = h.from("Comment"):blend("fg", "+#333333"),
@@ -224,7 +223,7 @@ return s.object({
     tool_result_denied = s.highlight(h.link("DiagnosticError")),
     tool_result_aborted = s.highlight(h.link("DiagnosticError")),
     tool_preview = s.highlight(h.link("Comment")),
-    -- was: { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }
+    tool_label = s.highlight(h.attrs({ italic = true })),
     fence_label = s.highlight(h.themed({
       dark = h.from("Comment"):blend("fg", "-#303030"),
       light = h.from("Comment"):blend("fg", "+#303030"),
@@ -234,17 +233,14 @@ return s.object({
     fold_meta = s.highlight(h.link("Comment")),
     tool_detail = s.highlight(h.link("Comment")),
     busy = s.highlight(h.link("DiagnosticWarn")),
-    -- was: { dark = "FlemmaLineUser+bg:#101112,Normal+bg:#101112", light = "FlemmaLineUser-bg:#101112,Normal-bg:#101112" }
+    progress_accent = s.highlight(h.attrs({ bold = true })),
     approval_line = s.highlight(h.themed({
       dark = h.coalesce(h.from("FlemmaLineUser"):blend("bg", "+#101112"), h.from("Normal"):blend("bg", "+#101112")),
       light = h.coalesce(h.from("FlemmaLineUser"):blend("bg", "-#101112"), h.from("Normal"):blend("bg", "-#101112")),
     })),
-    -- was: "Folded!bg"
     approval_indicator = s.highlight(h.from("Folded"):omit("bg")),
-    -- was: "Folded!bg"
     approval_label = s.highlight(h.from("Folded"):omit("bg")),
     approval_key = s.highlight(h.link("MoreMsg")),
-    -- was: { dark = "ModeMsg+fg:#202122", light = "ModeMsg-fg:#202122" }
     approval_action = s.highlight(h.themed({
       dark = h.from("ModeMsg"):blend("fg", "+#202122"),
       light = h.from("ModeMsg"):blend("fg", "-#202122"),
@@ -255,7 +251,6 @@ return s.object({
   ruler = s.object({
     enabled = s.boolean(true),
     char = s.string("─"),
-    -- was: { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }
     hl = s.highlight(h.themed({
       dark = h.from("Comment"):blend("fg", "-#303030"),
       light = h.from("Comment"):blend("fg", "+#303030"),
@@ -284,17 +279,14 @@ return s.object({
 
   line_highlights = s.object({
     enabled = s.boolean(true),
-    -- was: { dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }
     frontmatter = s.highlight(h.themed({
       dark = h.from("Normal"):blend("bg", "+#18111a"),
       light = h.from("Normal"):blend("bg", "-#18111a"),
     })),
-    -- was: { dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }
     system = s.highlight(h.themed({
       dark = h.from("Normal"):blend("bg", "+#101112"),
       light = h.from("Normal"):blend("bg", "-#101112"),
     })),
-    -- was: { dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }
     user = s.highlight(h.themed({
       dark = h.from("Normal"):blend("bg", "+#202122"),
       light = h.from("Normal"):blend("bg", "-#202122"),

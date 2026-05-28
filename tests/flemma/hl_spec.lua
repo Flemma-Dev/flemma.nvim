@@ -117,6 +117,39 @@ describe("flemma.hl", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- DefaultOp
+  -- ---------------------------------------------------------------------------
+
+  describe("h.default()", function()
+    it("returns Normal bg when available", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = "#ffffff", bg = "#1a1a2e" })
+      local result = h.default("bg"):get()
+      assert.same({ bg = "#1a1a2e" }, result)
+    end)
+
+    it("returns Normal fg when available", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = "#aabbcc", bg = "#000000" })
+      local result = h.default("fg"):get()
+      assert.same({ fg = "#aabbcc" }, result)
+    end)
+
+    it("falls back to black bg in dark mode when Normal lacks bg", function()
+      vim.api.nvim_set_hl(0, "Normal", {})
+      vim.o.background = "dark"
+      local result = h.default("bg"):get()
+      assert.same({ bg = "#000000" }, result)
+    end)
+
+    it("falls back to white bg in light mode when Normal lacks bg", function()
+      vim.o.background = "light"
+      vim.api.nvim_set_hl(0, "Normal", {})
+      local result = h.default("bg"):get()
+      assert.same({ bg = "#ffffff" }, result)
+      vim.o.background = "dark"
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- CoalesceOp
   -- ---------------------------------------------------------------------------
 

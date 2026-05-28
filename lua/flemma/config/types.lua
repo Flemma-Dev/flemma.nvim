@@ -59,12 +59,14 @@
 ---@field lua_code_block flemma.hl.HlOp
 ---@field lua_delimiter flemma.hl.HlOp
 ---@field lua_expression flemma.hl.HlOp
+---@field progress_accent flemma.hl.HlOp
 ---@field role_name flemma.hl.HlOp
 ---@field system flemma.hl.HlOp
 ---@field thinking_block flemma.hl.HlOp
 ---@field thinking_tag flemma.hl.HlOp
 ---@field tool_detail flemma.hl.HlOp
 ---@field tool_icon flemma.hl.HlOp
+---@field tool_label flemma.hl.HlOp
 ---@field tool_name flemma.hl.HlOp
 ---@field tool_preview flemma.hl.HlOp
 ---@field tool_result_aborted flemma.hl.HlOp

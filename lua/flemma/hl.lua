@@ -229,6 +229,26 @@ function HexOp:get()
 end
 
 -- ---------------------------------------------------------------------------
+-- DefaultOp
+-- ---------------------------------------------------------------------------
+
+---@class flemma.hl.DefaultOp : flemma.hl.HlOp
+---@field _attr string
+local DefaultOp = setmetatable({}, { __index = HlOp })
+DefaultOp.__index = DefaultOp
+
+---@param attr string
+---@return flemma.hl.DefaultOp
+function DefaultOp.new(attr)
+  return setmetatable({ _attr = attr }, DefaultOp)
+end
+
+---@return vim.api.keyset.highlight
+function DefaultOp:get()
+  return { [self._attr] = default_color(self._attr) }
+end
+
+-- ---------------------------------------------------------------------------
 -- AttrsOp
 -- ---------------------------------------------------------------------------
 
@@ -701,6 +721,12 @@ end
 ---@return flemma.hl.AttrsOp
 function M.attrs(attrs)
   return AttrsOp.new(attrs)
+end
+
+---@param attr string
+---@return flemma.hl.DefaultOp
+function M.default(attr)
+  return DefaultOp.new(attr)
 end
 
 ---@param ... flemma.hl.HlOp
