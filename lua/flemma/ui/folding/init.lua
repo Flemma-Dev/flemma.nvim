@@ -20,12 +20,12 @@ local LABEL_DETAIL_SEPARATOR = " — "
 local TOOL_USE_ICON = "⬡"
 local TOOL_RESULT_ICON = "⬢"
 
----@type table<string, {icon_hl: string, text: string, text_hl: string}>
-local STATUS_DISPLAY = {
-  error = { icon_hl = "FlemmaToolIconError", text = "(error) ", text_hl = "FlemmaToolResultError" },
-  rejected = { icon_hl = "FlemmaToolIconRejected", text = "(rejected) ", text_hl = "FlemmaToolResultRejected" },
-  denied = { icon_hl = "FlemmaToolIconDenied", text = "(denied) ", text_hl = "FlemmaToolResultDenied" },
-  aborted = { icon_hl = "FlemmaToolIconAborted", text = "(aborted) ", text_hl = "FlemmaToolResultAborted" },
+---@type table<string, string>
+local STATUS_ICON_HL = {
+  error = "FlemmaToolIconError",
+  rejected = "FlemmaToolIconRejected",
+  denied = "FlemmaToolIconDenied",
+  aborted = "FlemmaToolIconAborted",
 }
 
 ---@class flemma.ui.folding.FoldRule
@@ -388,8 +388,8 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
       local tool_label = tool_info and tool_info.label
       local effective_status = query.effective_tool_result_status(tool_seg, doc)
 
-      local status_info = effective_status and STATUS_DISPLAY[effective_status]
-      local icon_hl = status_info and status_info.icon_hl
+      local status_info = effective_status and preview.STATUS_DISPLAY[effective_status]
+      local icon_hl = (effective_status and STATUS_ICON_HL[effective_status])
         or (not effective_status and tool_seg.content ~= "" and "FlemmaToolIconSuccess" or "FlemmaToolIcon")
 
       ---@type {[1]:string, [2]:string}[]
@@ -446,8 +446,8 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
       return chunks
     elseif tool_kind == "job_result" then
       ---@cast tool_seg flemma.ast.JobResultSegment
-      local job_status_info = tool_seg.status and STATUS_DISPLAY[tool_seg.status]
-      local icon_hl = job_status_info and job_status_info.icon_hl
+      local job_status_info = tool_seg.status and preview.STATUS_DISPLAY[tool_seg.status]
+      local icon_hl = (tool_seg.status and STATUS_ICON_HL[tool_seg.status])
         or (tool_seg.content ~= "" and "FlemmaToolIconSuccess" or "FlemmaToolIcon")
 
       ---@type {[1]:string, [2]:string}[]
