@@ -37,7 +37,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)           |
 | `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
-Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
+Each value is an `HlOp` builder from `require("flemma.hl")`. Simple cases use `h.link("Group")` for a direct link or `h.attrs({ bold = true })` for literal attributes. More complex cases chain operations like `:blend()`, `:omit()`, and `:pick()` to derive colours from existing groups.
 
 ### Job result highlights
 
@@ -60,122 +60,121 @@ Override any group to style job results independently from tool results.
 
 ## Theme-aware values
 
-Any highlight value can be theme-aware using `{ dark = ..., light = ... }`. Flemma detects `vim.o.background` and picks the matching branch:
+Any highlight value can be theme-aware using `h.themed()`. Flemma detects `vim.o.background` and evaluates the matching branch:
 
 ```lua
-ruler = { hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" } }
+local h = require("flemma.hl")
+
+ruler = { hl = h.themed({
+  dark = h.from("Comment"):blend("fg", "-#303030"),
+  light = h.from("Comment"):blend("fg", "+#303030"),
+}) }
 ```
 
-### Highlight expressions
+### Highlight builder operations
 
-Derive colours from existing highlight groups with blend operations. The syntax is:
+Colours are derived from existing highlight groups using chainable builder operations on `HlOp` objects. All operations resolve lazily when `:get()` is called (typically at highlight setup time).
 
-```
-"HighlightGroup±attr:#hexvalue"
-```
-
-Where `+` adds (brightens) and `-` subtracts (darkens) the hex value from the group's attribute. Valid attributes are `fg`, `bg`, and `sp`. Each RGB channel is clamped to 0–255 after the operation.
+**Blend** — add or subtract a hex value from a group's colour attribute. `+` brightens, `-` darkens. Each RGB channel is clamped to 0-255:
 
 ```lua
+local h = require("flemma.hl")
+
 -- Lighten Normal's bg by #101010
-line_highlights = { user = { dark = "Normal+bg:#101010" } }
+line_highlights = { user = h.themed({
+  dark = h.from("Normal"):blend("bg", "+#101010"),
+}) }
 
--- Darken with -
-ruler = { hl = { light = "Normal-fg:#303030" } }
+-- Darken Comment's fg
+ruler = { hl = h.themed({
+  light = h.from("Comment"):blend("fg", "-#303030"),
+}) }
 
--- Multiple operations on the same group
-"Normal+bg:#101010-fg:#202020"
+-- Chain multiple blends on the same group
+h.from("Normal"):blend("bg", "+#101010"):blend("fg", "-#202020")
 ```
 
-### Contrast enforcement
-
-The `^` operator ensures a minimum WCAG 2.1 contrast ratio between a colour attribute and a background context:
-
-```
-"HighlightGroup^attr:ratio"
-```
-
-Where `ratio` is a decimal contrast target (e.g., `4.5` for WCAG AA). The operator auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black.
-
-Composes with blend operations – blends are applied first, then contrast is enforced:
-
-```lua
--- Dim DiffChange fg, then ensure result meets 4.5:1 against the bar bg
-"DiffChange-fg:#222222^fg:4.5"
-```
-
-> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the usage bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
-
-### Attribute exclusion
-
-The `!` operator strips individual attributes from a resolved highlight group. Append `!attr` to exclude that attribute from the result:
-
-```
-"HighlightGroup!attr"
-```
-
-Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.). Multiple exclusions can be chained:
+**Omit** — strip attributes from the resolved result. Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.):
 
 ```lua
 -- Use Folded's fg and styles, but not its bg (approval_bg fills in as fallback)
-highlights = { approval_indicator = "Folded!bg" }
+highlights = { approval_indicator = h.from("Folded"):omit("bg") }
 
--- Use Folded's fg, drop both bg and italic
-highlights = { approval_label = "Folded!bg!italic" }
+-- Drop both bg and italic
+highlights = { approval_label = h.from("Folded"):omit("bg", "italic") }
 ```
 
-When a highlight value has exclusions, Flemma resolves the group to its concrete attributes (instead of creating a `:link`) and removes the excluded keys before any fallback logic runs. In composite highlights like the approval line, sub-groups that lack `bg` receive the `approval_line` background as a fallback — so `!bg` on a sub-group strips the group's own background and lets the shared approval background show through.
+When a highlight value uses `:omit()`, Flemma resolves the group to its concrete attributes (instead of creating a link) and removes the excluded keys before any fallback logic runs. In composite highlights like the approval line, sub-groups that lack `bg` receive the `approval_line` background as a fallback -- so `:omit("bg")` strips the group's own background and lets the shared approval background show through.
 
-Exclusions compose with blend and contrast operations. The exclusions are applied after all other operators:
+**Pick** — keep only the specified attributes, discarding everything else:
 
 ```lua
--- Blend bg, but exclude fg from the final result
-"Normal+bg:#101010!fg"
+-- Blend fg, then keep only the fg attribute in the final result
+h.from("Comment"):blend("fg", "-#303030"):pick("fg")
 ```
 
-**Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
+**Contrast** — ensure a minimum WCAG 2.1 contrast ratio between a colour attribute and a background context. Auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black:
 
 ```lua
--- Try FooBar first; if it lacks `bg`, fall back to Normal
-"FooBar+bg:#201020,Normal+bg:#101010"
+-- Ensure fg meets 4.5:1 against the bar background
+h.from("DiffChange"):blend("fg", "-#222222"):contrast("fg", bar_bg_op, 4.5)
 ```
 
-The `highlights.defaults` table provides the ultimate fallback values:
+> **Scope:** `:contrast()` requires a background `HlOp` provided by the caller. Currently only the usage bar highlight setup provides this context.
+
+**Coalesce** — try multiple operations in order, returning the first non-nil result. Replaces the old comma-separated fallback chains:
 
 ```lua
-highlights = {
-  defaults = {
-    dark = { bg = "#000000", fg = "#ffffff" },
-    light = { bg = "#ffffff", fg = "#000000" },
-  },
-}
+-- Try FlemmaLineUser first; if it resolves to nil, fall back to Normal
+h.coalesce(
+  h.from("FlemmaLineUser"):blend("bg", "+#101112"),
+  h.from("Normal"):blend("bg", "+#101112")
+)
 ```
+
+Fallback colours for missing attributes are handled internally by the builder's `default_color()` function, which reads from the `Normal` group or falls back to black/white based on `vim.o.background`.
 
 ## Line highlights
 
 Full-line background colours distinguish message roles. Applied via line-level extmarks on every line of each message block. Disable with `line_highlights.enabled = false` (default: `true`):
 
 ```lua
+local h = require("flemma.hl")
+
 line_highlights = {
   enabled = true,
-  frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
-  system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
-  user = { dark = "Normal", light = "Normal" },
-  assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
+  frontmatter = h.themed({
+    dark = h.from("Normal"):blend("bg", "+#201020"),
+    light = h.from("Normal"):blend("bg", "-#201020"),
+  }),
+  system = h.themed({
+    dark = h.from("Normal"):blend("bg", "+#201000"),
+    light = h.from("Normal"):blend("bg", "-#201000"),
+  }),
+  user = h.link("Normal"),
+  assistant = h.themed({
+    dark = h.from("Normal"):blend("bg", "+#102020"),
+    light = h.from("Normal"):blend("bg", "-#102020"),
+  }),
 }
 ```
 
-Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `highlights.role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
+Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line -- content starts on the next line. The `highlights.role_name` option (an `HlOp`, default `h.attrs({ bold = true })`) applies styling to the role name text only (not the ruler).
 
 ## Rulers
 
 Rulers are drawn directly on each role marker line (`@System:`, `@You:`, `@Assistant:`) using overlay extmarks. The ruler character replaces the `@` symbol and extends across the remaining window width, producing a visual separator that doesn't consume extra vertical space. Rulers resize automatically when the window is resized.
 
 ```lua
+local h = require("flemma.hl")
+
 ruler = {
   enabled = true,       -- default: true
   char = "─",           -- drawn over the role marker and repeated to fill the line
-  hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
+  hl = h.themed({
+    dark = h.from("Comment"):blend("fg", "-#303030"),
+    light = h.from("Comment"):blend("fg", "+#303030"),
+  }),
 }
 ```
 

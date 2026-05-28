@@ -3,11 +3,8 @@
 ---@class flemma.Highlight
 local M = {}
 
-local color = require("flemma.utilities.color")
 local config_facade = require("flemma.config")
-local log = require("flemma.logging")
-local notify = require("flemma.notify")
-local str = require("flemma.utilities.string")
+local h = require("flemma.hl")
 local preprocessor_syntax = require("flemma.preprocessor.syntax")
 local roles = require("flemma.utilities.roles")
 
@@ -20,7 +17,6 @@ local function get_hl_color(group_name, attr)
   if not ok or not hl then
     return nil
   end
-  -- nvim_get_hl returns 'fg' and 'bg' as integers
   local value = hl[attr]
   if value then
     return string.format("#%06x", value)
@@ -35,8 +31,7 @@ local fence_cursorline_map = {}
 
 ---Walk a chain of highlight group names and return the first group whose
 ---resolved highlight definition provides BOTH a foreground and a background
----colour. Matches the "complete" criterion used by the usage bar and
----progress bar fallback logic.
+---colour.
 ---@param chain string|string[] Comma-separated string or list of group names
 ---@return string|nil group The first complete group, or nil
 function M.resolve_first_complete(chain)
@@ -61,315 +56,39 @@ function M.resolve_first_complete(chain)
   return nil
 end
 
----Get the default fallback color for an attribute.
----First tries the Normal highlight group, then falls back to config defaults.
+---Get the default fallback color for an attribute from Normal, or black/white.
 ---@param attr string "fg" or "bg"
----@return string hex Hex color
+---@return string
 local function get_default_color(attr)
-  -- First try Normal group (what Neovim actually uses as default)
-  local normal_color = get_hl_color("Normal", attr)
-  if normal_color then
-    return normal_color
-  end
-
-  -- Fall back to config defaults
-  local config = config_facade.get()
-  local is_dark = vim.o.background == "dark"
-  local defaults = config.highlights and config.highlights.defaults
-  if defaults then
-    local theme_defaults = is_dark and defaults.dark or defaults.light
-    if theme_defaults and theme_defaults[attr] then
-      return theme_defaults[attr]
+  local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = "Normal", link = false })
+  if ok and hl then
+    local v = hl[attr]
+    if v then
+      return string.format("#%06x", v)
     end
   end
-  -- Hardcoded fallback if config.highlights.defaults is missing
+  local is_dark = vim.o.background == "dark"
   if attr == "bg" then
     return is_dark and "#000000" or "#ffffff"
-  else
-    return is_dark and "#ffffff" or "#000000"
   end
-end
-
--- Valid attribute names for highlight expressions
-local VALID_ATTRIBUTES = {
-  fg = true,
-  bg = true,
-  sp = true,
-}
-
----@class flemma.highlight.ResolvedAttrs
----@field fg? string Hex color
----@field bg? string Hex color
----@field sp? string Hex color
-
----Try to resolve a single highlight expression like "Normal+bg:#101010" or "DiagnosticOk^fg:4.5"
----@param expr string Single expression (no commas)
----@param use_defaults boolean Whether to use defaults when group lacks attribute
----@param contrast_bg? string Hex bg color for ^ contrast enforcement (nil = ignore ^ operators)
----@return flemma.highlight.ResolvedAttrs|nil
-local function try_expression(expr, use_defaults, contrast_bg)
-  -- Match base group: everything before the first operator (+, -, or ^)
-  local base_group = expr:match("^(.-)[%+%-^][fbs][gp]:")
-  if not base_group or base_group == "" then
-    return nil
-  end
-
-  local result = {}
-
-  -- Pass 1: process +/- blend operations
-  for op, attr, hex_value in expr:gmatch("([%+%-])([fbs][gp]):(#%x%x%x%x%x%x)") do
-    if VALID_ATTRIBUTES[attr] then
-      local base_hex = get_hl_color(base_group, attr)
-      if not base_hex then
-        if not use_defaults then
-          return nil
-        end
-        base_hex = get_default_color(attr)
-      end
-      local base_rgb = color.hex_to_rgb(base_hex)
-      local mod_rgb = color.hex_to_rgb(hex_value)
-      if base_rgb and mod_rgb then
-        result[attr] = color.rgb_to_hex(color.blend(base_rgb, mod_rgb, op))
-      end
-    end
-  end
-
-  -- Pass 2: process ^ contrast operations (applied after blending)
-  for attr, ratio_str in expr:gmatch("%^([fbs][gp]):([%d%.]+)") do
-    if VALID_ATTRIBUTES[attr] then
-      local target_ratio = tonumber(ratio_str)
-      if target_ratio then
-        -- Use already-blended result, or fall back to base group's attribute
-        local current_hex = result[attr] or get_hl_color(base_group, attr)
-        if not current_hex then
-          if use_defaults then
-            current_hex = get_default_color(attr)
-          end
-        end
-        if current_hex then
-          if contrast_bg then
-            result[attr] = color.ensure_contrast(current_hex, contrast_bg, target_ratio)
-          else
-            -- No contrast context: resolve attribute but skip adjustment
-            result[attr] = current_hex
-          end
-        end
-      end
-    end
-  end
-
-  return next(result) and result or nil
-end
-
----Parse a highlight expression string and return resolved highlight options.
----Format: "Group+attr:#color,FallbackGroup+attr:#color,...".
----Comma-separated expressions are tried in order; only last uses defaults.
----@param value string The highlight expression(s)
----@param contrast_bg? string Hex bg color for ^ contrast enforcement
----@return flemma.highlight.ResolvedAttrs|nil
-local function parse_highlight_expression(value, contrast_bg)
-  if not value:match("[%+%-^][fbs][gp]:") then
-    return nil
-  end
-
-  local expressions = {}
-  for expr in value:gmatch("([^,]+)") do
-    table.insert(expressions, expr:match("^%s*(.-)%s*$"))
-  end
-
-  for i, expr in ipairs(expressions) do
-    local result = try_expression(expr, i == #expressions, contrast_bg)
-    if result then
-      return result
-    end
-  end
-  return nil
-end
-
----Parse `!attr` exclusion suffixes from a highlight value string.
----E.g., `"Folded!bg!italic"` → `"Folded"`, `{ bg = true, italic = true }`.
----Exclusions are stripped from the string so the remainder can be parsed
----normally by expression, hex, or group-name resolution.
----@param value string
----@return string base The value with exclusion suffixes stripped
----@return table<string, true> exclusions Set of excluded attribute names
-local function parse_exclusions(value)
-  ---@type table<string, true>
-  local exclusions = {}
-  local base = value:gsub("!(%w+)", function(attr)
-    exclusions[attr] = true
-    return ""
-  end)
-  return base, exclusions
-end
-
--- Forward declaration: resolve_hl_value is defined below but called by set_highlight's ! fast-path.
----@type fun(config_value: string|table): vim.api.keyset.highlight, table<string, true>
-local resolve_hl_value
-
----Set highlight groups.
----Accepts a highlight group name to link to, a hex color string,
----a highlight expression, or a table with highlight attributes.
----@param group_name string
----@param value string|table
----@param type_? string For bare hex colors, which attribute to use ("fg" or "bg")
----@param contrast_bg? string Hex bg color for ^ contrast enforcement in expressions
-local function set_highlight(group_name, value, type_, contrast_bg)
-  if type(value) == "table" then
-    if value.light ~= nil or value.dark ~= nil then
-      -- Handle theme-specific definitions
-      local is_dark = vim.o.background == "dark"
-      local theme_value = is_dark and value.dark or value.light
-      if theme_value then
-        set_highlight(group_name, theme_value, type_, contrast_bg)
-      end
-    else
-      local hl_opts = vim.tbl_extend("force", {}, value)
-      -- Add default = true to respect pre-existing user definitions
-      hl_opts.default = true
-      vim.api.nvim_set_hl(0, group_name, hl_opts)
-    end
-  elseif type(value) == "string" then
-    if value:find("!", 1, true) then
-      local hl_opts = resolve_hl_value(value)
-      if type_ then
-        local attr_val = hl_opts[type_]
-        hl_opts = attr_val and { [type_] = attr_val } or {}
-      end
-      hl_opts.default = true
-      vim.api.nvim_set_hl(0, group_name, hl_opts)
-    elseif value:match("[%+%-^][fbs][gp]:") then
-      -- Highlight expression (e.g., "Normal+fg:#101010-bg:#303030" or "Group^fg:4.5")
-      local hl_opts = parse_highlight_expression(value, contrast_bg)
-      if hl_opts then
-        set_highlight(group_name, hl_opts, type_, contrast_bg)
-      else
-        log.error(
-          string.format("set_highlight(): Failed to parse highlight expression for group %s: %s", group_name, value)
-        )
-      end
-    elseif value:sub(1, 1) == "#" then
-      -- Bare hex color - use type_ to determine attribute (defaults to fg)
-      local hl_opts = {}
-      hl_opts[type_ or "fg"] = value
-      set_highlight(group_name, hl_opts, type_, contrast_bg)
-    elseif type_ then
-      -- Highlight group name with specific attribute requested (e.g., for line highlights)
-      -- Extract only the specified attribute to avoid overriding other highlights
-      local resolved_color = get_hl_color(value, type_)
-      if not resolved_color then
-        -- Group doesn't have the attribute - use default color (tries Normal first, then config defaults)
-        resolved_color = get_default_color(type_)
-      end
-      local hl_opts = {}
-      hl_opts[type_] = resolved_color
-      set_highlight(group_name, hl_opts, type_, contrast_bg)
-    else
-      -- Assume it's a highlight group name to link
-      set_highlight(group_name, { link = value }, type_, contrast_bg)
-    end
-  else
-    log.error(string.format("set_highlight(): Invalid value type for group %s: %s", group_name, type(value)))
-  end
-end
-
----Public API for resolving a highlight expression with optional contrast context.
----Primarily for testing; internal code uses set_highlight() which calls this indirectly.
----@param value string Highlight expression string
----@param contrast_bg? string Hex bg color for ^ contrast enforcement
----@return flemma.highlight.ResolvedAttrs|nil
-function M.resolve_expression(value, contrast_bg)
-  return parse_highlight_expression(value, contrast_bg)
-end
-
----Resolve a HighlightValue config into highlight attributes.
----Handles dark/light tables, expressions, bare hex (as fg), group names,
----and `!attr` exclusion suffixes (e.g., `"Folded!bg"` drops the `bg` attr).
----Unlike set_highlight(), returns attrs directly without setting a group or
----adding default=true — intended for derived highlights that must re-resolve
----on each call.
----@param config_value string|table HighlightValue from config
----@return vim.api.keyset.highlight attrs
----@return table<string, true> exclusions
-function resolve_hl_value(config_value)
-  local value = config_value
-  if type(value) == "table" and (value.dark ~= nil or value.light ~= nil) then
-    value = (vim.o.background == "dark") and value.dark or value.light
-  end
-  if type(value) ~= "string" then
-    return {}, {}
-  end
-  local base, exclusions = parse_exclusions(value)
-  local expr_result = parse_highlight_expression(base)
-  ---@type vim.api.keyset.highlight
-  local attrs
-  if expr_result then
-    attrs = expr_result --[[@as vim.api.keyset.highlight]]
-  elseif base:sub(1, 1) == "#" then
-    attrs = { fg = base }
-  else
-    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = base, link = false })
-    if not ok or not hl then
-      return {}, exclusions
-    end
-    attrs = {}
-    for k, v in pairs(hl) do
-      if k == "fg" or k == "bg" or k == "sp" then
-        attrs[k] = string.format("#%06x", v)
-      elseif k ~= "link" then
-        attrs[k] = v
-      end
-    end
-  end
-  for attr in pairs(exclusions) do
-    attrs[attr] = nil
-  end
-  return attrs, exclusions
+  return is_dark and "#ffffff" or "#000000"
 end
 
 ---Setup CursorLine blend highlight groups for line-highlighted chat buffers.
----Creates FlemmaLine*CursorLine variants that combine role backgrounds with CursorLine styling,
----so the cursor line remains visible on top of role-based line highlights.
+---Creates FlemmaLine*CursorLine variants that combine role backgrounds with CursorLine styling.
 local function setup_cursorline_highlights()
   local current_config = config_facade.get()
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
     return
   end
 
-  local cl_hl = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
-  if not cl_hl or not next(cl_hl) then
+  if not h.from("CursorLine"):get() then
     return
   end
 
-  -- Compute the bg delta: how CursorLine differs from Normal
-  local cl_bg_hex = cl_hl.bg and string.format("#%06x", cl_hl.bg)
-  local normal_bg_hex = get_hl_color("Normal", "bg") or get_default_color("bg")
+  local cl_delta = h.diff("Normal", "CursorLine", "bg")
+  local cl_decorations = h.from("CursorLine"):omit("fg", "bg", "sp")
 
-  ---@type {r: integer, g: integer, b: integer}|nil
-  local delta_rgb
-  if cl_bg_hex then
-    local cl_rgb = color.hex_to_rgb(cl_bg_hex)
-    local normal_rgb = color.hex_to_rgb(normal_bg_hex)
-    if cl_rgb and normal_rgb then
-      -- Delta = CursorLine_bg - Normal_bg (per channel, may be negative)
-      delta_rgb = {
-        r = cl_rgb.r - normal_rgb.r,
-        g = cl_rgb.g - normal_rgb.g,
-        b = cl_rgb.b - normal_rgb.b,
-      }
-    end
-  end
-
-  -- Collect non-color CursorLine attributes (bold, underline, italic, etc.)
-  ---@type table<string, boolean|integer>
-  local cl_decorations = {}
-  for attr, value in pairs(cl_hl) do
-    if attr ~= "bg" and attr ~= "fg" and attr ~= "sp" and attr ~= "link" then
-      cl_decorations[attr] = value
-    end
-  end
-
-  -- Create CursorLine variant for each line highlight group
   local base_groups = {
     "FlemmaLineFrontmatter",
     "FlemmaLineSystem",
@@ -378,212 +97,132 @@ local function setup_cursorline_highlights()
     "FlemmaThinkingBlock",
   }
   for _, base_group in ipairs(base_groups) do
-    local role_bg_hex = get_hl_color(base_group, "bg")
-    local cl_group_name = base_group .. "CursorLine"
-
-    ---@type vim.api.keyset.highlight
-    local hl_opts = vim.tbl_extend("force", {}, cl_decorations)
-
-    if role_bg_hex and delta_rgb then
-      -- Blend: apply CursorLine's bg delta onto the role bg
-      local role_rgb = color.hex_to_rgb(role_bg_hex)
-      if role_rgb then
-        local clamp = function(v)
-          return math.max(0, math.min(255, v))
-        end
-        hl_opts.bg = color.rgb_to_hex({
-          r = clamp(role_rgb.r + delta_rgb.r),
-          g = clamp(role_rgb.g + delta_rgb.g),
-          b = clamp(role_rgb.b + delta_rgb.b),
-        })
-      end
-    elseif cl_bg_hex then
-      -- No role bg or no delta; use CursorLine bg directly
-      hl_opts.bg = cl_bg_hex
-    end
-
-    hl_opts.default = true
-    vim.api.nvim_set_hl(0, cl_group_name, hl_opts)
+    h.from(base_group):blend("bg", cl_delta):merge(cl_decorations):set(base_group .. "CursorLine", { default = false })
   end
 
   -- Precompute contrast-adjusted fence highlight groups for CursorLine overlays.
-  -- For each role's CursorLine variant bg, check if the fence fg meets WCAG 4.5:1.
-  -- Only create adjusted groups where contrast fails — the map stays empty when
-  -- the colorscheme already provides sufficient contrast, making runtime cost zero.
   fence_cursorline_map = {}
   local fence_source_groups = { "FlemmaFenceBar", "FlemmaFenceLabel" }
-  ---@type table<string, string|nil>
-  local fence_fgs = {}
-  for _, group in ipairs(fence_source_groups) do
-    fence_fgs[group] = get_hl_color(group, "fg")
-  end
-
   for _, base_group in ipairs(base_groups) do
     local cl_group_name = base_group .. "CursorLine"
-    local cl_variant_bg = get_hl_color(cl_group_name, "bg")
-    if not cl_variant_bg then
-      goto continue_fence
-    end
+    local cl_bg = h.from(cl_group_name):pick("bg")
 
     ---@type table<string, string>
     local variants = {}
     for _, fence_group in ipairs(fence_source_groups) do
-      local fg = fence_fgs[fence_group]
-      if fg and color.contrast_ratio(fg, cl_variant_bg) < FENCE_CURSORLINE_CONTRAST then
-        local adjusted_fg = color.ensure_contrast(fg, cl_variant_bg, FENCE_CURSORLINE_CONTRAST)
-        local variant_name = fence_group .. "On" .. cl_group_name
-        vim.api.nvim_set_hl(0, variant_name, { fg = adjusted_fg, default = true })
-        variants[fence_group] = variant_name
+      local contrast_op = h.from(fence_group):contrast("fg", cl_bg, FENCE_CURSORLINE_CONTRAST)
+      local result = contrast_op:get()
+      if result then
+        local original_fg = get_hl_color(fence_group, "fg")
+        if original_fg and result.fg ~= original_fg then
+          local variant_name = fence_group .. "On" .. cl_group_name
+          vim.api.nvim_set_hl(0, variant_name, { fg = result.fg })
+          variants[fence_group] = variant_name
+        end
       end
     end
 
     if next(variants) then
       fence_cursorline_map[cl_group_name] = variants
     end
-
-    ::continue_fence::
   end
-end
-
--- Valid boolean style attributes for nvim_set_hl (used in role_style validation)
-local VALID_STYLE_ATTRIBUTES = {
-  bold = true,
-  italic = true,
-  underline = true,
-  undercurl = true,
-  underdouble = true,
-  underdotted = true,
-  underdashed = true,
-  strikethrough = true,
-  reverse = true,
-  standout = true,
-  nocombine = true,
-  altfont = true,
-}
-
----Parse and validate a role_style string, warning about invalid attributes.
----@param role_style string Comma-separated style attributes (e.g., "bold,underline")
----@return table<string, boolean>
-local function validate_role_style(role_style)
-  ---@type table<string, boolean>
-  local attrs = {}
-  for token in role_style:gmatch("[^,]+") do
-    local style = vim.trim(token)
-    if style ~= "" then
-      if VALID_STYLE_ATTRIBUTES[style] then
-        attrs[style] = true
-      else
-        local msg = string.format("flemma: invalid role_style '%s'", style)
-        local suggestion = str.closest_match(style, VALID_STYLE_ATTRIBUTES)
-        if suggestion then
-          msg = msg .. string.format(". Did you mean '%s'?", suggestion)
-        end
-        notify.warn(msg, { once = true })
-      end
-    end
-  end
-  return attrs
 end
 
 ---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
   local syntax_config = config_facade.get()
 
-  -- Explicitly load our syntax file
   vim.cmd("runtime! syntax/chat.vim")
 
-  -- Set highlights based on user config (link or hex color)
-  set_highlight("FlemmaSystem", syntax_config.highlights.system)
-  set_highlight("FlemmaUser", syntax_config.highlights.user)
-  set_highlight("FlemmaAssistant", syntax_config.highlights.assistant)
-  set_highlight("FlemmaLuaExpression", syntax_config.highlights.lua_expression)
-  set_highlight("FlemmaLuaCodeBlock", syntax_config.highlights.lua_code_block)
-  set_highlight("FlemmaLuaDelimiter", syntax_config.highlights.lua_delimiter)
+  -- Config-driven highlight groups: each value is an HlOp, call :set() directly
+  syntax_config.highlights.system:set("FlemmaSystem")
+  syntax_config.highlights.user:set("FlemmaUser")
+  syntax_config.highlights.assistant:set("FlemmaAssistant")
+  syntax_config.highlights.lua_expression:set("FlemmaLuaExpression")
+  syntax_config.highlights.lua_code_block:set("FlemmaLuaCodeBlock")
+  syntax_config.highlights.lua_delimiter:set("FlemmaLuaDelimiter")
+
   -- Apply rewriter-owned syntax rules and highlights
-  preprocessor_syntax.apply(syntax_config, set_highlight)
+  preprocessor_syntax.apply(syntax_config)
 
-  -- Set up spinner highlight with fg-only (no bg) so hl_mode="combine" inherits line highlight bg
-  local spinner_fg = get_hl_color("FlemmaAssistant", "fg") or get_default_color("fg")
-  vim.api.nvim_set_hl(0, "FlemmaAssistantSpinner", { fg = spinner_fg, default = true })
+  -- Spinner: fg-only from resolved assistant group
+  h.from("FlemmaAssistant"):pick("fg"):set("FlemmaAssistantSpinner")
 
-  -- Set up role marker highlights (e.g., @You:, @System:)
-  -- Extract fg from the resolved highlight group, falling back to Normal/defaults.
-  -- Parse role_style string into nvim_set_hl attributes (e.g., "bold,underline" -> { bold = true, underline = true }).
+  -- Role markers: fg extraction + role_name config merge
+  local role_name_op = syntax_config.highlights.role_name
   local role_groups = {
     { source = "FlemmaSystem", target = "FlemmaRoleSystem" },
     { source = "FlemmaUser", target = "FlemmaRoleUser" },
     { source = "FlemmaAssistant", target = "FlemmaRoleAssistant" },
   }
-  local role_style_attrs = validate_role_style(syntax_config.highlights.role_style)
   for _, role in ipairs(role_groups) do
-    local fg = get_hl_color(role.source, "fg") or get_default_color("fg")
-    -- Syntax group: fg-only (covers whole @Role: line; style would bleed into ruler via hl_mode=combine)
-    vim.api.nvim_set_hl(0, role.target, { fg = fg, default = true })
-    -- Name group: fg + style (applied via extmark on just the role name text)
-    ---@type vim.api.keyset.highlight
-    local name_opts = vim.tbl_extend("force", {}, role_style_attrs)
-    name_opts.fg = fg
-    name_opts.default = true
-    vim.api.nvim_set_hl(0, role.target .. "Name", name_opts)
+    h.from(role.source):pick("fg"):set(role.target)
+    h.from(role.source):pick("fg"):merge(role_name_op):set(role.target .. "Name")
   end
 
-  -- Set ruler highlight group
-  set_highlight("FlemmaRuler", syntax_config.ruler.hl)
-  set_highlight("FlemmaFenceLabel", syntax_config.highlights.fence_label)
-  set_highlight("FlemmaFenceBar", syntax_config.highlights.fence_bar)
+  -- Ruler
+  syntax_config.ruler.hl:set("FlemmaRuler")
 
-  -- Set highlight for thinking tags and blocks
-  set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
-  set_highlight("FlemmaThinkingBlock", syntax_config.highlights.thinking_block)
+  -- Fence labels/bars
+  syntax_config.highlights.fence_label:set("FlemmaFenceLabel")
+  syntax_config.highlights.fence_bar:set("FlemmaFenceBar")
 
-  -- fg-only variant for fold text preview: bg comes from line_hl_group extmarks,
-  -- allowing CursorLine overlay to blend correctly on folded thinking blocks
-  local thinking_fg = get_hl_color("FlemmaThinkingBlock", "fg") or get_hl_color("Comment", "fg")
-  if thinking_fg then
-    vim.api.nvim_set_hl(0, "FlemmaThinkingFoldPreview", { fg = thinking_fg, default = true })
+  -- Thinking: merge assistant line bg as fallback when line highlights are enabled,
+  -- so folded thinking blocks show the assistant tint instead of Folded bg
+  syntax_config.highlights.thinking_tag:set("FlemmaThinkingTag")
+  local thinking_op = syntax_config.highlights.thinking_block
+  if syntax_config.line_highlights and syntax_config.line_highlights.enabled then
+    thinking_op:merge(h.from("FlemmaLineAssistant"):pick("bg")):set("FlemmaThinkingBlock")
   else
-    vim.api.nvim_set_hl(0, "FlemmaThinkingFoldPreview", { link = "Comment", default = true })
+    thinking_op:set("FlemmaThinkingBlock")
   end
 
-  -- Set highlight for tool use and tool result syntax
-  -- Note: Tool names and IDs in backticks are handled by treesitter markdown_inline
-  set_highlight("FlemmaToolIcon", syntax_config.highlights.tool_icon)
-  set_highlight("FlemmaToolName", syntax_config.highlights.tool_name)
-  set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use_title)
-  set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result_title)
-  set_highlight("FlemmaToolResultError", syntax_config.highlights.tool_result_error)
-  set_highlight("FlemmaToolResultPending", syntax_config.highlights.tool_result_pending)
-  set_highlight("FlemmaToolResultApproved", syntax_config.highlights.tool_result_approved)
-  set_highlight("FlemmaToolResultRejected", syntax_config.highlights.tool_result_rejected)
-  set_highlight("FlemmaToolResultDenied", syntax_config.highlights.tool_result_denied)
-  set_highlight("FlemmaToolResultAborted", syntax_config.highlights.tool_result_aborted)
-  set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
+  -- Thinking fold preview: fg-only from thinking block or Comment
+  h.coalesce(h.from("FlemmaThinkingBlock"):pick("fg"), h.from("Comment"):pick("fg"), h.link("Comment"))
+    :set("FlemmaThinkingFoldPreview")
 
-  -- Job result syntax highlights (linked to tool result counterparts)
-  set_highlight("FlemmaJobResultTitle", { link = "FlemmaToolResultTitle", default = true })
-  set_highlight("FlemmaJobResultError", { link = "FlemmaToolResultError", default = true })
-  set_highlight("FlemmaJobResultPending", { link = "FlemmaToolResultPending", default = true })
-  set_highlight("FlemmaJobResultApproved", { link = "FlemmaToolResultApproved", default = true })
-  set_highlight("FlemmaJobResultRejected", { link = "FlemmaToolResultRejected", default = true })
-  set_highlight("FlemmaJobResultDenied", { link = "FlemmaToolResultDenied", default = true })
-  set_highlight("FlemmaJobResultAborted", { link = "FlemmaToolResultAborted", default = true })
+  -- Tool use and tool result highlights
+  syntax_config.highlights.tool_icon:set("FlemmaToolIcon")
+  syntax_config.highlights.tool_name:set("FlemmaToolName")
+  syntax_config.highlights.tool_use_title:set("FlemmaToolUseTitle")
+  syntax_config.highlights.tool_result_title:set("FlemmaToolResultTitle")
+  syntax_config.highlights.tool_result_error:set("FlemmaToolResultError")
+  syntax_config.highlights.tool_result_pending:set("FlemmaToolResultPending")
+  syntax_config.highlights.tool_result_approved:set("FlemmaToolResultApproved")
+  syntax_config.highlights.tool_result_rejected:set("FlemmaToolResultRejected")
+  syntax_config.highlights.tool_result_denied:set("FlemmaToolResultDenied")
+  syntax_config.highlights.tool_result_aborted:set("FlemmaToolResultAborted")
+  syntax_config.highlights.tool_preview:set("FlemmaToolPreview")
 
-  -- Set highlight for fold text segments
-  set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
-  set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
+  -- Job result highlights (linked to tool result counterparts)
+  h.link("FlemmaToolResultTitle"):set("FlemmaJobResultTitle")
+  h.link("FlemmaToolResultError"):set("FlemmaJobResultError")
+  h.link("FlemmaToolResultPending"):set("FlemmaJobResultPending")
+  h.link("FlemmaToolResultApproved"):set("FlemmaJobResultApproved")
+  h.link("FlemmaToolResultRejected"):set("FlemmaJobResultRejected")
+  h.link("FlemmaToolResultDenied"):set("FlemmaJobResultDenied")
+  h.link("FlemmaToolResultAborted"):set("FlemmaJobResultAborted")
 
-  -- FlemmaToolLabel: italic style override for human-readable tool intent in folds.
-  -- Defined unconditionally (not config-driven) because it has no color to configure —
-  -- only italic. nvim_set_hl silently ignores style attributes when link is also set,
-  -- so this must NOT use { link = ..., italic = true }.
-  vim.api.nvim_set_hl(0, "FlemmaToolLabel", { italic = true, default = true })
+  -- Fold text segments
+  syntax_config.highlights.fold_preview:set("FlemmaFoldPreview")
+  syntax_config.highlights.fold_meta:set("FlemmaFoldMeta")
 
-  -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
-  set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
+  -- Tool label: italic style for human-readable tool intent in folds
+  h.attrs({ italic = true }):set("FlemmaToolLabel")
 
-  local approval_resolved, approval_excl = resolve_hl_value(syntax_config.highlights.approval_line)
-  local approval_bg = not approval_excl.bg and (approval_resolved.bg or get_default_color("bg")) or nil
-  vim.api.nvim_set_hl(0, "FlemmaApprovalLine", approval_bg and { bg = approval_bg } or {})
+  -- Tool detail
+  syntax_config.highlights.tool_detail:set("FlemmaToolDetail")
+
+  -- Approval highlights
+  local approval_op = syntax_config.highlights.approval_line
+  local approval_result = approval_op:get()
+  local approval_bg = approval_result and approval_result.bg or nil
+  if approval_bg then
+    vim.api.nvim_set_hl(0, "FlemmaApprovalLine", { bg = approval_bg })
+  else
+    vim.api.nvim_set_hl(0, "FlemmaApprovalLine", {})
+  end
+  local approval_bg_op = approval_bg and h.hex(approval_bg, "bg") or nil
   local approval_sub_groups = {
     { "FlemmaApprovalIndicator", syntax_config.highlights.approval_indicator },
     { "FlemmaApprovalLabel", syntax_config.highlights.approval_label },
@@ -591,121 +230,87 @@ M.apply_syntax = function()
     { "FlemmaApprovalAction", syntax_config.highlights.approval_action },
   }
   for _, entry in ipairs(approval_sub_groups) do
-    local attrs = resolve_hl_value(entry[2])
-    if approval_bg and not attrs.bg then
-      attrs.bg = approval_bg
+    local sub_op = entry[2] --[[@as flemma.hl.HlOp]]
+    if approval_bg_op then
+      local merged = sub_op:merge(approval_bg_op):get()
+      if merged then
+        merged.default = true
+        vim.api.nvim_set_hl(0, entry[1], merged)
+      end
+    else
+      local result = sub_op:get()
+      if result then
+        result.default = true
+        vim.api.nvim_set_hl(0, entry[1], result)
+      end
     end
-    vim.api.nvim_set_hl(0, entry[1], attrs)
   end
 
-  -- Tool indicator icon highlights (inline ⬢ prefix and fold icon)
-  set_highlight("FlemmaToolIconPending", { link = "DiagnosticInfo", default = true })
-  set_highlight("FlemmaToolIconExecuting", { link = "FlemmaToolResultTitle", default = true })
-  set_highlight("FlemmaToolIconSuccess", { link = "FlemmaToolResultTitle", default = true })
-  set_highlight("FlemmaToolIconError", { link = "DiagnosticError", default = true })
-  set_highlight("FlemmaToolIconRejected", { link = "FlemmaToolResultRejected", default = true })
-  set_highlight("FlemmaToolIconDenied", { link = "FlemmaToolResultDenied", default = true })
-  set_highlight("FlemmaToolIconAborted", { link = "FlemmaToolResultAborted", default = true })
-  -- Tool indicator status highlights (EOL text)
-  set_highlight("FlemmaToolPending", { link = "DiagnosticHint", default = true })
-  set_highlight("FlemmaToolExecuting", { link = "DiagnosticInfo", default = true })
-  set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
-  set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
+  -- Tool indicator icon highlights
+  h.link("DiagnosticInfo"):set("FlemmaToolIconPending")
+  h.link("FlemmaToolResultTitle"):set("FlemmaToolIconExecuting")
+  h.link("FlemmaToolResultTitle"):set("FlemmaToolIconSuccess")
+  h.link("DiagnosticError"):set("FlemmaToolIconError")
+  h.link("FlemmaToolResultRejected"):set("FlemmaToolIconRejected")
+  h.link("FlemmaToolResultDenied"):set("FlemmaToolIconDenied")
+  h.link("FlemmaToolResultAborted"):set("FlemmaToolIconAborted")
+  -- Tool indicator status highlights
+  h.link("DiagnosticHint"):set("FlemmaToolPending")
+  h.link("DiagnosticInfo"):set("FlemmaToolExecuting")
+  h.link("DiagnosticOk"):set("FlemmaToolSuccess")
+  h.link("DiagnosticError"):set("FlemmaToolError")
 
-  -- Integration busy indicator highlight
-  set_highlight("FlemmaBusy", syntax_config.highlights.busy)
+  -- Integration busy indicator
+  syntax_config.highlights.busy:set("FlemmaBusy")
 
-  -- Turns column highlight
-  vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "FlemmaRuler", default = true })
+  -- Turns column
+  h.link("FlemmaRuler"):set("FlemmaTurn")
 
   -- Usage bar highlight groups
-  -- Derived from the first group in ui.usage.highlight that provides both fg and bg
-  local usage_base_group = M.resolve_first_complete(syntax_config.ui.usage.highlight)
-  local bar_bg_hex = usage_base_group and get_hl_color(usage_base_group, "bg") or nil
-  local bar_fg_hex = usage_base_group and get_hl_color(usage_base_group, "fg") or nil
-
-  if bar_bg_hex and bar_fg_hex then
-    -- Primary tier: base group fg + bg as-is (model name, cost)
-    vim.api.nvim_set_hl(0, "FlemmaUsageBar", { bg = bar_bg_hex, fg = bar_fg_hex, default = true })
-
-    -- Secondary tier: slightly dimmed fg (cache label, token counts, request count)
-    local is_dark = vim.o.background == "dark"
-    local secondary_expr = usage_base_group .. (is_dark and "-fg:#222222" or "+fg:#222222")
-    local secondary_resolved = parse_highlight_expression(secondary_expr)
-    if secondary_resolved and secondary_resolved.fg then
-      vim.api.nvim_set_hl(0, "FlemmaUsageBarSecondary", { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true })
-    end
-
-    -- Muted tier: more dimmed fg (provider, separators, session label)
-    local muted_expr = usage_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
-    local muted_resolved = parse_highlight_expression(muted_expr)
-    if muted_resolved and muted_resolved.fg then
-      vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
-    end
-
-    -- Semantic cache highlights with contrast enforcement
-    local cache_good_fg = get_hl_color("DiagnosticOk", "fg")
-    if cache_good_fg then
-      cache_good_fg = color.ensure_contrast(cache_good_fg, bar_bg_hex, 4.5)
-      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { bg = bar_bg_hex, fg = cache_good_fg, default = true })
-    else
-      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { link = "DiagnosticOk", default = true })
-    end
-
-    local cache_bad_fg = get_hl_color("DiagnosticWarn", "fg")
-    if cache_bad_fg then
-      cache_bad_fg = color.ensure_contrast(cache_bad_fg, bar_bg_hex, 4.5)
-      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { bg = bar_bg_hex, fg = cache_bad_fg, default = true })
-    else
-      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { link = "DiagnosticWarn", default = true })
-    end
-  else
-    -- Fallback when no candidate group provides both bg and fg: link to StatusLine
-    vim.api.nvim_set_hl(0, "FlemmaUsageBar", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaUsageBarSecondary", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { link = "Comment", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { link = "DiagnosticOk", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { link = "DiagnosticWarn", default = true })
+  local usage_ops = {}
+  for name in syntax_config.ui.usage.highlight:gmatch("[^,]+") do
+    table.insert(usage_ops, h.from(vim.trim(name)):expect("fg", "bg"))
   end
+  table.insert(usage_ops, h.from("StatusLine"))
+  local bar_base = h.coalesce(unpack(usage_ops))
+
+  bar_base:set("FlemmaUsageBar")
+  h.themed({
+    dark = bar_base:blend("fg", "-#222222"),
+    light = bar_base:blend("fg", "+#222222"),
+  }):set("FlemmaUsageBarSecondary")
+  h.themed({
+    dark = bar_base:blend("fg", "-#444444"),
+    light = bar_base:blend("fg", "+#444444"),
+  }):set("FlemmaUsageBarMuted")
+
+  -- Semantic cache highlights with contrast enforcement
+  h.coalesce(h.from("DiagnosticOk"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticOk"))
+    :set("FlemmaUsageBarCacheGood")
+  h.coalesce(h.from("DiagnosticWarn"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticWarn"))
+    :set("FlemmaUsageBarCacheBad")
 
   -- Progress bar highlight groups
-  -- Derived from the first group in progress.highlight that provides both fg and bg
   local progress_config = syntax_config.ui and syntax_config.ui.progress or { highlight = "StatusLine" }
-  local progress_base = M.resolve_first_complete(progress_config.highlight or "")
-  local progress_bg_hex = progress_base and get_hl_color(progress_base, "bg") or nil
-  local progress_fg_hex = progress_base and get_hl_color(progress_base, "fg") or nil
-
-  if progress_bg_hex and progress_fg_hex then
-    vim.api.nvim_set_hl(0, "FlemmaProgressBar", { bg = progress_bg_hex, fg = progress_fg_hex, default = true })
-    vim.api.nvim_set_hl(
-      0,
-      "FlemmaProgressBarAccent",
-      { bg = progress_bg_hex, fg = progress_fg_hex, bold = true, default = true }
-    )
-  else
-    -- Fallback: link to StatusLine
-    vim.api.nvim_set_hl(0, "FlemmaProgressBar", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaProgressBarAccent", { link = "StatusLine", bold = true, default = true })
+  local progress_ops = {}
+  for name in (progress_config.highlight or ""):gmatch("[^,]+") do
+    table.insert(progress_ops, h.from(vim.trim(name)):expect("fg", "bg"))
   end
+  table.insert(progress_ops, h.from("StatusLine"))
+  local progress_base = h.coalesce(unpack(progress_ops))
+  progress_base:set("FlemmaProgressBar")
+  progress_base:style({ bold = true }):set("FlemmaProgressBarAccent")
 
-  -- FlemmaStatusTextMuted: theme-neutral dim variant of StatusLine.
-  -- Keeps StatusLine's bg so %#FlemmaStatusTextMuted# embedded in a raw vim
-  -- statusline preserves background continuity; blends fg toward black (dark
-  -- bg) or white (light bg) at the same strength as FlemmaUsageBarMuted.
-  -- NOTE: This group's bg is StatusLine.bg, which is correct for raw statusline
-  -- use only. When rendered via lualine, section tints (lualine_c_normal etc.)
-  -- differ from StatusLine, so the lualine component rewrites occurrences to
-  -- FlemmaStatusTextMuted2 at render time — see lua/lualine/components/flemma.lua.
-  local is_dark_bg = vim.o.background == "dark"
-  local muted_expr = "StatusLine" .. (is_dark_bg and "-fg:#666666" or "+fg:#666666")
-  local muted_resolved = parse_highlight_expression(muted_expr)
-  local statusline_bg_hex = get_hl_color("StatusLine", "bg")
-  if muted_resolved and muted_resolved.fg and statusline_bg_hex then
-    vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = statusline_bg_hex, fg = muted_resolved.fg, default = true })
-  else
-    -- Fallback when StatusLine is incomplete: link to Comment
-    vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { link = "Comment", default = true })
-  end
+  -- StatusTextMuted: themed StatusLine fg blend + StatusLine bg.
+  -- Requires both fg and bg from StatusLine; falls back to Comment link.
+  local statusline_base = h.from("StatusLine"):expect("fg", "bg")
+  h.coalesce(
+    h.themed({
+      dark = statusline_base:blend("fg", "-#666666"),
+      light = statusline_base:blend("fg", "+#666666"),
+    }),
+    h.link("Comment")
+  ):set("FlemmaStatusTextMuted")
 
   -- Create CursorLine blend variants after all base groups are defined
   setup_cursorline_highlights()
@@ -720,32 +325,19 @@ local function setup_line_highlights()
 
   local line_highlight_keys = { "frontmatter", "user", "system", "assistant" }
   for _, key in ipairs(line_highlight_keys) do
-    local role_config = current_config.line_highlights[key]
-    if role_config then
+    ---@type flemma.hl.HlOp|nil
+    local role_op = current_config.line_highlights[key]
+    if role_op then
       local group_name = "FlemmaLine" .. roles.capitalize(key)
-      set_highlight(group_name, role_config, "bg")
+      local result = role_op:pick("bg"):get()
+      local bg = (result and result.bg) or get_default_color("bg")
+      vim.api.nvim_set_hl(0, group_name, { bg = bg, default = true })
     end
   end
 end
 
 ---Read and strip fenced code block conceal directives from a treesitter
----highlights query. Concatenates all query files for the language/query pair
----(matching the composition that `vim.treesitter.query.get()` would parse)
----and returns both the original and stripped texts.
----
----Neovim's treesitter highlighter registers a `_on_conceal_line` callback
----when a query contains `(#set! conceal_lines "")`. On every buffer change,
----all conceal_lines marks are cleared and the `_conceal_checked` cache is
----wiped. The next redraw then calls `_on_conceal_line` for every visible
----line, each of which re-parses the tree and evaluates the query — O(visible
----lines) per keystroke. On a 5000-line .chat buffer with ~128 fenced code
----blocks, this costs ~30ms per keystroke at conceallevel>=2.
----
----Strips both `conceal_lines` (line hiding) and `conceal ""` (character
----hiding) from the fenced_code_block_delimiter and info_string captures.
----Flemma's UI replaces fence lines with styled overlay extmarks instead.
----
----Returns nil, nil when no query files exist or none contain `conceal_lines`.
+---highlights query.
 ---@param lang string Treesitter language name
 ---@param query_name string Query name (e.g., "highlights")
 ---@return string|nil original, string|nil stripped
@@ -791,24 +383,6 @@ end
 
 ---Strip fenced code block conceal from the markdown treesitter highlights query.
 ---Idempotent — safe to call on every .chat BufRead; only patches once.
----Gated by `experimental.patch_markdown_conceal` config flag.
----
----Must be called BEFORE the treesitter highlighter is constructed for the
----buffer (i.e., at BufRead before `vim.bo.filetype = "chat"` triggers the
----highlighter constructor), so that the highlighter never sets
----`_conceal_line = true`. The `_conceal_line` flag is read once at
----construction from the query's `has_conceal_line` metadata; it is never
----re-evaluated when the query changes after construction.
----
----**Side effect**: patches the global `markdown` highlights query. Markdown
----buffers opened after the patch get a highlighter without `_conceal_line`,
----losing fence concealing at `conceallevel>=2`. Call `restore_highlighter_conceal`
----on those buffers (via BufWinEnter) to reconstruct their highlighter with the
----original query. Sessions that never open `.chat` files are unaffected.
----
----Fence delimiter lines with an odd count (malformed/unclosed fences) may
----cause the open/close bracket overlay to swap for subsequent blocks. This is
----a visual-only effect that self-corrects on the next `update_ui` cycle.
 function M.strip_fence_conceal()
   if fence_conceal_patched then
     return
@@ -825,31 +399,23 @@ function M.strip_fence_conceal()
   original_markdown_query = original
   stripped_markdown_query = stripped
   vim.treesitter.query.set("markdown", "highlights", stripped)
-  -- If any highlighter was constructed before we stripped the query, clear its
-  -- cached _conceal_line flag so the _on_conceal_line callback stops firing.
-  for _, hl in pairs(vim.treesitter.highlighter.active) do
-    if hl._conceal_line then
-      hl._conceal_line = false
-      hl._conceal_checked = {}
+  for _, hl_obj in pairs(vim.treesitter.highlighter.active) do
+    if hl_obj._conceal_line then
+      hl_obj._conceal_line = false
+      hl_obj._conceal_checked = {}
     end
   end
 end
 
 ---Restore the original markdown highlights query for a non-chat buffer's
----treesitter highlighter. Performs a "sandwich restart": temporarily sets
----the original query globally, restarts the buffer's highlighter (which
----eagerly caches the query and sets `_conceal_line` from its metadata),
----then re-sets the stripped query for future .chat highlighter construction.
----
----Idempotent — only restarts when the highlighter has `_conceal_line` unset,
----meaning it was constructed while the stripped query was active.
+---treesitter highlighter.
 ---@param bufnr integer
 function M.restore_highlighter_conceal(bufnr)
   if not fence_conceal_patched or not original_markdown_query or not stripped_markdown_query then
     return
   end
-  local hl = vim.treesitter.highlighter.active[bufnr]
-  if not hl or hl._conceal_line then
+  local hl_obj = vim.treesitter.highlighter.active[bufnr]
+  if not hl_obj or hl_obj._conceal_line then
     return
   end
   vim.treesitter.query.set("markdown", "highlights", original_markdown_query)
@@ -860,15 +426,10 @@ end
 
 ---Setup function to initialize highlighting functionality
 M.setup = function()
-  -- Create or clear the augroup for highlight-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaHighlight", { clear = true })
 
-  -- Set up line highlights for full-line background colors
   setup_line_highlights()
 
-  -- Set up autocmd for the chat filetype
-  -- NOTE: Only apply_syntax() here — update_ui is handled by the FlemmaUI augroup
-  -- (BufEnter/BufWinEnter/CursorHold) to avoid redundant fold/ruler/turn work.
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "FileType" }, {
     group = augroup,
     pattern = { "*.chat", "chat" },

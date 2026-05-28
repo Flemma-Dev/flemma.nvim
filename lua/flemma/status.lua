@@ -4,6 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local h = require("flemma.hl")
 local hooks = require("flemma.hooks")
 local normalize = require("flemma.provider.normalize")
 local autopilot = require("flemma.autopilot")
@@ -1866,44 +1867,41 @@ end
 
 ---Ensure all status highlight groups are defined.
 local function setup_highlights()
-  local groups = {
-    FlemmaStatusTitle = "Title",
-    FlemmaStatusTree = "Comment",
-    FlemmaStatusSection = "Type",
-    FlemmaStatusKey = "Keyword",
-    FlemmaStatusEnabled = "DiagnosticOk",
-    FlemmaStatusDisabled = "DiagnosticWarn",
-    FlemmaStatusParen = "Comment",
-    FlemmaStatusSummary = "Comment",
-    FlemmaStatusToolEnabled = "DiagnosticOk",
-    FlemmaStatusToolDisabled = "DiagnosticWarn",
-    FlemmaStatusToolPending = "DiagnosticInfo",
-    FlemmaStatusBooting = "WarningMsg",
-    FlemmaStatusNumber = "Number",
-    FlemmaStatusVersion = "Special",
-    FlemmaStatusOpSet = "Keyword",
-    FlemmaStatusOpAppend = "DiagnosticOk",
-    FlemmaStatusOpRemove = "DiagnosticWarn",
-    FlemmaStatusOpPath = "Identifier",
-    FlemmaStatusOpArrow = "Operator",
-    FlemmaStatusLegend = "Comment",
+  local link_groups = {
+    { "FlemmaStatusTitle", "Title" },
+    { "FlemmaStatusTree", "Comment" },
+    { "FlemmaStatusSection", "Type" },
+    { "FlemmaStatusKey", "Keyword" },
+    { "FlemmaStatusEnabled", "DiagnosticOk" },
+    { "FlemmaStatusDisabled", "DiagnosticWarn" },
+    { "FlemmaStatusParen", "Comment" },
+    { "FlemmaStatusSummary", "Comment" },
+    { "FlemmaStatusToolEnabled", "DiagnosticOk" },
+    { "FlemmaStatusToolDisabled", "DiagnosticWarn" },
+    { "FlemmaStatusToolPending", "DiagnosticInfo" },
+    { "FlemmaStatusBooting", "WarningMsg" },
+    { "FlemmaStatusNumber", "Number" },
+    { "FlemmaStatusVersion", "Special" },
+    { "FlemmaStatusOpSet", "Keyword" },
+    { "FlemmaStatusOpAppend", "DiagnosticOk" },
+    { "FlemmaStatusOpRemove", "DiagnosticWarn" },
+    { "FlemmaStatusOpPath", "Identifier" },
+    { "FlemmaStatusOpArrow", "Operator" },
+    { "FlemmaStatusLegend", "Comment" },
   }
-  for name, link in pairs(groups) do
-    vim.api.nvim_set_hl(0, name, { default = true, link = link })
+  for _, entry in ipairs(link_groups) do
+    h.link(entry[2]):set(entry[1])
   end
 
-  -- Source/sandbox icon highlights: fg-only (no bg) so CursorLine bleeds through
-  -- when combined via hl_mode="combine" on the virtual text extmarks.
   local fg_only_groups = {
-    FlemmaStatusSourceDefault = "Comment",
-    FlemmaStatusSourceSetup = "DiagnosticInfo",
-    FlemmaStatusSourceRuntime = "DiagnosticOk",
-    FlemmaStatusSourceFrontmatter = "DiagnosticHint",
-    FlemmaStatusSandboxIcon = "DiagnosticInfo",
+    { "FlemmaStatusSourceDefault", "Comment" },
+    { "FlemmaStatusSourceSetup", "DiagnosticInfo" },
+    { "FlemmaStatusSourceRuntime", "DiagnosticOk" },
+    { "FlemmaStatusSourceFrontmatter", "DiagnosticHint" },
+    { "FlemmaStatusSandboxIcon", "DiagnosticInfo" },
   }
-  for name, base in pairs(fg_only_groups) do
-    local resolved = vim.api.nvim_get_hl(0, { name = base, link = false })
-    vim.api.nvim_set_hl(0, name, { fg = resolved.fg, default = true })
+  for _, entry in ipairs(fg_only_groups) do
+    h.from(entry[2]):pick("fg"):set(entry[1])
   end
 end
 

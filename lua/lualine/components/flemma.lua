@@ -4,6 +4,7 @@
 --- format string trigger data lookups.  Variables are cached per render cycle.
 local lualine_component = require("lualine.component")
 local config_facade = require("flemma.config")
+local h = require("flemma.hl")
 local normalize = require("flemma.provider.normalize")
 local prefetch = require("flemma.usage.prefetch")
 local readiness = require("flemma.readiness")
@@ -347,10 +348,10 @@ function flemma_component:_do_update_status()
             -- etc., so update_status runs frequently. Skip nvim_set_hl unless the
             -- inputs have actually changed (only on mode switch or colorscheme).
             if self._muted_section_bg ~= section_hl.bg or self._muted_fg ~= muted_hl.fg then
-              vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", {
-                bg = section_hl.bg,
-                fg = muted_hl.fg,
-              })
+              h.from("FlemmaStatusTextMuted")
+                :pick("fg")
+                :merge(h.hex(string.format("#%06x", section_hl.bg), "bg"), "force")
+                :set("FlemmaStatusTextMuted2", { default = false })
               self._muted_section_bg = section_hl.bg
               self._muted_fg = muted_hl.fg
             end

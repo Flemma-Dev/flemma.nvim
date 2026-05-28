@@ -1443,6 +1443,43 @@ function LiteralNode:to_json_schema()
 end
 
 -- ---------------------------------------------------------------------------
+-- HlOpNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.schema.HlOpNode : flemma.schema.Node
+---@field _default? flemma.hl.HlOp
+local HlOpNode = setmetatable({}, { __index = Node })
+HlOpNode.__index = HlOpNode
+
+---@return boolean
+function HlOpNode:has_default()
+  return self._default ~= nil
+end
+
+---@return flemma.hl.HlOp|nil
+function HlOpNode:materialize()
+  return self._default
+end
+
+---@param value any
+---@return boolean, string?
+function HlOpNode:validate_value(value)
+  if type(value) ~= "table" then
+    return false, "expected flemma.hl.HlOp, got " .. type(value)
+  end
+  if type(value.get) ~= "function" or type(value.set) ~= "function" then
+    return false, "expected flemma.hl.HlOp instance (missing :get() or :set())"
+  end
+  return true
+end
+
+---@param default? flemma.hl.HlOp
+---@return flemma.schema.HlOpNode
+function HlOpNode.new(default)
+  return setmetatable({ _default = default }, HlOpNode)
+end
+
+-- ---------------------------------------------------------------------------
 -- Cross-type chainable modifiers
 -- ---------------------------------------------------------------------------
 
@@ -1480,5 +1517,6 @@ M.LoadableNode = LoadableNode
 M.FuncNode = FuncNode
 M.LiteralNode = LiteralNode
 M.NullableNode = NullableNode
+M.HlOpNode = HlOpNode
 
 return M

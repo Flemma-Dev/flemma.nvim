@@ -3,6 +3,8 @@
 Flemma works without arguments – `require("flemma").setup({})` uses sensible defaults (Anthropic provider, `thinking = "high"`, prompt caching enabled). Every option is documented with inline comments below.
 
 ```lua
+local h = require("flemma.hl")
+
 require("flemma").setup({
   provider = "anthropic",                    -- "anthropic" | "openai" | "vertex" | "moonshot"
   model = nil,                               -- nil = provider default
@@ -79,45 +81,48 @@ require("flemma").setup({
   templating = {
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
-  highlights = {
-    defaults = {
-      dark = { bg = "#000000", fg = "#ffffff" },
-      light = { bg = "#ffffff", fg = "#000000" },
-    },
-    system = "Special",
-    user = "Normal",
-    assistant = "Normal",
-    lua_expression = "PreProc",
-    lua_code_block = "PreProc",              -- {% code %} block content
-    lua_delimiter = "FlemmaLuaExpression",   -- {{ }} and {% %} delimiters
-    user_file_reference = "Include",
-    thinking_tag = "Comment",
-    thinking_block = { dark = "Comment+bg:#000000-fg:#333333",
-                       light = "Comment-bg:#000000+fg:#333333" },
-    tool_icon = "FlemmaToolUseTitle",
-    tool_name = "Function",
-    tool_use_title = "Function",
-    tool_result_title = "Function",
-    tool_result_error    = "DiagnosticError", -- concise `(error)` suffix on tool_result headers
-    tool_result_pending  = "DiagnosticInfo",  -- concise `(pending)` suffix
-    tool_result_approved = "DiagnosticOk",    -- concise `(approved)` suffix
-    tool_result_rejected = "DiagnosticWarn",  -- concise `(rejected)` suffix
-    tool_result_denied   = "DiagnosticError", -- concise `(denied)` suffix
-    tool_result_aborted  = "DiagnosticError", -- concise `(aborted)` suffix
-    tool_preview = "Comment",
-    tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
-    fence_label = { dark = "Comment-fg:#303030",    -- Fence code block language label
-                    light = "Comment+fg:#303030" },
-    fence_bar = "FlemmaFenceLabel",                 -- Fence code block delimiter bar
-    fold_preview = "Comment",
-    fold_meta = "Comment",
-    busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
-    role_style = "bold",                     -- Comma-separated GUI attributes for role names
+  highlights = {                              -- All values are HlOp builders (see require("flemma.hl"))
+    system = h.link("Special"),
+    user = h.link("Normal"),
+    assistant = h.link("Normal"),
+    lua_expression = h.link("PreProc"),
+    lua_code_block = h.link("PreProc"),              -- {% code %} block content
+    lua_delimiter = h.link("FlemmaLuaExpression"),    -- {{ }} and {% %} delimiters
+    user_file_reference = h.link("Include"),
+    thinking_tag = h.link("Comment"),
+    thinking_block = h.themed({
+      dark = h.from("Comment"):blend("fg", "-#333333"),
+      light = h.from("Comment"):blend("fg", "+#333333"),
+    }),
+    tool_icon = h.link("FlemmaToolUseTitle"),
+    tool_name = h.link("Function"),
+    tool_use_title = h.link("Function"),
+    tool_result_title = h.link("Function"),
+    tool_result_error    = h.link("DiagnosticError"), -- concise `(error)` suffix on tool_result headers
+    tool_result_pending  = h.link("DiagnosticInfo"),  -- concise `(pending)` suffix
+    tool_result_approved = h.link("DiagnosticOk"),    -- concise `(approved)` suffix
+    tool_result_rejected = h.link("DiagnosticWarn"),  -- concise `(rejected)` suffix
+    tool_result_denied   = h.link("DiagnosticError"), -- concise `(denied)` suffix
+    tool_result_aborted  = h.link("DiagnosticError"), -- concise `(aborted)` suffix
+    tool_preview = h.link("Comment"),
+    tool_detail = h.link("Comment"),                  -- Raw technical detail in structured tool previews
+    fence_label = h.themed({                          -- Fence code block language label
+      dark = h.from("Comment"):blend("fg", "-#303030"),
+      light = h.from("Comment"):blend("fg", "+#303030"),
+    }),
+    fence_bar = h.link("FlemmaFenceLabel"),            -- Fence code block delimiter bar
+    fold_preview = h.link("Comment"),
+    fold_meta = h.link("Comment"),
+    busy = h.link("DiagnosticWarn"),                   -- Busy indicator icon in integrations (e.g., bufferline)
+    role_name = h.attrs({ bold = true }),              -- GUI attributes for role names
   },
   ruler = {
     enabled = true,
     char = "─",
-    hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
+    hl = h.themed({
+      dark = h.from("Comment"):blend("fg", "-#303030"),
+      light = h.from("Comment"):blend("fg", "+#303030"),
+    }),
   },
   turns = {
     enabled = true,
@@ -126,10 +131,19 @@ require("flemma").setup({
   },
   line_highlights = {
     enabled = true,
-    frontmatter = { dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" },
-    system = { dark = "Normal+bg:#101112", light = "Normal-bg:#101112" },
-    user = { dark = "Normal+bg:#202122", light = "Normal-bg:#202122" },
-    assistant = { dark = "Normal", light = "Normal" },
+    frontmatter = h.themed({
+      dark = h.from("Normal"):blend("bg", "+#18111a"),
+      light = h.from("Normal"):blend("bg", "-#18111a"),
+    }),
+    system = h.themed({
+      dark = h.from("Normal"):blend("bg", "+#101112"),
+      light = h.from("Normal"):blend("bg", "-#101112"),
+    }),
+    user = h.themed({
+      dark = h.from("Normal"):blend("bg", "+#202122"),
+      light = h.from("Normal"):blend("bg", "-#202122"),
+    }),
+    assistant = h.link("Normal"),
   },
   ui = {
     usage = {

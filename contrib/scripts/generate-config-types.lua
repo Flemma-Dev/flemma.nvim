@@ -93,6 +93,12 @@ local function is_nullable_node(node)
   return getmetatable(node) == schema_types.NullableNode
 end
 
+---@param node flemma.schema.Node
+---@return boolean
+local function is_hlop_node(node)
+  return getmetatable(node) == schema_types.HlOpNode
+end
+
 -- ---------------------------------------------------------------------------
 -- Registry boot — populate built-in entries so DISCOVER caches resolve
 -- ---------------------------------------------------------------------------
@@ -205,6 +211,10 @@ local function node_to_type(node, class_name_for_objects)
 
   if is_func_node(node) then
     return "fun(...)"
+  end
+
+  if is_hlop_node(node) then
+    return "flemma.hl.HlOp"
   end
 
   if is_list_node(node) then

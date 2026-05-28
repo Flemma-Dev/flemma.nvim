@@ -2,7 +2,6 @@
 --- AUTO-GENERATED from config/schema.lua — do not edit by hand.
 --- Regenerate with: make types
 
----@alias flemma.config.HighlightValue string|{ dark: string, light: string }
 ---@alias flemma.tools.AutoApprove string[]|flemma.tools.AutoApproveFunction|string
 
 ---@class flemma.config.ConfigAware<T>
@@ -46,39 +45,38 @@
 ---@field patch_markdown_conceal boolean
 
 ---@class flemma.config.Highlights
----@field approval_action flemma.config.HighlightValue
----@field approval_indicator flemma.config.HighlightValue
----@field approval_key flemma.config.HighlightValue
----@field approval_label flemma.config.HighlightValue
----@field approval_line flemma.config.HighlightValue
----@field assistant flemma.config.HighlightValue
----@field busy flemma.config.HighlightValue
----@field defaults flemma.config.HighlightsDefaults
----@field fence_bar flemma.config.HighlightValue
----@field fence_label flemma.config.HighlightValue
----@field fold_meta flemma.config.HighlightValue
----@field fold_preview flemma.config.HighlightValue
----@field lua_code_block flemma.config.HighlightValue
----@field lua_delimiter flemma.config.HighlightValue
----@field lua_expression flemma.config.HighlightValue
----@field role_style string
----@field system flemma.config.HighlightValue
----@field thinking_block flemma.config.HighlightValue
----@field thinking_tag flemma.config.HighlightValue
----@field tool_detail flemma.config.HighlightValue
----@field tool_icon flemma.config.HighlightValue
----@field tool_name flemma.config.HighlightValue
----@field tool_preview flemma.config.HighlightValue
----@field tool_result_aborted flemma.config.HighlightValue
----@field tool_result_approved flemma.config.HighlightValue
----@field tool_result_denied flemma.config.HighlightValue
----@field tool_result_error flemma.config.HighlightValue
----@field tool_result_pending flemma.config.HighlightValue
----@field tool_result_rejected flemma.config.HighlightValue
----@field tool_result_title flemma.config.HighlightValue
----@field tool_use_title flemma.config.HighlightValue
----@field user flemma.config.HighlightValue
----@field user_file_reference flemma.config.HighlightValue
+---@field approval_action flemma.hl.HlOp
+---@field approval_indicator flemma.hl.HlOp
+---@field approval_key flemma.hl.HlOp
+---@field approval_label flemma.hl.HlOp
+---@field approval_line flemma.hl.HlOp
+---@field assistant flemma.hl.HlOp
+---@field busy flemma.hl.HlOp
+---@field fence_bar flemma.hl.HlOp
+---@field fence_label flemma.hl.HlOp
+---@field fold_meta flemma.hl.HlOp
+---@field fold_preview flemma.hl.HlOp
+---@field lua_code_block flemma.hl.HlOp
+---@field lua_delimiter flemma.hl.HlOp
+---@field lua_expression flemma.hl.HlOp
+---@field role_name flemma.hl.HlOp
+---@field system flemma.hl.HlOp
+---@field thinking_block flemma.hl.HlOp
+---@field thinking_tag flemma.hl.HlOp
+---@field tool_detail flemma.hl.HlOp
+---@field tool_icon flemma.hl.HlOp
+---@field tool_name flemma.hl.HlOp
+---@field tool_preview flemma.hl.HlOp
+---@field tool_result_aborted flemma.hl.HlOp
+---@field tool_result_approved flemma.hl.HlOp
+---@field tool_result_denied flemma.hl.HlOp
+---@field tool_result_error flemma.hl.HlOp
+---@field tool_result_pending flemma.hl.HlOp
+---@field tool_result_rejected flemma.hl.HlOp
+---@field tool_result_title flemma.hl.HlOp
+---@field tool_use_title flemma.hl.HlOp
+---@field user flemma.hl.HlOp
+---@field user_file_reference flemma.hl.HlOp
 
 ---@class flemma.config.Integrations
 ---@field devicons flemma.config.IntegrationsDevicons
@@ -90,11 +88,11 @@
 ---@field text_object string|false
 
 ---@class flemma.config.LineHighlights
----@field assistant flemma.config.HighlightValue
+---@field assistant flemma.hl.HlOp
 ---@field enabled boolean
----@field frontmatter flemma.config.HighlightValue
----@field system flemma.config.HighlightValue
----@field user flemma.config.HighlightValue
+---@field frontmatter flemma.hl.HlOp
+---@field system flemma.hl.HlOp
+---@field user flemma.hl.HlOp
 
 ---@class flemma.config.Lsp
 ---@field enabled boolean
@@ -117,7 +115,7 @@
 ---@class flemma.config.Ruler
 ---@field char string
 ---@field enabled boolean
----@field hl flemma.config.HighlightValue
+---@field hl flemma.hl.HlOp
 
 ---@class flemma.config.Sandbox
 ---@field backend string
@@ -172,10 +170,6 @@
 ---@class flemma.config.EditingFold
 ---@field gap boolean
 ---@field level integer
-
----@class flemma.config.HighlightsDefaults
----@field dark flemma.config.HighlightsDefaultsDark
----@field light flemma.config.HighlightsDefaultsLight
 
 ---@class flemma.config.IntegrationsDevicons
 ---@field enabled boolean
@@ -285,14 +279,6 @@
 ---@field highlight string
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 ---@field timeout integer
-
----@class flemma.config.HighlightsDefaultsDark
----@field bg string
----@field fg string
-
----@class flemma.config.HighlightsDefaultsLight
----@field bg string
----@field fg string
 
 ---@class flemma.config.ParametersOpenaiExperimental
 ---@field phase boolean

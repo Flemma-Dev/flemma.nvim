@@ -47,19 +47,25 @@ describe("config.schema.definition", function()
       assert.are.same({ level = "high", foreign = "preserve" }, cfg.parameters.thinking)
     end)
 
-    it("materializes highlight defaults (string)", function()
+    it("materializes highlight defaults as HlOp instances", function()
       local cfg = config_facade.get()
-      assert.equals("Special", cfg.highlights.system)
-      assert.equals("Normal", cfg.highlights.user)
-      assert.equals("Function", cfg.highlights.tool_name)
-    end)
-
-    it("materializes highlight defaults (table)", function()
-      local cfg = config_facade.get()
-      local tb = cfg.highlights.thinking_block
-      assert.is_table(tb)
-      assert.equals("Comment+bg:#000000-fg:#333333", tb.dark)
-      assert.equals("Comment-bg:#000000+fg:#333333", tb.light)
+      local hl = require("flemma.hl")
+      assert.is_table(cfg.highlights.system)
+      assert.is_function(cfg.highlights.system.get)
+      assert.same({ link = "Special" }, cfg.highlights.system:get())
+      assert.same({ link = "Normal" }, cfg.highlights.user:get())
+      assert.same({ link = "Function" }, cfg.highlights.tool_name:get())
+      -- ThemedOp defaults are also HlOp instances
+      assert.is_table(cfg.highlights.thinking_block)
+      assert.is_function(cfg.highlights.thinking_block.get)
+      -- role_name is an AttrsOp
+      assert.is_table(cfg.highlights.role_name)
+      local rn = cfg.highlights.role_name:get()
+      assert.is_true(rn.bold)
+      -- Verify HlOpNode validation rejects non-HlOp values
+      local schema_node = schema:get_child_schema("highlights"):get_child_schema("system")
+      assert.is_true(schema_node:validate_value(hl.link("Foo")))
+      assert.is_false(schema_node:validate_value("NotAnOp"))
     end)
 
     it("materializes ruler defaults", function()
@@ -291,12 +297,13 @@ describe("config.schema.definition", function()
       assert.equals(4096, cfg.parameters.thinking)
     end)
 
-    it("accepts highlight string override for table-default field", function()
+    it("accepts highlight HlOp override for highlight field", function()
+      local hl = require("flemma.hl")
       config_facade.apply(config_facade.LAYERS.SETUP, {
-        highlights = { thinking_block = "MyCustomHighlight" },
+        highlights = { thinking_block = hl.link("MyCustomHighlight") },
       })
       local cfg = config_facade.get()
-      assert.equals("MyCustomHighlight", cfg.highlights.thinking_block)
+      assert.same({ link = "MyCustomHighlight" }, cfg.highlights.thinking_block:get())
     end)
 
     it("accepts text_object = false", function()

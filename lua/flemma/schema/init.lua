@@ -115,4 +115,11 @@ function M.literal(value)
   return types.LiteralNode.new(value)
 end
 
+--- Highlight op schema node. Validates HlOp instances.
+---@param default? flemma.hl.HlOp
+---@return flemma.schema.HlOpNode
+function M.highlight(default)
+  return types.HlOpNode.new(default)
+end
+
 return M

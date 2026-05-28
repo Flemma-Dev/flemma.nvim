@@ -7,6 +7,7 @@
 --- Each module owns its own config schema (M.metadata.config_schema).
 --- Defaults from discovered schemas materialize into L10 at registration time.
 
+local h = require("flemma.hl")
 local s = require("flemma.schema")
 local symbols = require("flemma.symbols")
 
@@ -22,23 +23,6 @@ local BAR_POSITIONS = { "top", "bottom", "top left", "top right", "bottom left",
 ---@return flemma.schema.Node
 local function position(default)
   return s.enum(BAR_POSITIONS, default)
-end
-
---- HighlightValue: string | { dark: string, light: string }
---- String defaults produce a union with the string branch carrying the default.
---- Table defaults produce a union with the object branch carrying the defaults.
----@param default? string|table<string, string>
----@return flemma.schema.Node
-local function highlight(default)
-  local node
-  if type(default) == "table" then
-    node = s.union(s.string(), s.object({ dark = s.string(default.dark), light = s.string(default.light) }))
-  elseif type(default) == "string" then
-    node = s.union(s.string(default), s.object({ dark = s.string(), light = s.string() }))
-  else
-    node = s.union(s.string(), s.object({ dark = s.string(), light = s.string() }))
-  end
-  return node:type_as("flemma.config.HighlightValue")
 end
 
 --- ThinkingLevel: the set of valid thinking value forms (enum | number | false).
@@ -216,55 +200,66 @@ return s.object({
   -- ---------------------------------------------------------------------------
 
   highlights = s.object({
-    -- Fallback colors used when highlight groups don't define fg/bg
-    defaults = s.object({
-      dark = s.object({ bg = s.string("#000000"), fg = s.string("#ffffff") }),
-      light = s.object({ bg = s.string("#ffffff"), fg = s.string("#000000") }),
-    }),
-    system = highlight("Special"),
-    user = highlight("Normal"),
-    assistant = highlight("Normal"),
-    lua_expression = highlight("PreProc"),
-    lua_code_block = highlight("PreProc"),
-    lua_delimiter = highlight("FlemmaLuaExpression"),
-    user_file_reference = highlight("Include"),
-    thinking_tag = highlight("Comment"),
-    thinking_block = highlight({
-      dark = "Comment+bg:#000000-fg:#333333",
-      light = "Comment-bg:#000000+fg:#333333",
-    }),
-    tool_icon = highlight("FlemmaToolUseTitle"),
-    tool_name = highlight("Function"),
-    tool_use_title = highlight("Function"),
-    tool_result_title = highlight("Function"),
-    tool_result_error = highlight("DiagnosticError"),
-    tool_result_pending = highlight("DiagnosticInfo"),
-    tool_result_approved = highlight("DiagnosticOk"),
-    tool_result_rejected = highlight("DiagnosticWarn"),
-    tool_result_denied = highlight("DiagnosticError"),
-    tool_result_aborted = highlight("DiagnosticError"),
-    tool_preview = highlight("Comment"),
-    fence_label = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
-    fence_bar = highlight("FlemmaFenceLabel"),
-    fold_preview = highlight("Comment"),
-    fold_meta = highlight("Comment"),
-    tool_detail = highlight("Comment"),
-    busy = highlight("DiagnosticWarn"),
-    approval_line = highlight({
-      dark = "FlemmaLineUser+bg:#101112,Normal+bg:#101112",
-      light = "FlemmaLineUser-bg:#101112,Normal-bg:#101112",
-    }),
-    approval_indicator = highlight("Folded!bg"),
-    approval_label = highlight("Folded!bg"),
-    approval_key = highlight("MoreMsg"),
-    approval_action = highlight({ dark = "ModeMsg+fg:#202122", light = "ModeMsg-fg:#202122" }),
-    role_style = s.string("bold"),
+    system = s.highlight(h.link("Special")),
+    user = s.highlight(h.link("Normal")),
+    assistant = s.highlight(h.link("Normal")),
+    lua_expression = s.highlight(h.link("PreProc")),
+    lua_code_block = s.highlight(h.link("PreProc")),
+    lua_delimiter = s.highlight(h.link("FlemmaLuaExpression")),
+    user_file_reference = s.highlight(h.link("Include")),
+    thinking_tag = s.highlight(h.link("Comment")),
+    -- was: { dark = "Comment+bg:#000000-fg:#333333", light = "Comment-bg:#000000+fg:#333333" }
+    thinking_block = s.highlight(h.themed({
+      dark = h.from("Comment"):blend("fg", "-#333333"),
+      light = h.from("Comment"):blend("fg", "+#333333"),
+    })),
+    tool_icon = s.highlight(h.link("FlemmaToolUseTitle")),
+    tool_name = s.highlight(h.link("Function")),
+    tool_use_title = s.highlight(h.link("Function")),
+    tool_result_title = s.highlight(h.link("Function")),
+    tool_result_error = s.highlight(h.link("DiagnosticError")),
+    tool_result_pending = s.highlight(h.link("DiagnosticInfo")),
+    tool_result_approved = s.highlight(h.link("DiagnosticOk")),
+    tool_result_rejected = s.highlight(h.link("DiagnosticWarn")),
+    tool_result_denied = s.highlight(h.link("DiagnosticError")),
+    tool_result_aborted = s.highlight(h.link("DiagnosticError")),
+    tool_preview = s.highlight(h.link("Comment")),
+    -- was: { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }
+    fence_label = s.highlight(h.themed({
+      dark = h.from("Comment"):blend("fg", "-#303030"),
+      light = h.from("Comment"):blend("fg", "+#303030"),
+    })),
+    fence_bar = s.highlight(h.link("FlemmaFenceLabel")),
+    fold_preview = s.highlight(h.link("Comment")),
+    fold_meta = s.highlight(h.link("Comment")),
+    tool_detail = s.highlight(h.link("Comment")),
+    busy = s.highlight(h.link("DiagnosticWarn")),
+    -- was: { dark = "FlemmaLineUser+bg:#101112,Normal+bg:#101112", light = "FlemmaLineUser-bg:#101112,Normal-bg:#101112" }
+    approval_line = s.highlight(h.themed({
+      dark = h.coalesce(h.from("FlemmaLineUser"):blend("bg", "+#101112"), h.from("Normal"):blend("bg", "+#101112")),
+      light = h.coalesce(h.from("FlemmaLineUser"):blend("bg", "-#101112"), h.from("Normal"):blend("bg", "-#101112")),
+    })),
+    -- was: "Folded!bg"
+    approval_indicator = s.highlight(h.from("Folded"):omit("bg")),
+    -- was: "Folded!bg"
+    approval_label = s.highlight(h.from("Folded"):omit("bg")),
+    approval_key = s.highlight(h.link("MoreMsg")),
+    -- was: { dark = "ModeMsg+fg:#202122", light = "ModeMsg-fg:#202122" }
+    approval_action = s.highlight(h.themed({
+      dark = h.from("ModeMsg"):blend("fg", "+#202122"),
+      light = h.from("ModeMsg"):blend("fg", "-#202122"),
+    })),
+    role_name = s.highlight(h.attrs({ bold = true })),
   }),
 
   ruler = s.object({
     enabled = s.boolean(true),
     char = s.string("─"),
-    hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
+    -- was: { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }
+    hl = s.highlight(h.themed({
+      dark = h.from("Comment"):blend("fg", "-#303030"),
+      light = h.from("Comment"):blend("fg", "+#303030"),
+    })),
   }),
 
   turns = s.object({
@@ -289,10 +284,22 @@ return s.object({
 
   line_highlights = s.object({
     enabled = s.boolean(true),
-    frontmatter = highlight({ dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }),
-    system = highlight({ dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }),
-    user = highlight({ dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }),
-    assistant = highlight({ dark = "Normal", light = "Normal" }),
+    -- was: { dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }
+    frontmatter = s.highlight(h.themed({
+      dark = h.from("Normal"):blend("bg", "+#18111a"),
+      light = h.from("Normal"):blend("bg", "-#18111a"),
+    })),
+    -- was: { dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }
+    system = s.highlight(h.themed({
+      dark = h.from("Normal"):blend("bg", "+#101112"),
+      light = h.from("Normal"):blend("bg", "-#101112"),
+    })),
+    -- was: { dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }
+    user = s.highlight(h.themed({
+      dark = h.from("Normal"):blend("bg", "+#202122"),
+      light = h.from("Normal"):blend("bg", "-#202122"),
+    })),
+    assistant = s.highlight(h.link("Normal")),
   }),
 
   -- ---------------------------------------------------------------------------
