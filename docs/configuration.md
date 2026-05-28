@@ -81,12 +81,12 @@ require("flemma").setup({
   templating = {
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
-  highlights = {                              -- All values are HlOp builders (see require("flemma.hl"))
+  highlights = {                             -- All values are highlight builders (see require("flemma.hl"))
     system = h.link("Special"),
     user = h.link("Normal"),
     assistant = h.link("Normal"),
     lua_expression = h.link("PreProc"),
-    lua_code_block = h.link("PreProc"),              -- {% code %} block content
+    lua_code_block = h.link("PreProc"),               -- {% code %} block content
     lua_delimiter = h.link("FlemmaLuaExpression"),    -- {{ }} and {% %} delimiters
     user_file_reference = h.link("Include"),
     thinking_tag = h.link("Comment"),
@@ -102,15 +102,23 @@ require("flemma").setup({
     tool_result_denied   = h.link("DiagnosticError"), -- concise `(denied)` suffix
     tool_result_aborted  = h.link("DiagnosticError"), -- concise `(aborted)` suffix
     tool_preview = h.link("Comment"),
-    tool_label = h.attrs({ italic = true }),           -- Tool intent label in fold previews
+    tool_label = h.attrs({ italic = true }),          -- Tool intent label in fold previews
     tool_detail = h.link("Comment"),                  -- Raw technical detail in structured tool previews
     fence_label = h.from("Comment"):mute("fg", "#303030"),  -- Fence code block language label
-    fence_bar = h.link("FlemmaFenceLabel"),            -- Fence code block delimiter bar
+    fence_bar = h.link("FlemmaFenceLabel"),           -- Fence code block delimiter bar
     fold_preview = h.link("Comment"),
     fold_meta = h.link("Comment"),
-    busy = h.link("DiagnosticWarn"),                   -- Busy indicator icon in integrations (e.g., bufferline)
-    progress_accent = h.attrs({ bold = true }),        -- Bold accent for tool name in the progress bar
-    role_name = h.attrs({ bold = true }),              -- GUI attributes for role names
+    approval_line = h.coalesce(                        -- Full-line background for tool approval prompts
+      h.from("FlemmaLineUser"):tint("bg", "#101112"),
+      h.from("Normal"):tint("bg", "#101112")
+    ),
+    approval_indicator = h.from("Folded"):omit("bg"), -- Status indicator on approval prompts
+    approval_label = h.from("Folded"):omit("bg"),     -- Tool name label on approval prompts
+    approval_key = h.link("MoreMsg"),                 -- Keybinding hints on approval prompts
+    approval_action = h.from("ModeMsg"):tint("fg", "#202122"), -- Action text on approval prompts
+    busy = h.link("DiagnosticWarn"),                  -- Busy indicator icon in integrations (e.g., bufferline)
+    progress_accent = h.attrs({ bold = true }),       -- Bold accent for tool name in the progress bar
+    role_name = h.attrs({ bold = true }),             -- GUI attributes for role names
   },
   ruler = {
     enabled = true,

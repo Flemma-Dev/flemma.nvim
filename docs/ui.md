@@ -3,7 +3,7 @@
 Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable.
 
 > [!TIP]
-> Switching colorschemes mid-session (`:colorscheme gruvbox`, etc.) automatically refreshes all Flemma highlight groups. Builder operations resolve lazily with no cache, so the refresh picks up the new colorscheme's colours immediately — no buffer switch or restart required.
+> Switching colorschemes mid-session (`:colorscheme gruvbox`, etc.) automatically refreshes all Flemma highlight groups — no buffer switch or restart required.
 
 > For the full configuration block including all UI-related keys, see [docs/configuration.md](configuration.md).
 
@@ -39,10 +39,16 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                   |
 | `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)         |
 | `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)            |
+| `highlights.approval_line`        | Full-line background for tool approval prompts (`FlemmaApprovalLine`)     |
+| `highlights.approval_indicator`   | Status indicator on approval prompts (`FlemmaApprovalIndicator`)          |
+| `highlights.approval_label`       | Tool name label on approval prompts (`FlemmaApprovalLabel`)               |
+| `highlights.approval_key`         | Keybinding hints on approval prompts (`FlemmaApprovalKey`)                |
+| `highlights.approval_action`      | Action text on approval prompts (`FlemmaApprovalAction`)                  |
 | `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)        |
 | `highlights.progress_accent`      | Bold accent for tool name in the progress bar (`FlemmaProgressBarAccent`) |
+| `highlights.role_name`            | GUI attributes for role name text, e.g., bold (`FlemmaRole*Name`)         |
 
-Each value is an `HlOp` builder from `require("flemma.hl")`. Simple cases use `h.link("Group")` for a direct link or `h.attrs({ bold = true })` for literal attributes. More complex cases chain operations like `:blend()`, `:omit()`, and `:pick()` to derive colours from existing groups.
+Each value is a highlight builder from `require("flemma.hl")`. Simple cases use `h.link("Group")` for a direct link or `h.attrs({ bold = true })` for literal attributes. More complex cases chain operations like `:blend()`, `:omit()`, and `:pick()` to derive colours from existing groups.
 
 ### Job result highlights
 
@@ -91,86 +97,64 @@ highlights = { example = h.themed({
 
 ### Highlight builder operations
 
-Colours are derived from existing highlight groups using chainable builder operations on `HlOp` objects. All operations resolve lazily when `:get()` is called (typically at highlight setup time).
+Colours are derived from existing highlight groups using chainable operations. Operations can be combined freely — each returns a new builder, so chains never mutate the original.
 
-**Tint / Mute** — theme-aware blends that flip direction automatically. `:tint()` offsets away from the background (making colours more distinct), `:mute()` offsets toward the background (making colours more subdued):
+**Constructors** — starting points for a highlight chain:
+
+| Constructor                             | What it does                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| `h.link("Group")`                       | Link to an existing group (no copy, follows changes)                         |
+| `h.from("Group")`                       | Resolve a group's concrete attributes as a starting point                    |
+| `h.attrs({ ... })`                      | Literal attributes (`{ bold = true }`, `{ fg = "#ff0000" }`)                 |
+| `h.hex("#aabbcc")`                      | Literal colour, defaults to `fg`; pass `"bg"` as second arg for background   |
+| `h.themed({ dark = ..., light = ... })` | Branch on `vim.o.background` (see [Theme-aware values](#theme-aware-values)) |
+| `h.coalesce(a, b, c)`                   | Try each operation in order, use the first that resolves                     |
+
+**Chain operations** — transform the result of the constructor or a previous chain step:
+
+**`:tint(attr, hex)` / `:mute(attr, hex)`** — theme-aware blends described in [Theme-aware values](#theme-aware-values) above.
+
+**`:blend(attr, offset)`** — add or subtract a hex value with an explicit direction. `+` brightens, `-` darkens. Each RGB channel is clamped to 0-255. Prefer `:tint()` / `:mute()` when the only difference between dark and light mode is the blend direction:
 
 ```lua
-local h = require("flemma.hl")
-
--- Tint Normal's bg to stand out from the base
-line_highlights = { user = h.from("Normal"):tint("bg", "#202122") }
-
--- Mute Comment's fg for a subtler appearance
-ruler = { hl = h.from("Comment"):mute("fg", "#303030") }
-```
-
-**Blend** — add or subtract a hex value from a group's colour attribute with an explicit direction. `+` brightens, `-` darkens. Each RGB channel is clamped to 0-255. Prefer `:tint()` / `:mute()` when the only difference between dark and light mode is the blend direction:
-
-```lua
--- Explicit direction (use when direction is fixed regardless of theme)
 h.from("Normal"):blend("bg", "+#101010")
-
--- Chain multiple blends on the same group
 h.from("Normal"):blend("bg", "+#101010"):blend("fg", "-#202020")
 ```
 
-**Default** — resolve Normal's attribute value with a black/white fallback based on `vim.o.background`. Useful as a coalesce fallback when groups may lack colour attributes:
+**`:omit(attr, ...)`** — strip attributes from the result. Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.):
 
 ```lua
--- Use the role's bg, falling back to Normal's bg or black/white
-h.coalesce(role_op:pick("bg"), h.default("bg"))
-```
-
-**Omit** — strip attributes from the resolved result. Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.):
-
-```lua
--- Use Folded's fg and styles, but not its bg (approval_bg fills in as fallback)
-highlights = { approval_indicator = h.from("Folded"):omit("bg") }
+-- Keep fg and styles from Folded, but drop its bg
+h.from("Folded"):omit("bg")
 
 -- Drop both bg and italic
-highlights = { approval_label = h.from("Folded"):omit("bg", "italic") }
+h.from("Folded"):omit("bg", "italic")
 ```
 
-When a highlight value uses `:omit()`, Flemma resolves the group to its concrete attributes (instead of creating a link) and removes the excluded keys before any fallback logic runs. In composite highlights like the approval line, sub-groups that lack `bg` receive the `approval_line` background as a fallback -- so `:omit("bg")` strips the group's own background and lets the shared approval background show through.
-
-**Pick** — keep only the specified attributes, discarding everything else. This also strips decoration attributes like `reverse` and `bold` that can leak from colorscheme groups:
+**`:pick(attr, ...)`** — the inverse of `:omit()` — keep only the named attributes, discarding everything else:
 
 ```lua
--- Blend fg, then keep only the fg attribute in the final result
-h.from("Comment"):blend("fg", "-#303030"):pick("fg")
-
--- Strip everything except fg and bg from StatusLine (removes reverse, bold, cterm, etc.)
-h.from("StatusLine"):pick("fg", "bg")
+-- Extract just the fg colour from Comment
+h.from("Comment"):pick("fg")
 ```
 
-Pass `{ strict = true }` as the last argument to require **all** named attributes — returns `nil` if any are missing:
+**`:style({ ... })`** — merge in style attributes without changing colours:
 
 ```lua
--- Only use this group if it provides both fg and bg; fall through in coalesce otherwise
-h.from("PmenuSel"):pick("fg", "bg", { strict = true })
+h.from("Comment"):style({ italic = true, bold = true })
 ```
 
-**Contrast** — ensure a minimum WCAG 2.1 contrast ratio between a colour attribute and a background context. Auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black:
+**Coalesce** — `h.coalesce()` is particularly useful for fallback chains:
 
 ```lua
--- Ensure fg meets 4.5:1 against the bar background
-h.from("DiffChange"):blend("fg", "-#222222"):contrast("fg", bar_bg_op, 4.5)
-```
-
-> **Scope:** `:contrast()` requires a background `HlOp` provided by the caller. Currently only the usage bar highlight setup provides this context.
-
-**Coalesce** — try multiple operations in order, returning the first non-nil result. Replaces the old comma-separated fallback chains:
-
-```lua
--- Try FlemmaLineUser first; if it resolves to nil, fall back to Normal
+-- Try FlemmaLineUser first; if it has no bg, fall back to Normal
 h.coalesce(
   h.from("FlemmaLineUser"):tint("bg", "#101112"),
   h.from("Normal"):tint("bg", "#101112")
 )
 ```
 
-Fallback colours for missing attributes are handled internally by the builder's `default_color()` function, which reads from the `Normal` group or falls back to black/white based on `vim.o.background`.
+When an operation resolves to nothing (e.g., a group doesn't exist, or `:pick("sp")` on a group with no `sp`), it returns `nil` and the coalesce moves to the next candidate. Missing colours fall back to your `Normal` group, or to black/white based on `vim.o.background`.
 
 ## Line highlights
 
@@ -188,7 +172,7 @@ line_highlights = {
 }
 ```
 
-Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line -- content starts on the next line. The `highlights.role_name` option (an `HlOp`, default `h.attrs({ bold = true })`) applies styling to the role name text only (not the ruler).
+Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line -- content starts on the next line. The `highlights.role_name` option (default: `h.attrs({ bold = true })`) applies styling to the role name text only (not the ruler).
 
 ## Rulers
 
@@ -353,8 +337,6 @@ Each `.chat` buffer owns at most one active usage bar — a new request dismisse
 Before sending, preview the cost of the next request with `:Flemma usage:estimate`. The command delegates to the active provider — Anthropic (`POST /v1/messages/count_tokens`), OpenAI (`POST /v1/responses/input_tokens`), Google Vertex AI (`{model}:countTokens`), and Moonshot (`POST /v1/tokenizers/estimate-token-count`) implement it today. Each sends the exact body a real request would produce, with provider-specific counting-only fields removed, and reports input tokens, estimated cost, and the model's per-MTok rates as a single `notify.info` line. Output cost is intentionally not projected: we have no way to know how long the model will talk before it starts.
 
 For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they reference `buffer.tokens.input`. Estimates are deduped and suppressed while a chat request is already in flight.
-
-See `lua/flemma/usage/` for the driver and prefetch logic, and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 
 ## Extmark priority
 
