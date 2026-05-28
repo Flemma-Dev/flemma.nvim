@@ -20,6 +20,7 @@ describe("core.send_to_provider suspense handling", function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.session"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
@@ -30,6 +31,10 @@ describe("core.send_to_provider suspense handling", function()
     package.loaded["flemma.secrets.cache"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.usage"] = nil
+    package.loaded["flemma.usage.prefetch"] = nil
+    package.loaded["flemma.hooks"] = nil
+    package.loaded["flemma.emittable"] = nil
 
     local flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
