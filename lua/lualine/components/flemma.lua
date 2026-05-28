@@ -332,28 +332,28 @@ function flemma_component:_do_update_status()
       end)
 
       -- The FlemmaStatusTextMuted → FlemmaStatusTextMuted2 rewrite is the only
-      -- reason we parse default_hl and touch the hl API here. Short-circuit
-      -- when the escape isn't in the format so redraws pay nothing for it.
+      -- reason we parse default_hl here. Short-circuit when the escape isn't
+      -- in the format so redraws pay nothing for it.
       if status:find("%#FlemmaStatusTextMuted#", 1, true) then
         -- default_hl is always a lualine section escape — "%#lualine_c_normal#",
         -- "%#lualine_x_insert#", etc. Anchoring to the lualine_ prefix both
         -- self-documents the intent and lets unexpected shapes fall through to
-        -- the no-op path instead of feeding a garbage name to nvim_get_hl.
+        -- the no-op path instead of feeding a garbage name to h.from().
         local section_group = default_hl:match("^%%#(lualine_[%w_]+)#$")
         if section_group then
-          local section_hl = vim.api.nvim_get_hl(0, { name = section_group, link = false })
-          local muted_hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
-          if section_hl and section_hl.bg and muted_hl and muted_hl.fg then
+          local section_bg = h.from(section_group):pick("bg"):get()
+          local muted_fg = h.from("FlemmaStatusTextMuted"):pick("fg"):get()
+          if section_bg and section_bg.bg and muted_fg and muted_fg.fg then
             -- Lualine redraws the statusline on every CursorMoved / ModeChanged
-            -- etc., so update_status runs frequently. Skip nvim_set_hl unless the
+            -- etc., so update_status runs frequently. Skip :set() unless the
             -- inputs have actually changed (only on mode switch or colorscheme).
-            if self._muted_section_bg ~= section_hl.bg or self._muted_fg ~= muted_hl.fg then
+            if self._muted_section_bg ~= section_bg.bg or self._muted_fg ~= muted_fg.fg then
               h.from("FlemmaStatusTextMuted")
                 :pick("fg")
-                :merge(h.hex(string.format("#%06x", section_hl.bg), "bg"), "force")
+                :merge(h.hex(section_bg.bg --[[@as string]], "bg"), "force")
                 :set("FlemmaStatusTextMuted2", { default = false })
-              self._muted_section_bg = section_hl.bg
-              self._muted_fg = muted_hl.fg
+              self._muted_section_bg = section_bg.bg
+              self._muted_fg = muted_fg.fg
             end
             status = status:gsub("%%#FlemmaStatusTextMuted#", function()
               return "%#FlemmaStatusTextMuted2#"
