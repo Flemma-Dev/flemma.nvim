@@ -201,15 +201,7 @@ function FromOp:get()
   if not ok or not hl or not next(hl) then
     return nil
   end
-  ---@type vim.api.keyset.highlight
-  local attrs = {}
-  for k, v in pairs(hl) do
-    if k == "fg" or k == "bg" or k == "sp" then
-      attrs[k] = string.format("#%06x", v)
-    elseif k ~= "link" then
-      attrs[k] = v
-    end
-  end
+  local attrs = resolve_to_attrs({ link = self._group })
   return next(attrs) ~= nil and attrs or nil
 end
 
@@ -588,7 +580,7 @@ function ContrastOp:get()
   end
 
   local adjusted = color.ensure_contrast(fg_hex, bg_hex, self._ratio)
-  return vim.tbl_extend("force", attrs, against_attrs, { [self._attr] = adjusted })
+  return vim.tbl_extend("force", attrs, { [self._attr] = adjusted })
 end
 
 -- ---------------------------------------------------------------------------
