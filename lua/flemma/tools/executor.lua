@@ -1223,8 +1223,17 @@ function M.approve_all_pending(bufnr)
     return false, "No pending tools to approve"
   end
 
+  local failures = {}
   for _, tool_id in ipairs(pending_ids) do
-    M.approve(bufnr, tool_id)
+    local ok, approve_err = M.approve(bufnr, tool_id)
+    if not ok then
+      failures[#failures + 1] = tool_id .. ": " .. (approve_err or "unknown")
+    end
+  end
+
+  if #failures > 0 then
+    log.warn("approve_all_pending: " .. #failures .. " failure(s): " .. table.concat(failures, "; "))
+    return false, table.concat(failures, "; ")
   end
 
   return true, nil
