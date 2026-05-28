@@ -351,6 +351,7 @@ function flemma_component:_do_update_status()
               h.from("FlemmaStatusTextMuted")
                 :pick("fg")
                 :merge(h.hex(section_bg.bg --[[@as string]], "bg"), "force")
+                :style({ nocombine = true })
                 :set("FlemmaStatusTextMuted2", { default = false })
               self._muted_section_bg = section_bg.bg
               self._muted_fg = muted_fg.fg

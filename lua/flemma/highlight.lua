@@ -30,7 +30,7 @@ function M.resolve_first_complete(chain)
   end
   for _, name in ipairs(names) do
     if name ~= "" then
-      if h.from(name):expect("fg", "bg"):get() then
+      if h.from(name):pick("fg", "bg", { strict = true }):get() then
         return name
       end
     end
@@ -230,9 +230,9 @@ M.apply_syntax = function()
   -- Usage bar highlight groups
   local usage_ops = {}
   for name in syntax_config.ui.usage.highlight:gmatch("[^,]+") do
-    table.insert(usage_ops, h.from(vim.trim(name)):expect("fg", "bg"))
+    table.insert(usage_ops, h.from(vim.trim(name)):pick("fg", "bg", { strict = true }))
   end
-  table.insert(usage_ops, h.from("StatusLine"))
+  table.insert(usage_ops, h.from("StatusLine"):pick("fg", "bg"))
   local bar_base = h.coalesce(unpack(usage_ops))
 
   bar_base:set("FlemmaUsageBar")
@@ -249,17 +249,19 @@ M.apply_syntax = function()
   local progress_config = syntax_config.ui and syntax_config.ui.progress or { highlight = "StatusLine" }
   local progress_ops = {}
   for name in (progress_config.highlight or ""):gmatch("[^,]+") do
-    table.insert(progress_ops, h.from(vim.trim(name)):expect("fg", "bg"))
+    table.insert(progress_ops, h.from(vim.trim(name)):pick("fg", "bg", { strict = true }))
   end
-  table.insert(progress_ops, h.from("StatusLine"))
+  table.insert(progress_ops, h.from("StatusLine"):pick("fg", "bg"))
   local progress_base = h.coalesce(unpack(progress_ops))
   progress_base:set("FlemmaProgressBar")
   progress_base:merge(syntax_config.highlights.progress_accent):set("FlemmaProgressBarAccent")
 
   -- StatusTextMuted: themed StatusLine fg blend + StatusLine bg.
   -- Requires both fg and bg from StatusLine; falls back to Comment link.
-  local statusline_base = h.from("StatusLine"):expect("fg", "bg")
-  h.coalesce(statusline_base:mute("fg", "#666666"), h.link("Comment")):set("FlemmaStatusTextMuted")
+  -- nocombine prevents StatusLine's `reverse` from bleeding into %#Group# escapes
+  local statusline_base = h.from("StatusLine"):pick("fg", "bg", { strict = true })
+  h.coalesce(statusline_base:mute("fg", "#666666"):style({ nocombine = true }), h.link("Comment"))
+    :set("FlemmaStatusTextMuted")
 
   -- CursorLine highlights depend on FlemmaLine* groups established above
   setup_cursorline_highlights()

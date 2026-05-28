@@ -412,6 +412,35 @@ describe("flemma.hl", function()
       local result = h.from("NonExistent"):pick("fg"):get()
       assert.is_nil(result)
     end)
+
+    it("strict returns nil when any picked attr is missing", function()
+      local result = h.from("TestFgOnly"):pick("fg", "bg", { strict = true }):get()
+      assert.is_nil(result)
+    end)
+
+    it("strict passes when all picked attrs exist", function()
+      local result = h.from("TestComment"):pick("fg", "bg", { strict = true }):get()
+      assert.is_not_nil(result)
+      assert.equals("#888888", result.fg)
+      assert.equals("#111111", result.bg)
+      assert.is_nil(result.italic)
+    end)
+
+    it("strict returns nil when parent is nil", function()
+      local result = h.from("NonExistent"):pick("fg", { strict = true }):get()
+      assert.is_nil(result)
+    end)
+
+    it("strict strips non-picked attrs", function()
+      vim.api.nvim_set_hl(0, "TestReverse", { fg = "#aabbcc", bg = "#112233", reverse = true, bold = true })
+      local result = h.from("TestReverse"):pick("fg", "bg", { strict = true }):get()
+      assert.is_not_nil(result)
+      assert.equals("#aabbcc", result.fg)
+      assert.equals("#112233", result.bg)
+      assert.is_nil(result.reverse)
+      assert.is_nil(result.bold)
+      pcall(vim.api.nvim_set_hl, 0, "TestReverse", {})
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -467,24 +496,6 @@ describe("flemma.hl", function()
   -- ---------------------------------------------------------------------------
   -- ExpectOp
   -- ---------------------------------------------------------------------------
-
-  describe(":expect()", function()
-    it("passes when all expected attrs exist", function()
-      local result = h.from("TestComment"):expect("fg", "bg"):get()
-      assert.is_not_nil(result)
-      assert.equals("#888888", result.fg)
-    end)
-
-    it("returns nil when an expected attr is missing", function()
-      local result = h.from("TestFgOnly"):expect("fg", "bg"):get()
-      assert.is_nil(result)
-    end)
-
-    it("returns nil when parent is nil", function()
-      local result = h.from("NonExistent"):expect("fg"):get()
-      assert.is_nil(result)
-    end)
-  end)
 
   -- ---------------------------------------------------------------------------
   -- StyleOp
@@ -569,7 +580,8 @@ describe("flemma.hl", function()
       assert.equals(h.NilOp, op:blend("fg", "+#101010"))
       assert.equals(h.NilOp, op:pick("fg"))
       assert.equals(h.NilOp, op:omit("bg"))
-      assert.equals(h.NilOp, op:expect("fg"))
+      assert.equals(h.NilOp, op:tint("fg", "#101010"))
+      assert.equals(h.NilOp, op:mute("fg", "#101010"))
       assert.equals(h.NilOp, op:style({ bold = true }))
       assert.equals(h.NilOp, op:merge(h.hex("#ff0000")))
       assert.equals(h.NilOp, op:contrast("fg", h.from("TestNormal"), 4.5))

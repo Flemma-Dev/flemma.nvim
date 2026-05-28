@@ -131,11 +131,21 @@ highlights = { approval_label = h.from("Folded"):omit("bg", "italic") }
 
 When a highlight value uses `:omit()`, Flemma resolves the group to its concrete attributes (instead of creating a link) and removes the excluded keys before any fallback logic runs. In composite highlights like the approval line, sub-groups that lack `bg` receive the `approval_line` background as a fallback -- so `:omit("bg")` strips the group's own background and lets the shared approval background show through.
 
-**Pick** — keep only the specified attributes, discarding everything else:
+**Pick** — keep only the specified attributes, discarding everything else. This also strips decoration attributes like `reverse` and `bold` that can leak from colorscheme groups:
 
 ```lua
 -- Blend fg, then keep only the fg attribute in the final result
 h.from("Comment"):blend("fg", "-#303030"):pick("fg")
+
+-- Strip everything except fg and bg from StatusLine (removes reverse, bold, cterm, etc.)
+h.from("StatusLine"):pick("fg", "bg")
+```
+
+Pass `{ strict = true }` as the last argument to require **all** named attributes — returns `nil` if any are missing:
+
+```lua
+-- Only use this group if it provides both fg and bg; fall through in coalesce otherwise
+h.from("PmenuSel"):pick("fg", "bg", { strict = true })
 ```
 
 **Contrast** — ensure a minimum WCAG 2.1 contrast ratio between a colour attribute and a background context. Auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black:

@@ -147,13 +147,6 @@ function NilOp:contrast(_attr, _against, _ratio)
   return NilOp
 end
 
----@param _key1 string
----@param _key2? string
----@return flemma.hl.NilOp
-function NilOp:expect(_key1, _key2)
-  return NilOp
-end
-
 ---@param _attrs table<string, any>
 ---@return flemma.hl.NilOp
 function NilOp:style(_attrs)
@@ -517,14 +510,16 @@ end
 
 ---@class flemma.hl.PickOp : flemma.hl.HlOp
 ---@field _keys string[]
+---@field _strict boolean
 local PickOp = setmetatable({}, { __index = HlOp })
 PickOp.__index = PickOp
 
 ---@param parent flemma.hl.HlOp
 ---@param keys string[]
+---@param strict? boolean
 ---@return flemma.hl.PickOp
-function PickOp.new(parent, keys)
-  return setmetatable({ _parent = parent, _keys = keys }, PickOp)
+function PickOp.new(parent, keys, strict)
+  return setmetatable({ _parent = parent, _keys = keys, _strict = strict or false }, PickOp)
 end
 
 ---@return vim.api.keyset.highlight|nil
@@ -539,6 +534,8 @@ function PickOp:get()
   for _, key in ipairs(self._keys) do
     if attrs[key] ~= nil then
       result[key] = attrs[key]
+    elseif self._strict then
+      return nil
     end
   end
   if next(result) == nil then
@@ -592,37 +589,6 @@ function ContrastOp:get()
 
   local adjusted = color.ensure_contrast(fg_hex, bg_hex, self._ratio)
   return vim.tbl_extend("force", attrs, against_attrs, { [self._attr] = adjusted })
-end
-
--- ---------------------------------------------------------------------------
--- ExpectOp
--- ---------------------------------------------------------------------------
-
----@class flemma.hl.ExpectOp : flemma.hl.HlOp
----@field _keys string[]
-local ExpectOp = setmetatable({}, { __index = HlOp })
-ExpectOp.__index = ExpectOp
-
----@param parent flemma.hl.HlOp
----@param keys string[]
----@return flemma.hl.ExpectOp
-function ExpectOp.new(parent, keys)
-  return setmetatable({ _parent = parent, _keys = keys }, ExpectOp)
-end
-
----@return vim.api.keyset.highlight|nil
-function ExpectOp:get()
-  local parent_result = self._parent:get()
-  if parent_result == nil then
-    return nil
-  end
-  local attrs = resolve_to_attrs(parent_result)
-  for _, key in ipairs(self._keys) do
-    if attrs[key] == nil then
-      return nil
-    end
-  end
-  return attrs
 end
 
 -- ---------------------------------------------------------------------------
@@ -715,10 +681,16 @@ function HlOp:omit(...)
   return OmitOp.new(self, { ... })
 end
 
----@param ... string
+---@param ... string|{strict?: boolean}
 ---@return flemma.hl.PickOp
 function HlOp:pick(...)
-  return PickOp.new(self, { ... })
+  local args = { ... }
+  local last = args[#args]
+  if type(last) == "table" then
+    table.remove(args, #args)
+    return PickOp.new(self, args, last.strict)
+  end
+  return PickOp.new(self, args)
 end
 
 ---@param attr string
@@ -727,12 +699,6 @@ end
 ---@return flemma.hl.ContrastOp
 function HlOp:contrast(attr, against, ratio)
   return ContrastOp.new(self, attr, against, ratio)
-end
-
----@param ... string
----@return flemma.hl.ExpectOp
-function HlOp:expect(...)
-  return ExpectOp.new(self, { ... })
 end
 
 ---@param attrs table<string, any>
