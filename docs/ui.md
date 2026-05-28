@@ -2,6 +2,9 @@
 
 Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable.
 
+> [!TIP]
+> Switching colorschemes mid-session (`:colorscheme gruvbox`, etc.) automatically refreshes all Flemma highlight groups. Builder operations resolve lazily with no cache, so the refresh picks up the new colorscheme's colours immediately — no buffer switch or restart required.
+
 > For the full configuration block including all UI-related keys, see [docs/configuration.md](configuration.md).
 
 ## Highlights and styles

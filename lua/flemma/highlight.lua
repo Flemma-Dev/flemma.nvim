@@ -366,6 +366,13 @@ M.setup = function()
       M.apply_syntax()
     end,
   })
+
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = augroup,
+    callback = function()
+      M.apply_syntax()
+    end,
+  })
 end
 
 return M

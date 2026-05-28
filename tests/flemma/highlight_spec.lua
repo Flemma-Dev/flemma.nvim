@@ -766,6 +766,54 @@ describe("HlOp-based exclusion and approval highlights", function()
   end)
 end)
 
+describe("ColorScheme autocmd refresh", function()
+  local highlight
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.core"] = nil
+
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0xeeeeee, bg = 0x1a1a2e })
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    for _, group in ipairs({
+      "FlemmaSystem",
+      "FlemmaUser",
+      "FlemmaAssistant",
+      "FlemmaAssistantSpinner",
+      "FlemmaRoleSystem",
+      "FlemmaRoleUser",
+      "FlemmaRoleAssistant",
+    }) do
+      vim.cmd("highlight clear " .. group)
+    end
+  end)
+
+  it("should call apply_syntax when ColorScheme fires", function()
+    highlight.setup()
+
+    local call_count = 0
+    local original = highlight.apply_syntax
+    highlight.apply_syntax = function()
+      call_count = call_count + 1
+      original()
+    end
+
+    vim.api.nvim_exec_autocmds("ColorScheme", { pattern = "*" })
+    assert.are.equal(1, call_count, "apply_syntax should fire once on ColorScheme")
+
+    highlight.apply_syntax = original
+  end)
+end)
+
 describe("flemma.highlight.resolve_first_complete", function()
   local highlight
 
