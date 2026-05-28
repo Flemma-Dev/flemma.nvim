@@ -208,10 +208,7 @@ return s.object({
     lua_delimiter = s.highlight(h.link("FlemmaLuaExpression")),
     user_file_reference = s.highlight(h.link("Include")),
     thinking_tag = s.highlight(h.link("Comment")),
-    thinking_block = s.highlight(h.themed({
-      dark = h.from("Comment"):blend("fg", "-#333333"),
-      light = h.from("Comment"):blend("fg", "+#333333"),
-    })),
+    thinking_block = s.highlight(h.from("Comment"):mute("fg", "#333333")),
     tool_icon = s.highlight(h.link("FlemmaToolUseTitle")),
     tool_name = s.highlight(h.link("Function")),
     tool_use_title = s.highlight(h.link("Function")),
@@ -224,37 +221,27 @@ return s.object({
     tool_result_aborted = s.highlight(h.link("DiagnosticError")),
     tool_preview = s.highlight(h.link("Comment")),
     tool_label = s.highlight(h.attrs({ italic = true })),
-    fence_label = s.highlight(h.themed({
-      dark = h.from("Comment"):blend("fg", "-#303030"),
-      light = h.from("Comment"):blend("fg", "+#303030"),
-    })),
+    fence_label = s.highlight(h.from("Comment"):mute("fg", "#303030")),
     fence_bar = s.highlight(h.link("FlemmaFenceLabel")),
     fold_preview = s.highlight(h.link("Comment")),
     fold_meta = s.highlight(h.link("Comment")),
     tool_detail = s.highlight(h.link("Comment")),
     busy = s.highlight(h.link("DiagnosticWarn")),
     progress_accent = s.highlight(h.attrs({ bold = true })),
-    approval_line = s.highlight(h.themed({
-      dark = h.coalesce(h.from("FlemmaLineUser"):blend("bg", "+#101112"), h.from("Normal"):blend("bg", "+#101112")),
-      light = h.coalesce(h.from("FlemmaLineUser"):blend("bg", "-#101112"), h.from("Normal"):blend("bg", "-#101112")),
-    })),
+    approval_line = s.highlight(
+      h.coalesce(h.from("FlemmaLineUser"):tint("bg", "#101112"), h.from("Normal"):tint("bg", "#101112"))
+    ),
     approval_indicator = s.highlight(h.from("Folded"):omit("bg")),
     approval_label = s.highlight(h.from("Folded"):omit("bg")),
     approval_key = s.highlight(h.link("MoreMsg")),
-    approval_action = s.highlight(h.themed({
-      dark = h.from("ModeMsg"):blend("fg", "+#202122"),
-      light = h.from("ModeMsg"):blend("fg", "-#202122"),
-    })),
+    approval_action = s.highlight(h.from("ModeMsg"):tint("fg", "#202122")),
     role_name = s.highlight(h.attrs({ bold = true })),
   }),
 
   ruler = s.object({
     enabled = s.boolean(true),
     char = s.string("─"),
-    hl = s.highlight(h.themed({
-      dark = h.from("Comment"):blend("fg", "-#303030"),
-      light = h.from("Comment"):blend("fg", "+#303030"),
-    })),
+    hl = s.highlight(h.from("Comment"):mute("fg", "#303030")),
   }),
 
   turns = s.object({
@@ -279,18 +266,9 @@ return s.object({
 
   line_highlights = s.object({
     enabled = s.boolean(true),
-    frontmatter = s.highlight(h.themed({
-      dark = h.from("Normal"):blend("bg", "+#18111a"),
-      light = h.from("Normal"):blend("bg", "-#18111a"),
-    })),
-    system = s.highlight(h.themed({
-      dark = h.from("Normal"):blend("bg", "+#101112"),
-      light = h.from("Normal"):blend("bg", "-#101112"),
-    })),
-    user = s.highlight(h.themed({
-      dark = h.from("Normal"):blend("bg", "+#202122"),
-      light = h.from("Normal"):blend("bg", "-#202122"),
-    })),
+    frontmatter = s.highlight(h.from("Normal"):tint("bg", "#18111a")),
+    system = s.highlight(h.from("Normal"):tint("bg", "#101112")),
+    user = s.highlight(h.from("Normal"):tint("bg", "#202122")),
     assistant = s.highlight(h.link("Normal")),
   }),
 

@@ -111,6 +111,20 @@ function NilOp:blend(_attr, _mod)
   return NilOp
 end
 
+---@param _attr string
+---@param _hex string
+---@return flemma.hl.NilOp
+function NilOp:tint(_attr, _hex)
+  return NilOp
+end
+
+---@param _attr string
+---@param _hex string
+---@return flemma.hl.NilOp
+function NilOp:mute(_attr, _hex)
+  return NilOp
+end
+
 ---@param _key1 string
 ---@param _key2? string
 ---@return flemma.hl.NilOp
@@ -443,6 +457,32 @@ function BlendOp:get()
 end
 
 -- ---------------------------------------------------------------------------
+-- TintOp
+-- ---------------------------------------------------------------------------
+
+---@class flemma.hl.TintOp : flemma.hl.HlOp
+---@field _attr string
+---@field _hex string
+---@field _dark_direction "+" | "-"
+local TintOp = setmetatable({}, { __index = HlOp })
+TintOp.__index = TintOp
+
+---@param parent flemma.hl.HlOp
+---@param attr string
+---@param hex string
+---@param dark_direction "+" | "-"
+---@return flemma.hl.TintOp
+function TintOp.new(parent, attr, hex, dark_direction)
+  return setmetatable({ _parent = parent, _attr = attr, _hex = hex, _dark_direction = dark_direction }, TintOp)
+end
+
+---@return vim.api.keyset.highlight|nil
+function TintOp:get()
+  local direction = vim.o.background == "dark" and self._dark_direction or (self._dark_direction == "+" and "-" or "+")
+  return BlendOp.new(self._parent, self._attr, direction .. self._hex):get()
+end
+
+-- ---------------------------------------------------------------------------
 -- OmitOp
 -- ---------------------------------------------------------------------------
 
@@ -653,6 +693,20 @@ end
 ---@return flemma.hl.BlendOp
 function HlOp:blend(attr, mod)
   return BlendOp.new(self, attr, mod)
+end
+
+---@param attr string
+---@param hex string
+---@return flemma.hl.TintOp
+function HlOp:tint(attr, hex)
+  return TintOp.new(self, attr, hex, "+")
+end
+
+---@param attr string
+---@param hex string
+---@return flemma.hl.TintOp
+function HlOp:mute(attr, hex)
+  return TintOp.new(self, attr, hex, "-")
 end
 
 ---@param ... string

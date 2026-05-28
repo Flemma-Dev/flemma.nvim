@@ -300,6 +300,58 @@ describe("flemma.hl", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- TintOp / MuteOp
+  -- ---------------------------------------------------------------------------
+
+  describe(":tint()", function()
+    it("adds in dark mode", function()
+      vim.o.background = "dark"
+      local result = h.from("TestNormal"):tint("bg", "#101010"):get()
+      assert.is_not_nil(result)
+      assert.equals("#101010", result.bg)
+    end)
+
+    it("subtracts in light mode", function()
+      vim.o.background = "light"
+      vim.api.nvim_set_hl(0, "TestNormal", { fg = "#000000", bg = "#ffffff" })
+      local result = h.from("TestNormal"):tint("bg", "#101010"):get()
+      assert.is_not_nil(result)
+      assert.equals("#efefef", result.bg)
+      vim.o.background = "dark"
+      vim.api.nvim_set_hl(0, "TestNormal", { fg = "#ffffff", bg = "#000000" })
+    end)
+
+    it("returns nil when parent is nil", function()
+      local result = h.from("NonExistent"):tint("bg", "#101010"):get()
+      assert.is_nil(result)
+    end)
+  end)
+
+  describe(":mute()", function()
+    it("subtracts in dark mode", function()
+      vim.o.background = "dark"
+      local result = h.from("TestComment"):mute("fg", "#333333"):get()
+      assert.is_not_nil(result)
+      assert.equals("#555555", result.fg)
+    end)
+
+    it("adds in light mode", function()
+      vim.o.background = "light"
+      vim.api.nvim_set_hl(0, "TestComment", { fg = "#888888", bg = "#111111", italic = true })
+      local result = h.from("TestComment"):mute("fg", "#333333"):get()
+      assert.is_not_nil(result)
+      assert.equals("#bbbbbb", result.fg)
+      vim.o.background = "dark"
+      vim.api.nvim_set_hl(0, "TestComment", { fg = "#888888", bg = "#111111", italic = true })
+    end)
+
+    it("returns nil when parent is nil", function()
+      local result = h.from("NonExistent"):mute("fg", "#333333"):get()
+      assert.is_nil(result)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- OmitOp
   -- ---------------------------------------------------------------------------
 

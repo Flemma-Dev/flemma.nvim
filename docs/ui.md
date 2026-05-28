@@ -8,34 +8,36 @@ Flemma adapts to your colour scheme with theme-aware highlights, line background
 
 Configuration keys map to dedicated highlight groups:
 
-| Key                               | Applies to                                                               |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `highlights.system`               | System messages (`FlemmaSystem`)                                         |
-| `highlights.user`                 | User messages (`FlemmaUser`)                                             |
-| `highlights.assistant`            | Assistant messages (`FlemmaAssistant`)                                   |
-| `highlights.lua_expression`       | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
-| `highlights.lua_code_block`       | `{% code %}` block content (in `@You` and `@System` messages)            |
-| `highlights.lua_delimiter`        | `{{ }}` and `{% %}` delimiters including trim markers                    |
-| `highlights.user_file_reference`  | `@./path` fragments                                                      |
-| `highlights.thinking_tag`         | `<thinking>` / `</thinking>` tags                                        |
-| `highlights.thinking_block`       | Content inside thinking blocks                                           |
-| `highlights.tool_icon`            | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                     |
-| `highlights.tool_name`            | Tool name in tool fold text (`FlemmaToolName`)                           |
-| `highlights.tool_use_title`       | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
-| `highlights.tool_result_title`    | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
-| `highlights.tool_result_error`    | `(error)` suffix on tool result headers (`FlemmaToolResultError`)        |
-| `highlights.tool_result_pending`  | `(pending)` suffix on tool result headers (`FlemmaToolResultPending`)    |
-| `highlights.tool_result_approved` | `(approved)` suffix on tool result headers (`FlemmaToolResultApproved`)  |
-| `highlights.tool_result_rejected` | `(rejected)` suffix on tool result headers (`FlemmaToolResultRejected`)  |
-| `highlights.tool_result_denied`   | `(denied)` suffix on tool result headers (`FlemmaToolResultDenied`)      |
-| `highlights.tool_result_aborted`  | `(aborted)` suffix on tool result headers (`FlemmaToolResultAborted`)    |
-| `highlights.tool_preview`         | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
-| `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
-| `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
-| `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
-| `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)        |
-| `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)           |
-| `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
+| Key                               | Applies to                                                                |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `highlights.system`               | System messages (`FlemmaSystem`)                                          |
+| `highlights.user`                 | User messages (`FlemmaUser`)                                              |
+| `highlights.assistant`            | Assistant messages (`FlemmaAssistant`)                                    |
+| `highlights.lua_expression`       | `{{ expression }}` fragments (in `@You` and `@System` messages)           |
+| `highlights.lua_code_block`       | `{% code %}` block content (in `@You` and `@System` messages)             |
+| `highlights.lua_delimiter`        | `{{ }}` and `{% %}` delimiters including trim markers                     |
+| `highlights.user_file_reference`  | `@./path` fragments                                                       |
+| `highlights.thinking_tag`         | `<thinking>` / `</thinking>` tags                                         |
+| `highlights.thinking_block`       | Content inside thinking blocks                                            |
+| `highlights.tool_icon`            | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                      |
+| `highlights.tool_name`            | Tool name in tool fold text (`FlemmaToolName`)                            |
+| `highlights.tool_use_title`       | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                         |
+| `highlights.tool_result_title`    | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                   |
+| `highlights.tool_result_error`    | `(error)` suffix on tool result headers (`FlemmaToolResultError`)         |
+| `highlights.tool_result_pending`  | `(pending)` suffix on tool result headers (`FlemmaToolResultPending`)     |
+| `highlights.tool_result_approved` | `(approved)` suffix on tool result headers (`FlemmaToolResultApproved`)   |
+| `highlights.tool_result_rejected` | `(rejected)` suffix on tool result headers (`FlemmaToolResultRejected`)   |
+| `highlights.tool_result_denied`   | `(denied)` suffix on tool result headers (`FlemmaToolResultDenied`)       |
+| `highlights.tool_result_aborted`  | `(aborted)` suffix on tool result headers (`FlemmaToolResultAborted`)     |
+| `highlights.tool_preview`         | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`)  |
+| `highlights.tool_label`           | Tool intent label in fold previews, italic by default (`FlemmaToolLabel`) |
+| `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)     |
+| `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                  |
+| `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                   |
+| `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)         |
+| `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)            |
+| `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)        |
+| `highlights.progress_accent`      | Bold accent for tool name in the progress bar (`FlemmaProgressBarAccent`) |
 
 Each value is an `HlOp` builder from `require("flemma.hl")`. Simple cases use `h.link("Group")` for a direct link or `h.attrs({ bold = true })` for literal attributes. More complex cases chain operations like `:blend()`, `:omit()`, and `:pick()` to derive colours from existing groups.
 
@@ -60,14 +62,27 @@ Override any group to style job results independently from tool results.
 
 ## Theme-aware values
 
-Any highlight value can be theme-aware using `h.themed()`. Flemma detects `vim.o.background` and evaluates the matching branch:
+Most theme-aware highlights use `:tint()` or `:mute()` — theme-aware blends that automatically flip direction based on `vim.o.background`:
+
+- **`:tint(attr, hex)`** — offset away from the theme's background. Adds in dark mode (toward white), subtracts in light mode (toward black). Use for backgrounds that need to stand out from the base.
+- **`:mute(attr, hex)`** — offset toward the theme's background. Subtracts in dark mode (toward black), adds in light mode (toward white). Use for foregrounds that need to be more subdued.
 
 ```lua
 local h = require("flemma.hl")
 
-ruler = { hl = h.themed({
-  dark = h.from("Comment"):blend("fg", "-#303030"),
-  light = h.from("Comment"):blend("fg", "+#303030"),
+-- Mute Comment's fg (darker in dark mode, lighter in light mode)
+ruler = { hl = h.from("Comment"):mute("fg", "#303030") }
+
+-- Tint Normal's bg (lighter in dark mode, darker in light mode)
+line_highlights = { user = h.from("Normal"):tint("bg", "#202122") }
+```
+
+For cases requiring truly different ops per theme (not just flipped blend direction), `h.themed()` is available:
+
+```lua
+highlights = { example = h.themed({
+  dark = h.link("Special"),
+  light = h.from("Comment"):pick("fg"),
 }) }
 ```
 
@@ -75,23 +90,33 @@ ruler = { hl = h.themed({
 
 Colours are derived from existing highlight groups using chainable builder operations on `HlOp` objects. All operations resolve lazily when `:get()` is called (typically at highlight setup time).
 
-**Blend** — add or subtract a hex value from a group's colour attribute. `+` brightens, `-` darkens. Each RGB channel is clamped to 0-255:
+**Tint / Mute** — theme-aware blends that flip direction automatically. `:tint()` offsets away from the background (making colours more distinct), `:mute()` offsets toward the background (making colours more subdued):
 
 ```lua
 local h = require("flemma.hl")
 
--- Lighten Normal's bg by #101010
-line_highlights = { user = h.themed({
-  dark = h.from("Normal"):blend("bg", "+#101010"),
-}) }
+-- Tint Normal's bg to stand out from the base
+line_highlights = { user = h.from("Normal"):tint("bg", "#202122") }
 
--- Darken Comment's fg
-ruler = { hl = h.themed({
-  light = h.from("Comment"):blend("fg", "-#303030"),
-}) }
+-- Mute Comment's fg for a subtler appearance
+ruler = { hl = h.from("Comment"):mute("fg", "#303030") }
+```
+
+**Blend** — add or subtract a hex value from a group's colour attribute with an explicit direction. `+` brightens, `-` darkens. Each RGB channel is clamped to 0-255. Prefer `:tint()` / `:mute()` when the only difference between dark and light mode is the blend direction:
+
+```lua
+-- Explicit direction (use when direction is fixed regardless of theme)
+h.from("Normal"):blend("bg", "+#101010")
 
 -- Chain multiple blends on the same group
 h.from("Normal"):blend("bg", "+#101010"):blend("fg", "-#202020")
+```
+
+**Default** — resolve Normal's attribute value with a black/white fallback based on `vim.o.background`. Useful as a coalesce fallback when groups may lack colour attributes:
+
+```lua
+-- Use the role's bg, falling back to Normal's bg or black/white
+h.coalesce(role_op:pick("bg"), h.default("bg"))
 ```
 
 **Omit** — strip attributes from the resolved result. Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.):
@@ -127,8 +152,8 @@ h.from("DiffChange"):blend("fg", "-#222222"):contrast("fg", bar_bg_op, 4.5)
 ```lua
 -- Try FlemmaLineUser first; if it resolves to nil, fall back to Normal
 h.coalesce(
-  h.from("FlemmaLineUser"):blend("bg", "+#101112"),
-  h.from("Normal"):blend("bg", "+#101112")
+  h.from("FlemmaLineUser"):tint("bg", "#101112"),
+  h.from("Normal"):tint("bg", "#101112")
 )
 ```
 
@@ -143,19 +168,10 @@ local h = require("flemma.hl")
 
 line_highlights = {
   enabled = true,
-  frontmatter = h.themed({
-    dark = h.from("Normal"):blend("bg", "+#201020"),
-    light = h.from("Normal"):blend("bg", "-#201020"),
-  }),
-  system = h.themed({
-    dark = h.from("Normal"):blend("bg", "+#201000"),
-    light = h.from("Normal"):blend("bg", "-#201000"),
-  }),
+  frontmatter = h.from("Normal"):tint("bg", "#201020"),
+  system = h.from("Normal"):tint("bg", "#201000"),
   user = h.link("Normal"),
-  assistant = h.themed({
-    dark = h.from("Normal"):blend("bg", "+#102020"),
-    light = h.from("Normal"):blend("bg", "-#102020"),
-  }),
+  assistant = h.from("Normal"):tint("bg", "#102020"),
 }
 ```
 
@@ -171,10 +187,7 @@ local h = require("flemma.hl")
 ruler = {
   enabled = true,       -- default: true
   char = "─",           -- drawn over the role marker and repeated to fill the line
-  hl = h.themed({
-    dark = h.from("Comment"):blend("fg", "-#303030"),
-    light = h.from("Comment"):blend("fg", "+#303030"),
-  }),
+  hl = h.from("Comment"):mute("fg", "#303030"),
 }
 ```
 

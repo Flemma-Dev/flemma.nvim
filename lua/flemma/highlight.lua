@@ -215,14 +215,8 @@ M.apply_syntax = function()
   local bar_base = h.coalesce(unpack(usage_ops))
 
   bar_base:set("FlemmaUsageBar")
-  h.themed({
-    dark = bar_base:blend("fg", "-#222222"),
-    light = bar_base:blend("fg", "+#222222"),
-  }):set("FlemmaUsageBarSecondary")
-  h.themed({
-    dark = bar_base:blend("fg", "-#444444"),
-    light = bar_base:blend("fg", "+#444444"),
-  }):set("FlemmaUsageBarMuted")
+  bar_base:mute("fg", "#222222"):set("FlemmaUsageBarSecondary")
+  bar_base:mute("fg", "#444444"):set("FlemmaUsageBarMuted")
 
   -- Semantic cache highlights with contrast enforcement
   h.coalesce(h.from("DiagnosticOk"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticOk"))
@@ -244,13 +238,7 @@ M.apply_syntax = function()
   -- StatusTextMuted: themed StatusLine fg blend + StatusLine bg.
   -- Requires both fg and bg from StatusLine; falls back to Comment link.
   local statusline_base = h.from("StatusLine"):expect("fg", "bg")
-  h.coalesce(
-    h.themed({
-      dark = statusline_base:blend("fg", "-#666666"),
-      light = statusline_base:blend("fg", "+#666666"),
-    }),
-    h.link("Comment")
-  ):set("FlemmaStatusTextMuted")
+  h.coalesce(statusline_base:mute("fg", "#666666"), h.link("Comment")):set("FlemmaStatusTextMuted")
 
   -- Create CursorLine blend variants after all base groups are defined
   setup_cursorline_highlights()

@@ -90,10 +90,7 @@ require("flemma").setup({
     lua_delimiter = h.link("FlemmaLuaExpression"),    -- {{ }} and {% %} delimiters
     user_file_reference = h.link("Include"),
     thinking_tag = h.link("Comment"),
-    thinking_block = h.themed({
-      dark = h.from("Comment"):blend("fg", "-#333333"),
-      light = h.from("Comment"):blend("fg", "+#333333"),
-    }),
+    thinking_block = h.from("Comment"):mute("fg", "#333333"),
     tool_icon = h.link("FlemmaToolUseTitle"),
     tool_name = h.link("Function"),
     tool_use_title = h.link("Function"),
@@ -105,24 +102,20 @@ require("flemma").setup({
     tool_result_denied   = h.link("DiagnosticError"), -- concise `(denied)` suffix
     tool_result_aborted  = h.link("DiagnosticError"), -- concise `(aborted)` suffix
     tool_preview = h.link("Comment"),
+    tool_label = h.attrs({ italic = true }),           -- Tool intent label in fold previews
     tool_detail = h.link("Comment"),                  -- Raw technical detail in structured tool previews
-    fence_label = h.themed({                          -- Fence code block language label
-      dark = h.from("Comment"):blend("fg", "-#303030"),
-      light = h.from("Comment"):blend("fg", "+#303030"),
-    }),
+    fence_label = h.from("Comment"):mute("fg", "#303030"),  -- Fence code block language label
     fence_bar = h.link("FlemmaFenceLabel"),            -- Fence code block delimiter bar
     fold_preview = h.link("Comment"),
     fold_meta = h.link("Comment"),
     busy = h.link("DiagnosticWarn"),                   -- Busy indicator icon in integrations (e.g., bufferline)
+    progress_accent = h.attrs({ bold = true }),        -- Bold accent for tool name in the progress bar
     role_name = h.attrs({ bold = true }),              -- GUI attributes for role names
   },
   ruler = {
     enabled = true,
     char = "─",
-    hl = h.themed({
-      dark = h.from("Comment"):blend("fg", "-#303030"),
-      light = h.from("Comment"):blend("fg", "+#303030"),
-    }),
+    hl = h.from("Comment"):mute("fg", "#303030"),
   },
   turns = {
     enabled = true,
@@ -131,18 +124,9 @@ require("flemma").setup({
   },
   line_highlights = {
     enabled = true,
-    frontmatter = h.themed({
-      dark = h.from("Normal"):blend("bg", "+#18111a"),
-      light = h.from("Normal"):blend("bg", "-#18111a"),
-    }),
-    system = h.themed({
-      dark = h.from("Normal"):blend("bg", "+#101112"),
-      light = h.from("Normal"):blend("bg", "-#101112"),
-    }),
-    user = h.themed({
-      dark = h.from("Normal"):blend("bg", "+#202122"),
-      light = h.from("Normal"):blend("bg", "-#202122"),
-    }),
+    frontmatter = h.from("Normal"):tint("bg", "#18111a"),
+    system = h.from("Normal"):tint("bg", "#101112"),
+    user = h.from("Normal"):tint("bg", "#202122"),
     assistant = h.link("Normal"),
   },
   ui = {
