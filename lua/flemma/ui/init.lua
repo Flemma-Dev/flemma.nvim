@@ -859,10 +859,14 @@ function M.update_approval_prompt(bufnr, doc)
 
   doc = doc or parser.get_parsed_document(bufnr)
 
-  local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+
+  local cursor_line = vim.api.nvim_win_get_cursor(winid)[1]
 
   local siblings = ast.build_tool_sibling_table(doc)
-  local winid = vim.fn.bufwinid(bufnr)
   local max_length = preview.get_text_area_width(winid)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
