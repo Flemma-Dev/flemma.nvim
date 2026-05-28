@@ -548,12 +548,19 @@ end
 local ContrastOp = setmetatable({}, { __index = HlOp })
 ContrastOp.__index = ContrastOp
 
+---@type table<string, string>
+local CONTRAST_COMPLEMENT = {
+  fg = "bg",
+  bg = "fg",
+}
+
 ---@param parent flemma.hl.HlOp
 ---@param attr string
 ---@param against flemma.hl.HlOp
 ---@param ratio number
 ---@return flemma.hl.ContrastOp
 function ContrastOp.new(parent, attr, against, ratio)
+  assert(CONTRAST_COMPLEMENT[attr], "contrast: unsupported attr '" .. tostring(attr) .. "', expected fg/bg/sp")
   return setmetatable({ _parent = parent, _attr = attr, _against = against, _ratio = ratio }, ContrastOp)
 end
 
@@ -575,12 +582,12 @@ function ContrastOp:get()
     return nil
   end
 
-  local bg_hex = against_attrs.bg --[[@as string|nil]]
-  if not bg_hex then
+  local ref_hex = against_attrs[CONTRAST_COMPLEMENT[self._attr]] --[[@as string|nil]]
+  if not ref_hex then
     return nil
   end
 
-  local adjusted = color.ensure_contrast(fg_hex, bg_hex, self._ratio)
+  local adjusted = color.ensure_contrast(fg_hex, ref_hex, self._ratio)
   return vim.tbl_extend("force", attrs, { [self._attr] = adjusted })
 end
 
