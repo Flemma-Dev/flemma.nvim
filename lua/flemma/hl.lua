@@ -6,6 +6,12 @@ local M = {}
 
 local color = require("flemma.utilities.color")
 
+---@param v number
+---@return number
+local function clamp_byte(v)
+  return math.max(0, math.min(255, v))
+end
+
 -- ---------------------------------------------------------------------------
 -- HlOp base class
 -- ---------------------------------------------------------------------------
@@ -92,7 +98,7 @@ end
 -- ---------------------------------------------------------------------------
 
 ---@class flemma.hl.NilOp : flemma.hl.HlOp
-local NilOp = setmetatable({}, { __index = HlOp })
+local NilOp = {}
 NilOp.__index = NilOp
 
 ---@return nil
@@ -125,17 +131,15 @@ function NilOp:mute(_attr, _hex)
   return NilOp
 end
 
----@param _key1 string
----@param _key2? string
+---@param ... string
 ---@return flemma.hl.NilOp
-function NilOp:omit(_key1, _key2)
+function NilOp:omit(...) -- luacheck: no unused args
   return NilOp
 end
 
----@param _key1 string
----@param _key2? string
+---@param ... string
 ---@return flemma.hl.NilOp
-function NilOp:pick(_key1, _key2)
+function NilOp:pick(...) -- luacheck: no unused args
   return NilOp
 end
 
@@ -419,13 +423,10 @@ function BlendOp:get()
     if not delta then
       return attrs
     end
-    local clamp = function(v)
-      return math.max(0, math.min(255, v))
-    end
     attrs[self._attr] = color.rgb_to_hex({
-      r = clamp(base_rgb.r + delta.r),
-      g = clamp(base_rgb.g + delta.g),
-      b = clamp(base_rgb.b + delta.b),
+      r = clamp_byte(base_rgb.r + delta.r),
+      g = clamp_byte(base_rgb.g + delta.g),
+      b = clamp_byte(base_rgb.b + delta.b),
     })
   else
     local mod_str = mod --[[@as string]]
