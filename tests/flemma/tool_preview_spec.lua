@@ -675,6 +675,129 @@ describe("format_tool_preview_multiline", function()
     assert.is_falsy(lines[2]:find("multiline_tool:"), "second line should not have prefix")
   end)
 
+  it("indents continuation lines by name_prefix width", function()
+    registry.register("bash", {
+      name = "bash",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("bash", {
+      body = "$ echo hello\necho world\necho done",
+    }, 80)
+    assert.are.equal(3, #lines)
+    local prefix_width = #"bash: "
+    assert.are.equal("bash: $ echo hello", lines[1])
+    assert.are.equal(string.rep(" ", prefix_width) .. "echo world", lines[2])
+    assert.are.equal(string.rep(" ", prefix_width) .. "echo done", lines[3])
+  end)
+
+  it("indents continuation lines proportional to tool name length", function()
+    registry.register("my_long_tool_name", {
+      name = "my_long_tool_name",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("my_long_tool_name", {
+      body = "first\nsecond",
+    }, 80)
+    assert.are.equal(2, #lines)
+    local prefix_width = #"my_long_tool_name: "
+    assert.are.equal("my_long_tool_name: first", lines[1])
+    assert.are.equal(string.rep(" ", prefix_width) .. "second", lines[2])
+  end)
+
+  it("indents the omission indicator line", function()
+    local content_lines = {}
+    for i = 1, 25 do
+      content_lines[i] = "line" .. i
+    end
+
+    registry.register("ind_tool", {
+      name = "ind_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("ind_tool", {}, 80)
+    assert.are.equal(13, #lines)
+    local prefix_width = #"ind_tool: "
+    local indent = string.rep(" ", prefix_width)
+    assert.is_truthy(lines[7]:find("more lines"), "middle line should be truncation indicator")
+    assert.are.equal(indent, lines[7]:sub(1, prefix_width), "omission indicator should be indented")
+  end)
+
+  it("truncates indented continuation lines to available width", function()
+    registry.register("tt", {
+      name = "tt",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local max_length = 20
+    local long_line = string.rep("x", 30)
+    local lines = ui_preview.format_tool_preview_multiline("tt", {
+      body = "short\n" .. long_line,
+    }, max_length)
+    assert.are.equal(2, #lines)
+    local prefix_width = #"tt: "
+    local line2_width = vim.fn.strwidth(lines[2])
+    assert.is_true(line2_width <= max_length, "indented continuation must fit in max_length")
+    assert.are.equal(string.rep(" ", prefix_width), lines[2]:sub(1, prefix_width), "should have indent")
+    assert.is_truthy(lines[2]:find("…"), "truncated content should have ellipsis")
+  end)
+
+  it("does not indent single-line output", function()
+    registry.register("single", {
+      name = "single",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = "one line only" }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("single", {}, 80)
+    assert.are.equal(1, #lines)
+    assert.are.equal("single: one line only", lines[1])
+  end)
+
+  it("indents tail lines in head/tail truncation", function()
+    local content_lines = {}
+    for i = 1, 20 do
+      content_lines[i] = "content_line_" .. i
+    end
+
+    registry.register("ht_tool", {
+      name = "ht_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("ht_tool", {}, 80)
+    local prefix_width = #"ht_tool: "
+    local indent = string.rep(" ", prefix_width)
+    for i = 2, #lines do
+      assert.are.equal(indent, lines[i]:sub(1, prefix_width), "line " .. i .. " should be indented")
+    end
+  end)
+
   it("caps at 13 lines with head/tail truncation", function()
     local content_lines = {}
     for i = 1, 25 do

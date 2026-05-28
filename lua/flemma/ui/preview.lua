@@ -285,21 +285,24 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
     return { str.truncate(line, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER) }, label
   end
 
+  local indent = string.rep(" ", str.strwidth(name_prefix))
+  local continuation_width = max_length - str.strwidth(indent)
+
   local result = {}
   result[1] = str.truncate(name_prefix .. raw_lines[1], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 
   if #raw_lines <= max_lines then
     for i = 2, #raw_lines do
-      result[i] = str.truncate(raw_lines[i], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+      result[i] = indent .. str.truncate(raw_lines[i], continuation_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
     end
   else
     for i = 2, head do
-      result[#result + 1] = str.truncate(raw_lines[i], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+      result[#result + 1] = indent .. str.truncate(raw_lines[i], continuation_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
     end
     local omitted = #raw_lines - head - tail
-    result[#result + 1] = "… " .. omitted .. " more lines …"
+    result[#result + 1] = indent .. "… " .. omitted .. " more lines …"
     for i = #raw_lines - tail + 1, #raw_lines do
-      result[#result + 1] = str.truncate(raw_lines[i], max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+      result[#result + 1] = indent .. str.truncate(raw_lines[i], continuation_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
     end
   end
 
