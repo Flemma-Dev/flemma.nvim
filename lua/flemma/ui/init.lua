@@ -34,6 +34,9 @@ local cursorline_ns = vim.api.nvim_create_namespace("flemma_cursorline")
 local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
+
+---@type table<integer, {key_display: string, label: string}[]>
+local keybind_hints_cache = {}
 local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
 ---@type string
@@ -892,24 +895,28 @@ function M.update_approval_prompt(bufnr, doc)
     return
   end
 
-  ---@type {key_display: string, label: string}[]
-  local keybind_hints = {}
-  local keymaps_config = config_facade.get(bufnr).keymaps
-  if keymaps_config.enabled then
-    local bindings = {
-      { key = keymaps_config.normal.tool_approve, label = "Approve" },
-      { key = keymaps_config.normal.tool_reject, label = "Reject" },
-      { key = keymaps_config.normal.tool_approve_all, label = "All" },
-    }
-    for _, b in ipairs(bindings) do
-      if type(b.key) == "string" and b.key ~= "" then
-        keybind_hints[#keybind_hints + 1] = {
-          key_display = b.key,
-          label = b.label,
-        }
+  if not keybind_hints_cache[bufnr] then
+    ---@type {key_display: string, label: string}[]
+    local hints = {}
+    local keymaps_config = config_facade.get(bufnr).keymaps
+    if keymaps_config.enabled then
+      local bindings = {
+        { key = keymaps_config.normal.tool_approve, label = "Approve" },
+        { key = keymaps_config.normal.tool_reject, label = "Reject" },
+        { key = keymaps_config.normal.tool_approve_all, label = "All" },
+      }
+      for _, b in ipairs(bindings) do
+        if type(b.key) == "string" and b.key ~= "" then
+          hints[#hints + 1] = {
+            key_display = b.key,
+            label = b.label,
+          }
+        end
       end
     end
+    keybind_hints_cache[bufnr] = hints
   end
+  local keybind_hints = keybind_hints_cache[bufnr]
 
   for _, entry in ipairs(pending_tools) do
     local seg = entry.seg
@@ -921,11 +928,7 @@ function M.update_approval_prompt(bufnr, doc)
 
       local sibling = siblings[seg.tool_use_id]
       local tool_use = sibling and sibling.use
-      local label = nil
-      if tool_use then
-        local _
-        _, label = preview.format_tool_preview_multiline(tool_use.name, tool_use.input, max_length)
-      end
+      local label = tool_use and preview.format_tool_label(tool_use.name, tool_use.input) or nil
 
       ---@type {[1]:string, [2]:string}[]
       local prompt_chunks = {}
@@ -1073,6 +1076,7 @@ function M.setup()
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
         activity.cleanup_progress(ev.buf, M.update_ui)
         indicators.clear_all_tool_indicators(ev.buf)
+        keybind_hints_cache[ev.buf] = nil
         -- state.cleanup_buffer_state handles executor.cleanup_buffer internally
         state.cleanup_buffer_state(ev.buf)
       end

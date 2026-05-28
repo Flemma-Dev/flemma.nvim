@@ -35,7 +35,7 @@ local DEFAULT_MULTILINE_HEAD = 6
 local DEFAULT_MULTILINE_TAIL = 6
 
 ---@type table<string, {text: string, text_hl: string}>
-local STATUS_DISPLAY = {
+M.STATUS_DISPLAY = {
   error = { text = "(error) ", text_hl = "FlemmaToolResultError" },
   rejected = { text = "(rejected) ", text_hl = "FlemmaToolResultRejected" },
   denied = { text = "(denied) ", text_hl = "FlemmaToolResultDenied" },
@@ -211,6 +211,19 @@ function M.format_tool_preview(tool_name, input, max_length)
 
   local preview = name_prefix .. body
   return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
+end
+
+---Extract the label for a tool call without computing the full multiline preview.
+---@param tool_name string
+---@param input table<string, any>
+---@return string|nil label
+function M.format_tool_label(tool_name, input)
+  local tool_def = tools.get(tool_name)
+  if tool_def and tool_def.format_preview then
+    local structured = normalize_preview(tool_def.format_preview(input, DEFAULT_MAX_LENGTH))
+    return structured.label
+  end
+  return type(input.label) == "string" and input.label or nil
 end
 
 ---Format a multi-line preview for a tool call (used by virt_line display).
@@ -527,7 +540,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
       local effective_status = doc and query.effective_tool_result_status(result_seg, doc) or result_seg.status
-      local result_status_info = effective_status and STATUS_DISPLAY[effective_status]
+      local result_status_info = effective_status and M.STATUS_DISPLAY[effective_status]
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
@@ -583,7 +596,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
     elseif entry.kind == "job_result" then
       local job_seg = entry.segment --[[@as flemma.ast.JobResultSegment]]
-      local job_status_info = job_seg.status and STATUS_DISPLAY[job_seg.status]
+      local job_status_info = job_seg.status and M.STATUS_DISPLAY[job_seg.status]
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
