@@ -859,7 +859,8 @@ function M.add_tool_previews(bufnr, doc)
     end
   end
 
-  M.update_approval_prompt(bufnr, doc)
+  -- Reuse the sibling table already built above instead of rebuilding it.
+  M.update_approval_prompt(bufnr, doc, siblings)
 end
 
 ---Render the approval prompt line for each pending tool_result.
@@ -868,7 +869,8 @@ end
 ---that tool gets full keybind hints; others get a brief "awaiting approval".
 ---@param bufnr integer
 ---@param doc? flemma.ast.DocumentNode
-function M.update_approval_prompt(bufnr, doc)
+---@param siblings? table<string, flemma.ast.ToolSibling> Prebuilt sibling table; built from doc when omitted (lets add_tool_previews share its table)
+function M.update_approval_prompt(bufnr, doc, siblings)
   vim.api.nvim_buf_clear_namespace(bufnr, tool_approval_ns, 0, -1)
 
   local approval_config = config_facade.get(bufnr).ui.approval
@@ -885,7 +887,7 @@ function M.update_approval_prompt(bufnr, doc)
 
   local cursor_line = vim.api.nvim_win_get_cursor(winid)[1]
 
-  local siblings = ast.build_tool_sibling_table(doc)
+  siblings = siblings or ast.build_tool_sibling_table(doc)
   local max_length = preview.get_text_area_width(winid)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
