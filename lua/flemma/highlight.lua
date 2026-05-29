@@ -106,6 +106,21 @@ local function setup_line_highlights()
   end
 end
 
+---Build a bar base op from a comma-separated highlight group chain.
+---Each named group contributes its complete fg+bg (strict pick); the first
+---group that resolves both wins. Falls back to StatusLine's fg+bg when none
+---of the chain entries resolve. Used for the usage and progress bars.
+---@param chain string Comma-separated highlight group names
+---@return flemma.hl.HlOp
+local function build_bar_base(chain)
+  local ops = {}
+  for name in (chain or ""):gmatch("[^,]+") do
+    table.insert(ops, h.from(vim.trim(name)):pick("fg", "bg", { strict = true }))
+  end
+  table.insert(ops, h.from("StatusLine"):pick("fg", "bg"))
+  return h.coalesce(unpack(ops))
+end
+
 ---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
   local syntax_config = config_facade.get()
@@ -228,12 +243,7 @@ M.apply_syntax = function()
   h.link("FlemmaRuler"):set("FlemmaTurn")
 
   -- Usage bar highlight groups
-  local usage_ops = {}
-  for name in syntax_config.ui.usage.highlight:gmatch("[^,]+") do
-    table.insert(usage_ops, h.from(vim.trim(name)):pick("fg", "bg", { strict = true }))
-  end
-  table.insert(usage_ops, h.from("StatusLine"):pick("fg", "bg"))
-  local bar_base = h.coalesce(unpack(usage_ops))
+  local bar_base = build_bar_base(syntax_config.ui.usage.highlight)
 
   bar_base:set("FlemmaUsageBar")
   bar_base:mute("fg", "#222222"):set("FlemmaUsageBarSecondary")
@@ -247,12 +257,7 @@ M.apply_syntax = function()
 
   -- Progress bar highlight groups
   local progress_config = syntax_config.ui and syntax_config.ui.progress or { highlight = "StatusLine" }
-  local progress_ops = {}
-  for name in (progress_config.highlight or ""):gmatch("[^,]+") do
-    table.insert(progress_ops, h.from(vim.trim(name)):pick("fg", "bg", { strict = true }))
-  end
-  table.insert(progress_ops, h.from("StatusLine"):pick("fg", "bg"))
-  local progress_base = h.coalesce(unpack(progress_ops))
+  local progress_base = build_bar_base(progress_config.highlight)
   progress_base:set("FlemmaProgressBar")
   progress_base:merge(syntax_config.highlights.progress_accent):set("FlemmaProgressBarAccent")
 
