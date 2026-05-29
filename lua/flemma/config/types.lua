@@ -260,6 +260,8 @@
 
 ---@class flemma.config.UiApproval
 ---@field enabled boolean
+---@field fade integer
+---@field layout "inline"|"block"
 ---@field preview_lines { head: integer, tail: integer }|integer
 
 ---@class flemma.config.UiJobs

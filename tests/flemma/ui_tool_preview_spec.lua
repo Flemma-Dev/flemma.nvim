@@ -276,7 +276,7 @@ describe("UI Tool Previews", function()
         ""
       )
       assert.is_truthy(text:find("⏸"), "should contain ┕ connector")
-      assert.is_truthy(text:find("awaiting approval"), "should show hint text")
+      assert.is_truthy(text:find("Awaiting approval…"), "should show hint text")
       assert.is_falsy(text:find("<M%-a>"), "should not show keybinds")
     end)
 
@@ -385,7 +385,7 @@ describe("UI Tool Previews", function()
         ""
       )
       assert.is_truthy(second_text:find("2/2"), "second tool should show 2/2")
-      assert.is_truthy(second_text:find("awaiting approval"), "unfocused tool should show hint")
+      assert.is_truthy(second_text:find("Awaiting approval…"), "unfocused tool should show hint")
     end)
 
     it("counts all non-executed tools in queue counter, not just pending", function()
@@ -537,18 +537,18 @@ describe("UI Tool Previews", function()
         )
       end
 
-      -- Focused tool: "— checking disk space  ⏸ 1/2 · <M-a> ..."
+      -- Focused tool: "꜖ checking disk space  ⏸ 1/2 · <M-a> ..."
       local a = join(marks[1])
-      assert.is_truthy(a:find("^— checking disk space"), "label must lead: " .. a)
+      assert.is_truthy(a:find("^꜖ checking disk space"), "label must lead: " .. a)
       assert.is_true((a:find("checking disk space")) < (a:find("⏸")), "label must precede the ⏸ indicator: " .. a)
       assert.is_truthy(a:find("⏸ 1/2 · "), "indicator + counter follow the label: " .. a)
       assert.is_truthy(a:find("<M%-a>"), "focused tool shows keybinds after the indicator: " .. a)
 
-      -- Unfocused tool: "— second task  ⏸ 2/2 · awaiting approval"
+      -- Unfocused tool: "꜖ second task  ⏸ 2/2 · Awaiting approval…"
       local b = join(marks[2])
-      assert.is_truthy(b:find("^— second task"), "label must lead: " .. b)
+      assert.is_truthy(b:find("^꜖ second task"), "label must lead: " .. b)
       assert.is_true((b:find("second task")) < (b:find("⏸")), "label must precede the ⏸ indicator: " .. b)
-      assert.is_truthy(b:find("⏸ 2/2 · awaiting approval"), "awaiting hint follows the indicator: " .. b)
+      assert.is_truthy(b:find("⏸ 2/2 · Awaiting approval…"), "awaiting hint follows the indicator: " .. b)
     end)
   end)
 end)

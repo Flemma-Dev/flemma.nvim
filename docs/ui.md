@@ -39,7 +39,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                   |
 | `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)         |
 | `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)            |
-| `highlights.approval_line`        | Full-line background for tool approval prompts (`FlemmaApprovalLine`)     |
+| `highlights.approval_line`        | Background for tool approval prompts (`FlemmaApprovalLine`)               |
 | `highlights.approval_indicator`   | Status indicator on approval prompts (`FlemmaApprovalIndicator`)          |
 | `highlights.approval_label`       | Tool name label on approval prompts (`FlemmaApprovalLabel`)               |
 | `highlights.approval_key`         | Keybinding hints on approval prompts (`FlemmaApprovalKey`)                |
@@ -73,8 +73,10 @@ Override any group to style job results independently from tool results.
 
 Most theme-aware highlights use `:tint()` or `:mute()` — theme-aware blends that automatically flip direction based on `vim.o.background`:
 
-- **`:tint(attr, hex)`** — offset away from the theme's background. Adds in dark mode (toward white), subtracts in light mode (toward black). Use for backgrounds that need to stand out from the base.
-- **`:mute(attr, hex)`** — offset toward the theme's background. Subtracts in dark mode (toward black), adds in light mode (toward white). Use for foregrounds that need to be more subdued.
+- **`:tint(attr, mod, ratio?)`** — offset away from the theme's background. Adds in dark mode (toward white), subtracts in light mode (toward black). Use for backgrounds that need to stand out from the base.
+- **`:mute(attr, mod, ratio?)`** — offset toward the theme's background. Subtracts in dark mode (toward black), adds in light mode (toward white). Use for foregrounds that need to be more subdued.
+
+Both accept a hex string or an HlOp as the `mod` colour source. When `ratio` is provided (0.0–1.0), the colour is scaled by that factor before blending — useful for borrowing a fraction of another group's colour.
 
 ```lua
 local h = require("flemma.hl")
@@ -84,6 +86,9 @@ ruler = { hl = h.from("Comment"):mute("fg", "#303030") }
 
 -- Tint Normal's bg (lighter in dark mode, darker in light mode)
 line_highlights = { user = h.from("Normal"):tint("bg", "#202122") }
+
+-- Tint bg using 10% of DiagnosticWarn's fg colour
+highlights = { approval_line = h.from("Normal"):tint("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10) }
 ```
 
 For cases requiring truly different ops per theme (not just flipped blend direction), `h.themed()` is available:
@@ -113,13 +118,16 @@ Colours are derived from existing highlight groups using chainable operations. O
 
 **Chain operations** — transform the result of the constructor or a previous chain step:
 
-**`:tint(attr, hex)` / `:mute(attr, hex)`** — theme-aware blends described in [Theme-aware values](#theme-aware-values) above.
+**`:tint(attr, mod, ratio?)` / `:mute(attr, mod, ratio?)`** — theme-aware blends described in [Theme-aware values](#theme-aware-values) above.
 
-**`:blend(attr, offset)`** — add or subtract a hex value with an explicit direction. `+` brightens, `-` darkens. Each RGB channel is clamped to 0-255. Prefer `:tint()` / `:mute()` when the only difference between dark and light mode is the blend direction:
+**`:blend(attr, mod, ratio?)`** — add or subtract a colour with an explicit direction. When `mod` is a prefixed hex string, `+` brightens and `-` darkens. When `mod` is an HlOp and `ratio` is provided, the sign of the ratio controls direction and its magnitude scales the colour. Each RGB channel is clamped to 0-255. Prefer `:tint()` / `:mute()` when the only difference between dark and light mode is the blend direction:
 
 ```lua
 h.from("Normal"):blend("bg", "+#101010")
 h.from("Normal"):blend("bg", "+#101010"):blend("fg", "-#202020")
+
+-- Blend 10% of DiagnosticWarn's fg into the bg (positive = add)
+h.from("Normal"):blend("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10)
 ```
 
 **`:omit(attr, ...)`** — strip attributes from the result. Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.):
@@ -150,8 +158,8 @@ h.from("Comment"):style({ italic = true, bold = true })
 ```lua
 -- Try FlemmaLineUser first; if it has no bg, fall back to Normal
 h.coalesce(
-  h.from("FlemmaLineUser"):tint("bg", "#101112"),
-  h.from("Normal"):tint("bg", "#101112")
+  h.from("FlemmaLineUser"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1),
+  h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
 )
 ```
 
@@ -210,6 +218,30 @@ Three visual states indicate turn progress:
 - **Streaming** (`╭┊└` moving) — the assistant is actively generating a response.
 
 When `padding.right > 0`, the top arc (`╭`) connects to the ruler for a seamless visual join.
+
+## Approval prompt
+
+When a tool call requires manual approval, Flemma renders an inline prompt below the tool result block showing the tool label, a queue counter, and keybind hints. The prompt appears as a virtual line anchored to the tool result's opening fence.
+
+```lua
+ui = {
+  approval = {
+    enabled = true,       -- Show approval prompts (default: true)
+    layout = "inline",    -- "inline" or "block"
+    fade = 10,            -- Gradient steps at trailing edge (0 = off)
+    preview_lines = { head = 6, tail = 6 },
+  },
+}
+```
+
+### Layout modes
+
+- **`"inline"`** (default) — the prompt spans only the content width plus a 1-character pad, then fades into the line highlight (or Normal) background over `fade` steps using an ease-out cubic curve.
+- **`"block"`** — the prompt fills the entire line with `FlemmaApprovalLine` background, matching the full-width style of rulers and line highlights.
+
+### Fade gradient
+
+When `fade > 0` and `layout = "inline"`, the trailing edge transitions smoothly from the approval line background to the surrounding line highlight (or Normal) background. The gradient uses an ease-out cubic easing for a natural falloff. Set `fade = 0` to disable the gradient and show a hard edge.
 
 ## Spinner behaviour
 

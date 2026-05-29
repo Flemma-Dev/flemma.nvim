@@ -4,6 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local color = require("flemma.utilities.color")
 local h = require("flemma.hl")
 local preprocessor_syntax = require("flemma.preprocessor.syntax")
 local roles = require("flemma.utilities.roles")
@@ -227,6 +228,30 @@ M.apply_syntax = function()
   }
   for _, entry in ipairs(approval_sub_groups) do
     entry[2]:merge(approval_bg_op):set(entry[1])
+  end
+
+  -- Approval fade gradient: interpolate from approval bg → line/Normal bg
+  local fade_steps = syntax_config.ui and syntax_config.ui.approval and syntax_config.ui.approval.fade or 0
+  if fade_steps > 0 then
+    local target_bg_op = syntax_config.line_highlights
+        and syntax_config.line_highlights.enabled
+        and h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg"))
+      or h.default("bg")
+    local from_attrs = h.coalesce(approval_bg_op, h.default("bg")):get()
+    local to_attrs = target_bg_op:get()
+    local from_rgb = from_attrs and color.hex_to_rgb(from_attrs.bg --[[@as string|nil]])
+    local to_rgb = to_attrs and color.hex_to_rgb(to_attrs.bg --[[@as string|nil]])
+    if from_rgb and to_rgb then
+      for i = 1, fade_steps do
+        local t = 1 - (1 - i / fade_steps) ^ 3
+        local step_hex = color.rgb_to_hex({
+          r = math.floor(from_rgb.r + (to_rgb.r - from_rgb.r) * t + 0.5),
+          g = math.floor(from_rgb.g + (to_rgb.g - from_rgb.g) * t + 0.5),
+          b = math.floor(from_rgb.b + (to_rgb.b - from_rgb.b) * t + 0.5),
+        })
+        vim.api.nvim_set_hl(0, string.format("FlemmaApprovalFade%d", i), { bg = step_hex, default = true })
+      end
+    end
   end
 
   -- Tool indicator icon highlights

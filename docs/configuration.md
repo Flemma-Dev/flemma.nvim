@@ -108,9 +108,9 @@ require("flemma").setup({
     fence_bar = h.link("FlemmaFenceLabel"),           -- Fence code block delimiter bar
     fold_preview = h.link("Comment"),
     fold_meta = h.link("Comment"),
-    approval_line = h.coalesce(                        -- Full-line background for tool approval prompts
-      h.from("FlemmaLineUser"):tint("bg", "#101112"),
-      h.from("Normal"):tint("bg", "#101112")
+    approval_line = h.coalesce(                        -- Background for tool approval prompts
+      h.from("FlemmaLineUser"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1),
+      h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
     ),
     approval_indicator = h.from("Folded"):omit("bg"), -- Status indicator on approval prompts
     approval_label = h.from("Folded"):omit("bg"),     -- Tool name label on approval prompts
@@ -157,6 +157,12 @@ require("flemma").setup({
     },
     statusline = {
       format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
+    },
+    approval = {
+      enabled = true,                          -- Show inline approval prompts on pending tool results
+      layout = "inline",                       -- "inline" (content-width + fade) or "block" (full line)
+      fade = 10,                               -- Gradient fade steps at trailing edge (0 = off)
+      preview_lines = { head = 6, tail = 6 },  -- Lines of tool input shown in the preview
     },
   },
   editing = {

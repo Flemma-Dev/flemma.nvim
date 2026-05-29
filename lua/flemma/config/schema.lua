@@ -311,6 +311,8 @@ return s.object({
     }),
     approval = s.object({
       enabled = s.boolean(true),
+      layout = s.enum({ "inline", "block" }, "inline"),
+      fade = s.integer(10),
       preview_lines = s.union(
         s.object({
           head = s.integer(6),
