@@ -2864,9 +2864,9 @@ describe("UI Folding", function()
       folding.setup_folding()
       vim.wo.foldlevel = 99
 
-      -- Baseline: tool_use and tool_result are NOT terminal yet (job pending)
+      -- Baseline: tool_use folds (matching result exists), tool_result does NOT (job pending)
       folding.fold_completed_blocks(bufnr)
-      assert.are.equal(-1, vim.fn.foldclosed(4), "Sanity: tool_use should not fold while job is pending")
+      assert.are.equal(4, vim.fn.foldclosed(4), "tool_use should fold when a matching result exists")
       assert.are.equal(-1, vim.fn.foldclosed(11), "Sanity: tool_result should not fold while job is pending")
 
       -- Simulate job completion: inject a job_result block before the user's @You

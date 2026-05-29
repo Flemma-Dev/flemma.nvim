@@ -99,10 +99,12 @@ local function compute_fold_end(seg_index, msg, base_end_line, completed, comple
   return base_end_line
 end
 
----Build a tool_use_id -> terminal boolean lookup using the sibling table.
+---Build a tool_use_id -> has-result boolean lookup using the sibling table.
 ---Also builds the completed_jobs set for background job checks.
+---A tool_use is foldable whenever a matching tool_result exists, regardless
+---of the result's status — the tool_result is the interaction surface.
 ---@param doc flemma.ast.DocumentNode
----@return table<string, boolean> completed Tool-use-id -> terminal
+---@return table<string, boolean> completed Tool-use-id -> has result
 ---@return table<string, boolean> completed_jobs Job-id -> true
 local function build_completion_map(doc)
   local completed_jobs = build_completed_jobs(doc)
@@ -110,13 +112,13 @@ local function build_completion_map(doc)
   local completed = {}
   for tool_id, sibling in pairs(siblings) do
     if sibling.result then
-      completed[tool_id] = is_tool_result_terminal(sibling.result, completed_jobs)
+      completed[tool_id] = true
     end
   end
   return completed, completed_jobs
 end
 
----Populate fold map entries for completed tool_use and terminal tool_result blocks.
+---Populate fold map entries for tool_use blocks with a matching result and terminal tool_result blocks.
 ---@param doc flemma.ast.DocumentNode
 ---@param fold_map table<integer, string>
 function M.populate(doc, fold_map)
@@ -159,7 +161,7 @@ function M.populate(doc, fold_map)
 end
 
 ---Get closeable ranges for auto-fold.
----Returns all completed tool_use blocks and terminal tool_result blocks.
+---Returns all tool_use blocks with a matching result and terminal tool_result blocks.
 ---@param doc flemma.ast.DocumentNode
 ---@return flemma.ui.folding.CloseableRange[]
 function M.get_closeable_ranges(doc)
