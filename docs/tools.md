@@ -333,15 +333,15 @@ Newlines in either field are collapsed to the `eol` character from `listchars` (
 
 Tool previews use three highlight groups:
 
-| Group               | Default                     | Applies to                                                          |
-| ------------------- | --------------------------- | ------------------------------------------------------------------- |
-| `FlemmaToolPreview` | `Comment`                   | The whole virt-line placeholder preview (single combined highlight) |
-| `FlemmaToolLabel`   | `italic` (`default = true`) | The label chunk inside folded message previews                      |
-| `FlemmaToolDetail`  | `Comment`                   | The detail chunk inside folded message previews                     |
+| Group               | Default                         | Applies to                                                                     |
+| ------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
+| `FlemmaToolPreview` | `Comment`                       | The whole virt-line placeholder preview (single combined highlight)            |
+| `FlemmaToolLabel`   | `tool_preview` color + `italic` | The label chunk in folded message previews and the approved tool-result footer |
+| `FlemmaToolDetail`  | `Comment`                       | The detail chunk inside folded message previews                                |
 
-The virt-line placeholder preview is rendered as a single string with `FlemmaToolPreview` blended over the role's line background — so label and detail share one highlight and there is no italic distinction in that view. The label/detail split (italic + dimmer) is only visible in folded message previews, where each chunk gets its own highlight.
+The virt-line placeholder preview is rendered as a single string with `FlemmaToolPreview` blended over the role's line background — so label and detail share one highlight and there is no italic distinction in that view. The label/detail split (the label adds italic over the same muted color) is only visible in folded message previews, where each chunk gets its own highlight.
 
-Customise `FlemmaToolDetail` via `highlights.tool_detail` in your config. `FlemmaToolLabel` applies italic styling unconditionally and is not configurable through the highlights table. See [docs/ui.md](ui.md#highlights-and-styles) for details.
+Customise `FlemmaToolDetail` via `highlights.tool_detail` in your config. `FlemmaToolLabel` is the preview color (`highlights.tool_preview`) with the `highlights.tool_label` accent merged on top — italic by default; set a `fg` in `highlights.tool_label` to recolor it. See [docs/ui.md](ui.md#highlights-and-styles) for details.
 
 ---
 

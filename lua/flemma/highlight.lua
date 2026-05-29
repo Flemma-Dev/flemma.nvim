@@ -203,8 +203,15 @@ M.apply_syntax = function()
   syntax_config.highlights.fold_preview:set("FlemmaFoldPreview")
   syntax_config.highlights.fold_meta:set("FlemmaFoldMeta")
 
-  -- Tool label: style for human-readable tool intent in folds
-  syntax_config.highlights.tool_label:set("FlemmaToolLabel")
+  -- Tool label: the human-readable tool intent shown in folds and as the
+  -- approved tool_result footer. tool_label carries only accent attrs (italic by
+  -- default), exactly like progress_accent above — so it must be merged onto the
+  -- preview base rather than `:set` standalone. A standalone italic-only group
+  -- has no fg and inherits the bright Normal fg, which jars against the muted
+  -- (Comment) preview lines it sits beside. "force" lets a user-supplied
+  -- tool_label fg override the preview color, while the italic-only default
+  -- simply adds italic to the preview color.
+  syntax_config.highlights.tool_preview:merge(syntax_config.highlights.tool_label, "force"):set("FlemmaToolLabel")
 
   -- Tool detail
   syntax_config.highlights.tool_detail:set("FlemmaToolDetail")

@@ -165,6 +165,37 @@ describe("Highlight", function()
       assert.is_truthy(hl.link or hl.fg, "FlemmaToolPreview should still be defined")
     end)
 
+    it("merges FlemmaToolLabel from the preview color plus italic (not bright Normal)", function()
+      -- Distinct Comment vs Normal so we can prove the label takes the muted
+      -- preview/Comment fg, not the bright Normal it used to inherit when it was
+      -- `:set` as an italic-only group with no fg of its own.
+      local saved_comment = vim.api.nvim_get_hl(0, { name = "Comment" })
+      local saved_normal = vim.api.nvim_get_hl(0, { name = "Normal" })
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x888888 })
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xeeeeee, bg = 0x1a1a1a })
+      -- FlemmaToolLabel persists across tests and apply_syntax `:set`s it with
+      -- default = true, so an already-defined group would shadow our custom
+      -- Comment. Clear it (via :highlight clear, per the after_each note) so
+      -- apply_syntax redefines it fresh.
+      vim.cmd("silent! highlight clear FlemmaToolLabel")
+
+      setup_and_apply()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolLabel", link = false })
+
+      -- Restore/clear before asserting so a failure can't leak test state.
+      vim.api.nvim_set_hl(0, "Comment", saved_comment)
+      vim.api.nvim_set_hl(0, "Normal", saved_normal)
+      vim.cmd("silent! highlight clear FlemmaToolLabel")
+
+      assert.is_true(hl.italic, "FlemmaToolLabel should keep the label's italic accent")
+      assert.are.equal(
+        0x888888,
+        hl.fg,
+        "FlemmaToolLabel fg should be merged from the preview color (Comment), not the bright Normal fallback"
+      )
+    end)
+
     it("should accept renamed config key tool_use_title", function()
       local h = require("flemma.hl")
       flemma.setup({
