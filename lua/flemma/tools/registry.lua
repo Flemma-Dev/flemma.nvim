@@ -38,6 +38,10 @@ local M = {}
 ---@class flemma.StructuredToolPreview
 ---@field label? string  Human-readable intent — shown italic, truncated last
 ---@field detail? string|string[] Raw technical summary — shown dimmer, truncated first. Tables are joined with double-space upstream.
+---@field highlight? flemma.StructuredToolPreview.Highlight
+
+---@class flemma.StructuredToolPreview.Highlight
+---@field lang string TreeSitter language name (e.g., "bash", "lua", "python")
 
 ---@alias flemma.tools.ToolPreview string | flemma.StructuredToolPreview
 

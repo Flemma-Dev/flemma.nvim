@@ -8,6 +8,7 @@ local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local preview = require("flemma.ui.preview")
+local highlighter = require("flemma.ui.highlighter")
 local folding = require("flemma.ui.folding")
 local roles = require("flemma.utilities.roles")
 local bridge = require("flemma.bridge")
@@ -34,6 +35,7 @@ local cursorline_ns = vim.api.nvim_create_namespace("flemma_cursorline")
 local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
+local BASE_TOOL_PREVIEW_HL = "FlemmaToolPreview"
 
 -- Approval-prompt keybind hints, keyed by bufnr. Built lazily on first render
 -- from the buffer's keymaps config and reused across cursor moves. It is only
@@ -791,6 +793,45 @@ local function tool_result_anchor_row(seg)
   return opening_fence_line - 1 -- 0-indexed row for the extmark anchor
 end
 
+---Build virt_lines from highlighted chunk arrays with prefix, truncation, and trimming.
+---@param lines_chunks {[1]: string, [2]: string}[][] Content-only highlighted chunks
+---@param ctx flemma.ui.HighlightContext Highlight context with prefix/indent/lang
+---@param role_hl string Role line highlight group
+---@param max_length integer Text area width
+---@param head integer Head line budget
+---@param tail integer Tail line budget
+---@return {[1]:string, [2]:string|string[]}[][] virt_lines
+local function build_highlighted_virt_lines(lines_chunks, ctx, role_hl, max_length, head, tail)
+  ---@type {[1]: string, [2]: string|string[]}[][]
+  local prefixed = {}
+  for i, content_chunks in ipairs(lines_chunks) do
+    local prefix = i == 1 and ctx.name_prefix or ctx.indent
+    local prefix_width = str.strwidth(prefix)
+    local content_budget = max_length - prefix_width
+
+    local truncated = preview.truncate_chunks(content_chunks, content_budget)
+
+    ---@type {[1]: string, [2]: string|string[]}[]
+    local line_chunks = { { prefix, { BASE_TOOL_PREVIEW_HL, role_hl } } }
+    for _, chunk in ipairs(truncated) do
+      line_chunks[#line_chunks + 1] = { chunk[1], { chunk[2], role_hl } }
+    end
+
+    local used = prefix_width
+    for _, chunk in ipairs(truncated) do
+      used = used + str.strwidth(chunk[1])
+    end
+    local pad = math.max(0, max_length - used)
+    if pad > 0 then
+      line_chunks[#line_chunks + 1] = { string.rep(" ", pad), role_hl }
+    end
+
+    prefixed[i] = line_chunks
+  end
+
+  return preview.trim_chunks(prefixed, head, tail)
+end
+
 ---Add virtual line previews inside empty tool_result fences that carry a
 ---lifecycle (status) suffix in the header. Shows a compact summary of the
 ---tool call (name + input) so users can see what they're approving/rejecting
@@ -825,19 +866,46 @@ function M.add_tool_previews(bufnr, doc)
 
             if line_idx >= 0 and line_idx < line_count then
               local role_hl = roles.highlight_group("FlemmaLine", msg.role)
-              local preview_lines, label =
+              local preview_lines, label, highlight_context =
                 preview.format_tool_preview_multiline(tool_use.name, tool_use.input, max_length, preview_opts)
 
               ---@type {[1]:string, [2]:string|string[]}[][]
-              local virt_lines = {}
-              for _, line_text in ipairs(preview_lines) do
-                local pad_width = math.max(0, max_length - str.strwidth(line_text))
-                ---@type {[1]:string, [2]:string|string[]}[]
-                local chunks = { { line_text, { "FlemmaToolPreview", role_hl } } }
-                if pad_width > 0 then
-                  table.insert(chunks, { string.rep(" ", pad_width), role_hl })
+              local virt_lines
+
+              local used_highlighted = false
+              if highlight_context then
+                local in_sync_scope = true
+                highlighter.highlight(highlight_context.text, highlight_context.lang, function(lines_chunks)
+                  if lines_chunks then
+                    if in_sync_scope then
+                      virt_lines = build_highlighted_virt_lines(
+                        lines_chunks,
+                        highlight_context,
+                        role_hl,
+                        max_length,
+                        preview_opts.head or 6,
+                        preview_opts.tail or 6
+                      )
+                      used_highlighted = true
+                    else
+                      bridge.update_ui(bufnr)
+                    end
+                  end
+                end)
+                in_sync_scope = false
+              end
+
+              if not used_highlighted then
+                virt_lines = {}
+                for _, line_text in ipairs(preview_lines) do
+                  local pad_width = math.max(0, max_length - str.strwidth(line_text))
+                  ---@type {[1]:string, [2]:string|string[]}[]
+                  local chunks = { { line_text, { BASE_TOOL_PREVIEW_HL, role_hl } } }
+                  if pad_width > 0 then
+                    table.insert(chunks, { string.rep(" ", pad_width), role_hl })
+                  end
+                  virt_lines[#virt_lines + 1] = chunks
                 end
-                virt_lines[#virt_lines + 1] = chunks
               end
 
               if seg.status ~= "pending" and label and #preview_lines > 1 then

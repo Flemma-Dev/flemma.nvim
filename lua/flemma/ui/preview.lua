@@ -14,7 +14,7 @@ local tools = require("flemma.tools")
 ---with double-space so callers always see detail as string|nil.
 ---Label is NEVER auto-promoted from input.label here — callers handle that separately.
 ---@param raw flemma.tools.ToolPreview
----@return { label?: string, detail?: string }
+---@return flemma.StructuredToolPreview
 local function normalize_preview(raw)
   if type(raw) == "string" then
     return { detail = raw }
@@ -33,6 +33,98 @@ local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
 local LABEL_DETAIL_SEPARATOR = " — "
 local DEFAULT_MULTILINE_HEAD = 6
 local DEFAULT_MULTILINE_TAIL = 6
+local BASE_HL_GROUP = "FlemmaToolPreview"
+
+---@class flemma.ui.HighlightContext
+---@field text string The raw multi-line detail text (before prefix/indent/truncation)
+---@field lang string The treesitter language name
+---@field name_prefix string The tool name prefix (e.g., "bash: ") for line 1
+---@field indent string The continuation indent (whitespace matching prefix width) for lines 2+
+
+---Truncate a chunk array to fit within a display-width budget.
+---Walks chunks until cumulative width exceeds max_width, splits the current
+---chunk at the byte boundary, and appends the truncation marker.
+---@param chunks {[1]: string, [2]: string}[] Array of {text, hl_group} tuples
+---@param max_width integer Maximum display width for the result (including marker)
+---@param marker? string Truncation marker (default: CONTENT_PREVIEW_TRUNCATION_MARKER)
+---@return {[1]: string, [2]: string}[]
+function M.truncate_chunks(chunks, max_width, marker)
+  if max_width <= 0 then
+    return {}
+  end
+  marker = marker or CONTENT_PREVIEW_TRUNCATION_MARKER
+  local marker_width = str.strwidth(marker)
+
+  local total_width = 0
+  for _, chunk in ipairs(chunks) do
+    total_width = total_width + str.strwidth(chunk[1])
+  end
+  if total_width <= max_width then
+    return chunks
+  end
+
+  local target = max_width - marker_width
+  if target <= 0 then
+    return { { marker, chunks[1] and chunks[1][2] or BASE_HL_GROUP } }
+  end
+
+  local result = {}
+  local used = 0
+
+  for _, chunk in ipairs(chunks) do
+    local chunk_width = str.strwidth(chunk[1])
+    if used + chunk_width <= target then
+      result[#result + 1] = chunk
+      used = used + chunk_width
+    else
+      local remaining = target - used
+      if remaining > 0 then
+        local truncated = str.truncate(chunk[1], remaining, "")
+        if truncated ~= "" then
+          result[#result + 1] = { truncated, chunk[2] }
+        end
+      end
+      result[#result + 1] = { marker, chunk[2] }
+      return result
+    end
+  end
+
+  return result
+end
+
+---Trim chunk arrays by logical-line budget (head + tail).
+---When the line count exceeds head + tail, keeps the first `head` lines
+---and the last `tail` lines with a truncation indicator in between.
+---@param lines_chunks {[1]: string, [2]: string|string[]}[][] Array of per-line chunk arrays
+---@param head integer Head line count
+---@param tail integer Tail line count
+---@return {[1]: string, [2]: string|string[]}[][] Trimmed chunk arrays
+function M.trim_chunks(lines_chunks, head, tail)
+  local line_count = #lines_chunks
+  if line_count <= head + tail then
+    return lines_chunks
+  end
+
+  local result = {}
+  for i = 1, head do
+    result[#result + 1] = lines_chunks[i]
+  end
+
+  local omitted = line_count - head - tail
+  local indicator_text
+  if omitted == 1 then
+    indicator_text = "… 1 more line …"
+  else
+    indicator_text = "… " .. omitted .. " more lines …"
+  end
+  result[#result + 1] = { { indicator_text, BASE_HL_GROUP } }
+
+  for i = line_count - tail + 1, line_count do
+    result[#result + 1] = lines_chunks[i]
+  end
+
+  return result
+end
 
 ---@type table<string, {text: string, text_hl: string}>
 M.STATUS_DISPLAY = {
@@ -186,6 +278,7 @@ end
 ---@param opts? { head?: integer, tail?: integer }
 ---@return string[] lines
 ---@return string|nil label
+---@return flemma.ui.HighlightContext|nil context
 function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
   local head = (opts and opts.head) or DEFAULT_MULTILINE_HEAD
   local tail = (opts and opts.tail) or DEFAULT_MULTILINE_TAIL
@@ -201,7 +294,7 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
   else
     local keys = vim.tbl_keys(input)
     if #keys == 0 then
-      return { tool_name }, nil
+      return { tool_name }, nil, nil
     end
     local available = max_length - str.strwidth(name_prefix)
     structured = {
@@ -213,18 +306,29 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
   local label = structured.label
   local detail = structured.detail --[[@as string|nil]]
 
+  ---@type flemma.ui.HighlightContext|nil
+  local highlight_context = nil
+  if structured.highlight and structured.highlight.lang and detail and detail ~= "" then
+    highlight_context = {
+      text = detail,
+      lang = structured.highlight.lang,
+      name_prefix = name_prefix,
+      indent = string.rep(" ", str.strwidth(name_prefix)),
+    }
+  end
+
   if not detail or detail == "" then
     if label then
-      return { name_prefix .. label }, nil
+      return { name_prefix .. label }, nil, nil
     end
-    return { tool_name }, nil
+    return { tool_name }, nil, nil
   end
 
   local raw_lines = vim.split(detail, "\n", { plain = true })
 
   if #raw_lines == 1 then
     local line = name_prefix .. raw_lines[1]
-    return { str.truncate(line, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER) }, label
+    return { str.truncate(line, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER) }, label, highlight_context
   end
 
   local indent = string.rep(" ", str.strwidth(name_prefix))
@@ -248,7 +352,7 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
     end
   end
 
-  return result, label
+  return result, label, highlight_context
 end
 
 local SEGMENT_SEPARATOR = " | "
@@ -328,8 +432,9 @@ function M.get_tool_use_body(tool_name, input, available)
     local structured = normalize_preview(tool_def.format_preview(input, available))
     -- Collapse newlines in detail, then truncate detail to available
     if structured.detail then
-      structured.detail = structured.detail:gsub("\n", display.get_newline_char())
-      structured.detail = str.truncate(structured.detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+      local detail = structured.detail --[[@as string]]
+      detail = detail:gsub("\n", display.get_newline_char())
+      structured.detail = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
     end
     return structured
   end

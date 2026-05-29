@@ -462,6 +462,7 @@ M.definitions = {
       return {
         label = input.label,
         detail = "$ " .. input.command,
+        highlight = { lang = "bash" },
       }
     end,
     execute = HAS_TERMINAL_PTY_FIX and execute_terminal or execute_jobstart,
