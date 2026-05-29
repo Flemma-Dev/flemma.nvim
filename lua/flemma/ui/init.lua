@@ -35,6 +35,12 @@ local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
 
+-- Approval-prompt keybind hints, keyed by bufnr. Built lazily on first render
+-- from the buffer's keymaps config and reused across cursor moves. It is only
+-- cleared on buffer teardown (see the BufWipeout/BufUnload/BufDelete autocmd in
+-- M.setup), NOT on a runtime keymaps config change — acceptable because keymaps
+-- are resolved when the buffer is set up, not per request. A user who rebinds
+-- approval keys mid-session sees the new hints after reopening the buffer.
 ---@type table<integer, {key_display: string, label: string}[]>
 local keybind_hints_cache = {}
 local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
@@ -772,6 +778,17 @@ function M.setup_chat_filetype_autocmds()
   end
 end
 
+---Compute the 0-indexed buffer row where a tool_result's preview and approval
+---virt_lines anchor: the block's opening fence (one line above the closing
+---fence at seg.position.end_line). virt_lines on that row render below it,
+---inside the empty fence. May be negative for malformed blocks; callers guard.
+---@param seg flemma.ast.ToolResultSegment
+---@return integer row 0-indexed anchor row
+local function tool_result_anchor_row(seg)
+  local opening_fence_line = seg.position.end_line - 1 -- 1-indexed opening fence
+  return opening_fence_line - 1 -- 0-indexed row for the extmark anchor
+end
+
 ---Add virtual line previews inside empty tool_result fences that carry a
 ---lifecycle (status) suffix in the header. Shows a compact summary of the
 ---tool call (name + input) so users can see what they're approving/rejecting
@@ -802,8 +819,7 @@ function M.add_tool_previews(bufnr, doc)
           local sibling = siblings[seg.tool_use_id]
           local tool_use = sibling and sibling.use or nil
           if tool_use then
-            local opening_fence_line = seg.position.end_line - 1
-            local line_idx = opening_fence_line - 1
+            local line_idx = tool_result_anchor_row(seg)
 
             if line_idx >= 0 and line_idx < line_count then
               local role_hl = roles.highlight_group("FlemmaLine", msg.role)
@@ -920,8 +936,7 @@ function M.update_approval_prompt(bufnr, doc)
 
   for _, entry in ipairs(pending_tools) do
     local seg = entry.seg
-    local opening_fence_line = seg.position.end_line - 1
-    local line_idx = opening_fence_line - 1
+    local line_idx = tool_result_anchor_row(seg)
 
     if line_idx >= 0 and line_idx < line_count then
       local cursor_on_this = cursor_line >= seg.position.start_line and cursor_line <= seg.position.end_line
