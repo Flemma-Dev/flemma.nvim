@@ -25,26 +25,6 @@ function M.resolve_error_message(status, content)
   return messages.render("tool-denied")
 end
 
----Find the tool_use segment for a given tool ID
----@param doc flemma.ast.DocumentNode
----@param tool_id string
----@return flemma.ast.ToolUseSegment|nil segment
----@return flemma.ast.MessageNode|nil message
----@return integer|nil message_index
-local function find_tool_use_by_id(doc, tool_id)
-  for i, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" and seg.id == tool_id then
-          ---@cast seg flemma.ast.ToolUseSegment
-          return seg, msg, i
-        end
-      end
-    end
-  end
-  return nil, nil, nil
-end
-
 --- Find the @You: message immediately following a given message index
 --- @param doc table Parsed document AST
 --- @param after_msg_idx integer Message index to look after
@@ -163,7 +143,7 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg, assistant_msg, assistant_idx = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg, assistant_msg, assistant_idx = ast.find_tool_use_by_id(doc, tool_id)
   if not tool_use_seg or not assistant_msg or not assistant_idx then
     return nil, "Tool use block not found in buffer", { modified = false }
   end
@@ -293,7 +273,7 @@ function M.inject_result(bufnr, tool_id, result)
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find existing tool_result placeholder
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local sibling = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   local existing_seg = (sibling and sibling.kind == "tool_result") and sibling --[[@as flemma.ast.ToolResultSegment]]
     or nil
@@ -360,7 +340,7 @@ function M.set_header_status(bufnr, tool_id, status)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id
@@ -398,7 +378,7 @@ function M.set_header_modeline(bufnr, tool_id, modeline_content)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id
@@ -426,7 +406,7 @@ function M.set_fence_content(bufnr, tool_id, content)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id

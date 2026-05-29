@@ -239,20 +239,7 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find the tool_use segment by ID
-  ---@type flemma.ast.ToolUseSegment|nil
-  local tool_use_seg = nil
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "tool_use" and seg.id == tool_id then
-        tool_use_seg = seg --[[@as flemma.ast.ToolUseSegment]]
-        break
-      end
-    end
-    if tool_use_seg then
-      break
-    end
-  end
-
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   if not tool_use_seg then
     return
   end
@@ -1092,18 +1079,7 @@ end
 ---@return string|nil error
 local function validate_lifecycle_status(bufnr, tool_id)
   local doc = parser.get_parsed_document(bufnr)
-  local tool_use_seg = nil
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "tool_use" and seg.id == tool_id then
-        tool_use_seg = seg
-        break
-      end
-    end
-    if tool_use_seg then
-      break
-    end
-  end
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   if not tool_use_seg then
     return false, "Tool not found: " .. tool_id
   end

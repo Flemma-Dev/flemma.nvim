@@ -110,6 +110,27 @@ function M.build_tool_use_index(doc)
   return map
 end
 
+---Find a tool_use segment by its tool ID.
+---tool_use segments are only ever produced for @Assistant messages (the parser
+---routes assistant content through parse_assistant_segments), so this
+---document-wide scan is equivalent to a role-filtered one.
+---@param doc flemma.ast.DocumentNode
+---@param tool_id string
+---@return flemma.ast.ToolUseSegment|nil segment
+---@return flemma.ast.MessageNode|nil message
+---@return integer|nil message_index 1-based index of the message in doc.messages
+function M.find_tool_use_by_id(doc, tool_id)
+  for i, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" and seg.id == tool_id then
+        ---@cast seg flemma.ast.ToolUseSegment
+        return seg, msg, i
+      end
+    end
+  end
+  return nil, nil, nil
+end
+
 ---@class flemma.ast.ToolSibling
 ---@field use? flemma.ast.ToolUseSegment
 ---@field use_message? flemma.ast.MessageNode
