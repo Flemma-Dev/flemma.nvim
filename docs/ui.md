@@ -109,6 +109,7 @@ Colours are derived from existing highlight groups using chainable operations. O
 | `h.hex("#aabbcc")`                      | Literal colour, defaults to `fg`; pass `"bg"` as second arg for background   |
 | `h.themed({ dark = ..., light = ... })` | Branch on `vim.o.background` (see [Theme-aware values](#theme-aware-values)) |
 | `h.coalesce(a, b, c)`                   | Try each operation in order, use the first that resolves                     |
+| `h.none()`                              | A no-op: resolves to nothing and sets no group — leaves it unmanaged         |
 
 **Chain operations** — transform the result of the constructor or a previous chain step:
 

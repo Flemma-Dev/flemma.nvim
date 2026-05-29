@@ -54,7 +54,11 @@ end
 local function resolve_to_attrs(result)
   local link_name = result.link
   if not link_name then
-    return result
+    -- Return a shallow copy, never the caller's own table. OmitOp/BlendOp mutate
+    -- the returned attrs in place; aliasing the parent op's result would corrupt
+    -- it should that op ever hand back a shared or cached table. Highlight attrs
+    -- are flat (scalar values), so a shallow copy is sufficient.
+    return vim.tbl_extend("force", {}, result)
   end
   local ok, hl = pcall(vim.api.nvim_get_hl, 0, {
     name = link_name --[[@as string]],
@@ -560,7 +564,11 @@ local CONTRAST_COMPLEMENT = {
 ---@param ratio number
 ---@return flemma.hl.ContrastOp
 function ContrastOp.new(parent, attr, against, ratio)
-  assert(CONTRAST_COMPLEMENT[attr], "contrast: unsupported attr '" .. tostring(attr) .. "', expected fg/bg/sp")
+  if not CONTRAST_COMPLEMENT[attr] then
+    local valid = vim.tbl_keys(CONTRAST_COMPLEMENT)
+    table.sort(valid)
+    error("contrast: unsupported attr '" .. tostring(attr) .. "', expected " .. table.concat(valid, "/"))
+  end
   return setmetatable({ _parent = parent, _attr = attr, _against = against, _ratio = ratio }, ContrastOp)
 end
 
@@ -741,6 +749,16 @@ end
 ---@return flemma.hl.AttrsOp
 function M.attrs(attrs)
   return AttrsOp.new(attrs)
+end
+
+--- A no-op highlight: `:get()` resolves to nil and `:set()` does nothing.
+--- Use as a config value to leave a group unmanaged by Flemma (e.g.
+--- `highlights = { thinking_tag = h.none() }`), so the colorscheme or the
+--- user's own definition stands. Being a regular HlOp, it needs no special
+--- handling in the schema — it validates and chains like any other op.
+---@return flemma.hl.NilOp
+function M.none()
+  return NilOp
 end
 
 ---@param attr string

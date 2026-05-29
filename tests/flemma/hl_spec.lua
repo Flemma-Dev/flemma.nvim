@@ -629,6 +629,28 @@ describe("flemma.hl", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- Result immutability
+  -- ---------------------------------------------------------------------------
+
+  describe("result immutability", function()
+    -- Mutating ops (omit/blend) modify resolved attrs in place, so resolve_to_attrs
+    -- copies rather than aliasing the parent's table. This keeps a single op safe
+    -- to reuse as the base of several chains even if an op ever memoizes :get().
+    it("reusing an op as a base for multiple chains does not corrupt it", function()
+      local base = h.from("TestComment") -- fg=#888888, bg=#111111, italic
+
+      local without_bg = base:omit("bg"):get()
+      local brightened = base:blend("bg", "+#101010"):get()
+      local full = base:get()
+
+      assert.is_nil(without_bg.bg, "omit chain should drop bg")
+      assert.are.equal("#212121", brightened.bg, "blend chain should brighten bg (0x11 + 0x10)")
+      assert.are.equal("#111111", full.bg, "base must still resolve its original bg")
+      assert.is_not_nil(full.fg)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- NilOp propagation
   -- ---------------------------------------------------------------------------
 
@@ -654,6 +676,19 @@ describe("flemma.hl", function()
       assert.has_no_error(function()
         h.NilOp:set("FlemmaTestGroup")
       end)
+    end)
+
+    it("h.none() returns the NilOp singleton", function()
+      assert.equals(h.NilOp, h.none())
+    end)
+
+    it("h.none() resolves to nil and sets no group", function()
+      assert.is_nil(h.none():get())
+      vim.api.nvim_set_hl(0, "FlemmaNoneTest", { fg = "#abcdef" })
+      h.none():set("FlemmaNoneTest")
+      -- :set() is a no-op, so the pre-existing definition is left untouched
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNoneTest", link = false })
+      assert.equals(0xabcdef, hl.fg)
     end)
 
     it("coalesce skips nil children", function()
