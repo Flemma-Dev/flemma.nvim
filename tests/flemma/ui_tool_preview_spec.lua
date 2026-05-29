@@ -250,8 +250,13 @@ describe("UI Tool Previews", function()
       local marks = get_approval_extmarks(bufnr)
       assert.are.equal(1, #marks, "should have one approval extmark")
       local virt_lines = marks[1][4].virt_lines
-      local first_text = virt_lines[1][1][1]
-      assert.is_truthy(first_text:find("⏸"), "approval virt_line should contain ┕ connector")
+      local text = table.concat(
+        vim.tbl_map(function(c)
+          return c[1]
+        end, virt_lines[1]),
+        ""
+      )
+      assert.is_truthy(text:find("⏸"), "approval virt_line should contain the pause indicator")
     end)
 
     it("shows hint instead of keybinds when cursor is outside tool_result range", function()
@@ -470,6 +475,80 @@ describe("UI Tool Previews", function()
         assert.are.equal("FlemmaLineUser", chunks[2][2])
         assert.is_truthy(chunks[2][1]:match("^ +$"), "padding chunk should be spaces only")
       end
+    end)
+
+    it("renders the label ahead of the ⏸ approval affordance", function()
+      -- Canonical layout — the label leads so it stays in a fixed position
+      -- across the pending → approved transition:
+      --   "— <label>  ⏸ N/M · <hints>"   (focused → keybinds; else → awaiting)
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a","label":"checking disk space"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b","label":"second task"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      -- Cursor on tool_a → focused → keybind hints.
+      for i, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+        if line:find("tool_a.*pending") then
+          vim.api.nvim_win_set_cursor(0, { i, 0 })
+          break
+        end
+      end
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_approval_extmarks(bufnr)
+      assert.are.equal(2, #marks)
+
+      local function join(mark)
+        return table.concat(
+          vim.tbl_map(function(c)
+            return c[1]
+          end, mark[4].virt_lines[1]),
+          ""
+        )
+      end
+
+      -- Focused tool: "— checking disk space  ⏸ 1/2 · <M-a> ..."
+      local a = join(marks[1])
+      assert.is_truthy(a:find("^— checking disk space"), "label must lead: " .. a)
+      assert.is_true((a:find("checking disk space")) < (a:find("⏸")), "label must precede the ⏸ indicator: " .. a)
+      assert.is_truthy(a:find("⏸ 1/2 · "), "indicator + counter follow the label: " .. a)
+      assert.is_truthy(a:find("<M%-a>"), "focused tool shows keybinds after the indicator: " .. a)
+
+      -- Unfocused tool: "— second task  ⏸ 2/2 · awaiting approval"
+      local b = join(marks[2])
+      assert.is_truthy(b:find("^— second task"), "label must lead: " .. b)
+      assert.is_true((b:find("second task")) < (b:find("⏸")), "label must precede the ⏸ indicator: " .. b)
+      assert.is_truthy(b:find("⏸ 2/2 · awaiting approval"), "awaiting hint follows the indicator: " .. b)
     end)
   end)
 end)

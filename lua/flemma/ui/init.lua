@@ -864,9 +864,11 @@ function M.add_tool_previews(bufnr, doc)
 end
 
 ---Render the approval prompt line for each pending tool_result.
----Uses a pause indicator (⏸) to tie the prompt to the tool result
----block above. When the cursor is within a pending tool_result's range,
----that tool gets full keybind hints; others get a brief "awaiting approval".
+---Layout: `— <label>  ⏸ N/M · <hints>` — the label leads (mirroring the
+---settled footer) so it stays in a fixed position when the tool is approved;
+---the pause indicator (⏸) and affordance follow. When the cursor is within a
+---pending tool_result's range, that tool gets full keybind hints; others get
+---a brief "awaiting approval".
 ---@param bufnr integer
 ---@param doc? flemma.ast.DocumentNode
 ---@param siblings? table<string, flemma.ast.ToolSibling> Prebuilt sibling table; built from doc when omitted (lets add_tool_previews share its table)
@@ -950,6 +952,14 @@ function M.update_approval_prompt(bufnr, doc, siblings)
       ---@type {[1]:string, [2]:string}[]
       local prompt_chunks = {}
 
+      -- Label leads (mirroring the settled "— <label>" footer) so it keeps a
+      -- fixed position across the pending → approved transition; the pending
+      -- affordance (⏸ N/M · hints) follows. Highlight groups are unchanged.
+      if label then
+        table.insert(prompt_chunks, { "— " .. label, "FlemmaApprovalLabel" })
+        table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
+      end
+
       table.insert(prompt_chunks, { "⏸ ", "FlemmaApprovalIndicator" })
 
       if queue_total > 1 then
@@ -958,12 +968,7 @@ function M.update_approval_prompt(bufnr, doc, siblings)
         table.insert(prompt_chunks, { " · ", "FlemmaApprovalIndicator" })
       end
 
-      if label then
-        table.insert(prompt_chunks, { label, "FlemmaApprovalLabel" })
-      end
-
       if cursor_on_this and #keybind_hints > 0 then
-        table.insert(prompt_chunks, { " — ", "FlemmaApprovalIndicator" })
         for j, hint in ipairs(keybind_hints) do
           if j > 1 then
             table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
@@ -973,7 +978,6 @@ function M.update_approval_prompt(bufnr, doc, siblings)
           table.insert(prompt_chunks, { hint.label, "FlemmaApprovalAction" })
         end
       else
-        table.insert(prompt_chunks, { " — ", "FlemmaApprovalIndicator" })
         table.insert(prompt_chunks, { "awaiting approval", "FlemmaApprovalIndicator" })
       end
 
