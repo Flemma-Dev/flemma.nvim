@@ -873,7 +873,7 @@ function M.add_tool_previews(bufnr, doc)
               local virt_lines
 
               local used_highlighted = false
-              if highlight_context then
+              if highlight_context and approval_config.syntax_highlighting then
                 local in_sync_scope = true
                 highlighter.highlight(highlight_context.text, highlight_context.lang, function(lines_chunks)
                   if lines_chunks then

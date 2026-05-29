@@ -263,6 +263,7 @@
 ---@field fade integer
 ---@field layout "inline"|"block"
 ---@field preview_lines { head: integer, tail: integer }|integer
+---@field syntax_highlighting boolean
 
 ---@class flemma.config.UiJobs
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"

@@ -313,6 +313,7 @@ return s.object({
       enabled = s.boolean(true),
       layout = s.enum({ "inline", "block" }, "inline"),
       fade = s.integer(10),
+      syntax_highlighting = s.boolean(true),
       preview_lines = s.union(
         s.object({
           head = s.integer(6),
