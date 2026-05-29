@@ -1011,9 +1011,9 @@ function M.update_approval_prompt(bufnr, doc, siblings)
 
   for _, entry in ipairs(pending_tools) do
     local seg = entry.seg
-    local line_idx = tool_result_anchor_row(seg)
+    local closing_fence_row = seg.position.end_line - 1
 
-    if line_idx >= 0 and line_idx < line_count then
+    if closing_fence_row >= 0 and closing_fence_row < line_count then
       local cursor_on_this = cursor_line >= seg.position.start_line and cursor_line <= seg.position.end_line
 
       local sibling = siblings[seg.tool_use_id]
@@ -1090,8 +1090,9 @@ function M.update_approval_prompt(bufnr, doc, siblings)
         end
       end
 
-      vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, line_idx, 0, {
+      vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
         virt_lines = { prompt_chunks },
+        virt_lines_above = true,
       })
     end
   end
