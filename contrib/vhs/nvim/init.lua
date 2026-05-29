@@ -78,6 +78,7 @@ require("flemma").setup({
       "$standard",
       "calculator",
     },
+    auto_approve_sandboxed = false,
   },
   editing = {
     auto_write = true,
