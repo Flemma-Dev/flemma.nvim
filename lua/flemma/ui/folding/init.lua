@@ -382,13 +382,7 @@ function M._build_fold_text(foldstart_lnum, foldend_lnum)
       return chunks
     elseif tool_kind == "tool_result" then
       ---@cast tool_seg flemma.ast.ToolResultSegment
-      local tool_use_index = query.build_tool_use_index(doc)
-      local tool_info = tool_use_index[tool_seg.tool_use_id]
-      local tool_name = tool_info and tool_info.name or "result"
-      local tool_label = tool_info and tool_info.label
-      local effective_status = query.effective_tool_result_status(tool_seg, doc)
-
-      local status_info = effective_status and preview.STATUS_DISPLAY[effective_status]
+      local tool_name, tool_label, status_info, effective_status = preview.resolve_tool_result_display(tool_seg, doc)
       local icon_hl = (effective_status and STATUS_ICON_HL[effective_status])
         or (not effective_status and tool_seg.content ~= "" and "FlemmaToolIconSuccess" or "FlemmaToolIcon")
 

@@ -348,6 +348,26 @@ function M.get_tool_use_body(tool_name, input, available)
   return { label = label, detail = detail ~= "" and detail or nil }
 end
 
+---Resolve a tool_result's display data: the tool name (or "result" when the
+---paired tool_use is missing), the paired tool_use's label, the status-marker
+---display info, and the effective status. Shared by the message fold preview
+---and the per-block fold text so this name/label/status resolution lives in one
+---place; each caller does its own width-budgeted chunk assembly afterwards.
+---@param result_seg flemma.ast.ToolResultSegment
+---@param doc? flemma.ast.DocumentNode Resolves the paired tool_use and job-linked status
+---@param tool_use_index? table<string, flemma.ast.ToolUseInfo> Prebuilt index; built from doc when omitted
+---@return string name
+---@return string|nil label
+---@return {text: string, text_hl: string}|nil status_info
+---@return flemma.ast.ToolStatus|nil effective_status
+function M.resolve_tool_result_display(result_seg, doc, tool_use_index)
+  tool_use_index = tool_use_index or (doc and query.build_tool_use_index(doc)) or {}
+  local tool_info = tool_use_index[result_seg.tool_use_id]
+  local effective_status = doc and query.effective_tool_result_status(result_seg, doc) or result_seg.status
+  local status_info = effective_status and M.STATUS_DISPLAY[effective_status] or nil
+  return tool_info and tool_info.name or "result", tool_info and tool_info.label, status_info, effective_status
+end
+
 ---Build a composite fold preview from a message's segments in buffer order.
 ---Consecutive text segments are merged; tool_use and tool_result segments produce
 ---per-segment highlighted chunks. Entries are joined with ' | ' separators.
@@ -454,11 +474,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
     elseif entry.kind == "tool_result" then
       local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
-      local tool_info = tool_use_index and tool_use_index[result_seg.tool_use_id]
-      local tool_name = tool_info and tool_info.name or "result"
-      local tool_label = tool_info and tool_info.label
-      local effective_status = doc and query.effective_tool_result_status(result_seg, doc) or result_seg.status
-      local result_status_info = effective_status and M.STATUS_DISPLAY[effective_status]
+      local tool_name, tool_label, result_status_info = M.resolve_tool_result_display(result_seg, doc, tool_use_index)
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
