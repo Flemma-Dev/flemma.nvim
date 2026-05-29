@@ -229,7 +229,10 @@ return s.object({
     busy = s.highlight(h.link("DiagnosticWarn")),
     progress_accent = s.highlight(h.attrs({ bold = true })),
     approval_line = s.highlight(
-      h.coalesce(h.from("FlemmaLineUser"):tint("bg", "#101112"), h.from("Normal"):tint("bg", "#101112"))
+      h.coalesce(
+        h.from("FlemmaLineUser"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1),
+        h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
+      )
     ),
     approval_indicator = s.highlight(h.from("Folded"):omit("bg")),
     approval_label = s.highlight(h.from("Folded"):omit("bg")),

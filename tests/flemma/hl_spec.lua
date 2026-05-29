@@ -318,6 +318,53 @@ describe("flemma.hl", function()
       assert.equals("#888888", result.fg)
       assert.is_true(result.italic)
     end)
+
+    it("blends with positive ratio on hex string", function()
+      local result = h.from("TestNormal"):blend("bg", "#808080", 0.5):get()
+      assert.is_not_nil(result)
+      -- 0x00 + 0x80*0.5 = 0x40
+      assert.equals("#404040", result.bg)
+    end)
+
+    it("blends with negative ratio on hex string", function()
+      local result = h.from("TestComment"):blend("fg", "#888888", -0.5):get()
+      assert.is_not_nil(result)
+      -- 0x88 - 0x88*0.5 = 0x88 - 0x44 = 0x44
+      assert.equals("#444444", result.fg)
+    end)
+
+    it("blends with HlOp mod and positive ratio", function()
+      vim.api.nvim_set_hl(0, "TestWarn", { fg = "#ff8800" })
+      local result = h.from("TestNormal"):blend("bg", h.from("TestWarn"):pick("fg"), 0.10):get()
+      assert.is_not_nil(result)
+      -- 0x00 + 0xff*0.10 ≈ 25 = 0x19, 0x00 + 0x88*0.10 ≈ 13 = 0x0d, 0x00 + 0x00*0.10 = 0x00
+      assert.equals("#190d00", result.bg)
+      pcall(vim.api.nvim_set_hl, 0, "TestWarn", {})
+    end)
+
+    it("blends with HlOp mod and negative ratio", function()
+      vim.api.nvim_set_hl(0, "TestWarn", { fg = "#ff8800" })
+      vim.api.nvim_set_hl(0, "TestBright", { bg = "#ffffff" })
+      local result = h.from("TestBright"):blend("bg", h.from("TestWarn"):pick("fg"), -0.10):get()
+      assert.is_not_nil(result)
+      -- 0xff - 0xff*0.10 ≈ 255-25 = 230 = 0xe6, 0xff - 0x88*0.10 ≈ 255-13 = 242 = 0xf2, 0xff - 0x00 = 0xff
+      assert.equals("#e5f1ff", result.bg)
+      pcall(vim.api.nvim_set_hl, 0, "TestWarn", {})
+      pcall(vim.api.nvim_set_hl, 0, "TestBright", {})
+    end)
+
+    it("returns parent unchanged when HlOp mod resolves to nil", function()
+      local result = h.from("TestComment"):blend("bg", h.from("NonExistent"):pick("fg"), 0.5):get()
+      assert.is_not_nil(result)
+      assert.equals("#111111", result.bg)
+    end)
+
+    it("preserves other attrs when using ratio", function()
+      local result = h.from("TestComment"):blend("fg", "#888888", -0.5):get()
+      assert.is_not_nil(result)
+      assert.equals("#111111", result.bg)
+      assert.is_true(result.italic)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -346,6 +393,29 @@ describe("flemma.hl", function()
       local result = h.from("NonExistent"):tint("bg", "#101010"):get()
       assert.is_nil(result)
     end)
+
+    it("tints bg with HlOp source at ratio in dark mode", function()
+      vim.o.background = "dark"
+      vim.api.nvim_set_hl(0, "TestWarn", { fg = "#ff8800" })
+      local result = h.from("TestNormal"):tint("bg", h.from("TestWarn"):pick("fg"), 0.10):get()
+      assert.is_not_nil(result)
+      -- dark mode → positive ratio → add 10% of warn fg
+      assert.equals("#190d00", result.bg)
+      pcall(vim.api.nvim_set_hl, 0, "TestWarn", {})
+    end)
+
+    it("tints bg with HlOp source at ratio in light mode", function()
+      vim.o.background = "light"
+      vim.api.nvim_set_hl(0, "TestNormal", { fg = "#000000", bg = "#ffffff" })
+      vim.api.nvim_set_hl(0, "TestWarn", { fg = "#ff8800" })
+      local result = h.from("TestNormal"):tint("bg", h.from("TestWarn"):pick("fg"), 0.10):get()
+      assert.is_not_nil(result)
+      -- light mode → negative ratio → subtract 10% of warn fg
+      assert.equals("#e5f1ff", result.bg)
+      vim.o.background = "dark"
+      vim.api.nvim_set_hl(0, "TestNormal", { fg = "#ffffff", bg = "#000000" })
+      pcall(vim.api.nvim_set_hl, 0, "TestWarn", {})
+    end)
   end)
 
   describe(":mute()", function()
@@ -369,6 +439,37 @@ describe("flemma.hl", function()
     it("returns nil when parent is nil", function()
       local result = h.from("NonExistent"):mute("fg", "#333333"):get()
       assert.is_nil(result)
+    end)
+
+    it("mutes with HlOp source at ratio in dark mode", function()
+      vim.o.background = "dark"
+      vim.api.nvim_set_hl(0, "TestBright", { bg = "#ffffff" })
+      vim.api.nvim_set_hl(0, "TestWarn", { fg = "#ff8800" })
+      local result = h.from("TestBright"):mute("bg", h.from("TestWarn"):pick("fg"), 0.10):get()
+      assert.is_not_nil(result)
+      -- dark mode mute → negative ratio → subtract 10% of warn fg
+      assert.equals("#e5f1ff", result.bg)
+      pcall(vim.api.nvim_set_hl, 0, "TestBright", {})
+      pcall(vim.api.nvim_set_hl, 0, "TestWarn", {})
+    end)
+
+    it("mutes with HlOp source at ratio in light mode", function()
+      vim.o.background = "light"
+      vim.api.nvim_set_hl(0, "TestWarn", { fg = "#ff8800" })
+      local result = h.from("TestNormal"):mute("bg", h.from("TestWarn"):pick("fg"), 0.10):get()
+      assert.is_not_nil(result)
+      -- light mode mute → positive ratio → add 10% of warn fg
+      -- Normal bg in light mode fallback = #ffffff
+      -- 0xff + 0xff*0.10 clamped = 0xff, 0xff + 0x88*0.10 clamped = 0xff, 0xff + 0 = 0xff
+      -- Actually Normal was set to {} by light mode default test... let me be explicit
+      vim.api.nvim_set_hl(0, "TestDark", { bg = "#000000" })
+      local result2 = h.from("TestDark"):mute("bg", h.from("TestWarn"):pick("fg"), 0.10):get()
+      assert.is_not_nil(result2)
+      -- 0x00 + 0xff*0.10 ≈ 25 = 0x19, 0x00 + 0x88*0.10 ≈ 13 = 0x0d, 0x00 + 0x00 = 0x00
+      assert.equals("#190d00", result2.bg)
+      vim.o.background = "dark"
+      pcall(vim.api.nvim_set_hl, 0, "TestWarn", {})
+      pcall(vim.api.nvim_set_hl, 0, "TestDark", {})
     end)
   end)
 
@@ -663,10 +764,13 @@ describe("flemma.hl", function()
     it("NilOp chain methods return NilOp", function()
       local op = h.NilOp
       assert.equals(h.NilOp, op:blend("fg", "+#101010"))
+      assert.equals(h.NilOp, op:blend("fg", h.from("TestNormal"):pick("fg"), 0.5))
       assert.equals(h.NilOp, op:pick("fg"))
       assert.equals(h.NilOp, op:omit("bg"))
       assert.equals(h.NilOp, op:tint("fg", "#101010"))
+      assert.equals(h.NilOp, op:tint("fg", h.from("TestNormal"):pick("fg"), 0.1))
       assert.equals(h.NilOp, op:mute("fg", "#101010"))
+      assert.equals(h.NilOp, op:mute("fg", h.from("TestNormal"):pick("fg"), 0.1))
       assert.equals(h.NilOp, op:style({ bold = true }))
       assert.equals(h.NilOp, op:merge(h.hex("#ff0000")))
       assert.equals(h.NilOp, op:contrast("fg", h.from("TestNormal"), 4.5))

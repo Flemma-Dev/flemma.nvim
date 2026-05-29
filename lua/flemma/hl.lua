@@ -6,12 +6,6 @@ local M = {}
 
 local color = require("flemma.utilities.color")
 
----@param v number
----@return number
-local function clamp_byte(v)
-  return math.max(0, math.min(255, v))
-end
-
 -- ---------------------------------------------------------------------------
 -- HlOp base class
 -- ---------------------------------------------------------------------------
@@ -115,23 +109,26 @@ end
 function NilOp:set(_name, _opts) end
 
 ---@param _attr string
----@param _mod string|flemma.hl.DiffOp
+---@param _mod string|flemma.hl.DiffOp|flemma.hl.HlOp
+---@param _ratio? number
 ---@return flemma.hl.NilOp
-function NilOp:blend(_attr, _mod)
+function NilOp:blend(_attr, _mod, _ratio)
   return NilOp
 end
 
 ---@param _attr string
----@param _hex string
+---@param _mod string|flemma.hl.HlOp
+---@param _ratio? number
 ---@return flemma.hl.NilOp
-function NilOp:tint(_attr, _hex)
+function NilOp:tint(_attr, _mod, _ratio)
   return NilOp
 end
 
 ---@param _attr string
----@param _hex string
+---@param _mod string|flemma.hl.HlOp
+---@param _ratio? number
 ---@return flemma.hl.NilOp
-function NilOp:mute(_attr, _hex)
+function NilOp:mute(_attr, _mod, _ratio)
   return NilOp
 end
 
@@ -390,16 +387,69 @@ end
 
 ---@class flemma.hl.BlendOp : flemma.hl.HlOp
 ---@field _attr string
----@field _mod string|flemma.hl.DiffOp
+---@field _mod string|flemma.hl.DiffOp|flemma.hl.HlOp
+---@field _ratio? number
 local BlendOp = setmetatable({}, { __index = HlOp })
 BlendOp.__index = BlendOp
 
 ---@param parent flemma.hl.HlOp
 ---@param attr string
----@param mod string|flemma.hl.DiffOp
+---@param mod string|flemma.hl.DiffOp|flemma.hl.HlOp
+---@param ratio? number
 ---@return flemma.hl.BlendOp
-function BlendOp.new(parent, attr, mod)
-  return setmetatable({ _parent = parent, _attr = attr, _mod = mod }, BlendOp)
+function BlendOp.new(parent, attr, mod, ratio)
+  return setmetatable({ _parent = parent, _attr = attr, _mod = mod, _ratio = ratio }, BlendOp)
+end
+
+--- Resolve the mod operand to an RGB triplet and a blend direction.
+---@return flemma.utilities.color.RGB|nil mod_rgb
+---@return "+"|"-"|nil direction
+---@private
+function BlendOp:_resolve_mod()
+  local mod = self._mod
+  local ratio = self._ratio
+
+  if getmetatable(mod) == DiffOp then
+    local delta = (mod --[[@as flemma.hl.DiffOp]]):delta()
+    if not delta then
+      return nil, nil
+    end
+    return delta, "+"
+  end
+
+  if ratio ~= nil then
+    local mod_rgb ---@type flemma.utilities.color.RGB|nil
+    if type(mod) == "string" then
+      mod_rgb = color.hex_to_rgb(mod --[[@as string]])
+    else
+      local mod_result = (mod --[[@as flemma.hl.HlOp]]):get()
+      if mod_result then
+        local mod_attrs = resolve_to_attrs(mod_result)
+        local first_color = mod_attrs.fg or mod_attrs.bg or mod_attrs.sp --[[@as string|nil]]
+        if first_color then
+          mod_rgb = color.hex_to_rgb(first_color)
+        end
+      end
+    end
+    if not mod_rgb then
+      return nil, nil
+    end
+    local magnitude = math.abs(ratio)
+    return {
+      r = mod_rgb.r * magnitude,
+      g = mod_rgb.g * magnitude,
+      b = mod_rgb.b * magnitude,
+    },
+      ratio >= 0 and "+" or "-"
+  end
+
+  local mod_str = mod --[[@as string]]
+  local direction = mod_str:sub(1, 1) --[[@as "+"|"-"]]
+  local mod_rgb = color.hex_to_rgb(mod_str:sub(2))
+  if not mod_rgb then
+    return nil, nil
+  end
+  return mod_rgb, direction
 end
 
 ---@return vim.api.keyset.highlight|nil
@@ -420,29 +470,12 @@ function BlendOp:get()
     return attrs
   end
 
-  local mod = self._mod
-  if getmetatable(mod) == DiffOp then
-    local diff_op = mod --[[@as flemma.hl.DiffOp]]
-    local delta = diff_op:delta()
-    if not delta then
-      return attrs
-    end
-    attrs[self._attr] = color.rgb_to_hex({
-      r = clamp_byte(base_rgb.r + delta.r),
-      g = clamp_byte(base_rgb.g + delta.g),
-      b = clamp_byte(base_rgb.b + delta.b),
-    })
-  else
-    local mod_str = mod --[[@as string]]
-    local direction = mod_str:sub(1, 1)
-    local hex_value = mod_str:sub(2)
-    local mod_rgb = color.hex_to_rgb(hex_value)
-    if not mod_rgb then
-      return attrs
-    end
-    attrs[self._attr] = color.rgb_to_hex(color.blend(base_rgb, mod_rgb, direction))
+  local mod_rgb, direction = self:_resolve_mod()
+  if not mod_rgb or not direction then
+    return attrs
   end
 
+  attrs[self._attr] = color.rgb_to_hex(color.blend(base_rgb, mod_rgb, direction))
   return attrs
 end
 
@@ -452,24 +485,29 @@ end
 
 ---@class flemma.hl.TintOp : flemma.hl.HlOp
 ---@field _attr string
----@field _hex string
----@field _dark_direction "+" | "-"
+---@field _mod string|flemma.hl.HlOp
+---@field _dark_sign 1|-1
+---@field _ratio number
 local TintOp = setmetatable({}, { __index = HlOp })
 TintOp.__index = TintOp
 
 ---@param parent flemma.hl.HlOp
 ---@param attr string
----@param hex string
----@param dark_direction "+" | "-"
+---@param mod string|flemma.hl.HlOp
+---@param dark_sign 1|-1
+---@param ratio? number
 ---@return flemma.hl.TintOp
-function TintOp.new(parent, attr, hex, dark_direction)
-  return setmetatable({ _parent = parent, _attr = attr, _hex = hex, _dark_direction = dark_direction }, TintOp)
+function TintOp.new(parent, attr, mod, dark_sign, ratio)
+  return setmetatable(
+    { _parent = parent, _attr = attr, _mod = mod, _dark_sign = dark_sign, _ratio = ratio or 1.0 },
+    TintOp
+  )
 end
 
 ---@return vim.api.keyset.highlight|nil
 function TintOp:get()
-  local direction = vim.o.background == "dark" and self._dark_direction or (self._dark_direction == "+" and "-" or "+")
-  return BlendOp.new(self._parent, self._attr, direction .. self._hex):get()
+  local sign = vim.o.background == "dark" and self._dark_sign or -self._dark_sign
+  return BlendOp.new(self._parent, self._attr, self._mod, sign * self._ratio):get()
 end
 
 -- ---------------------------------------------------------------------------
@@ -663,24 +701,27 @@ end
 -- ---------------------------------------------------------------------------
 
 ---@param attr string
----@param mod string|flemma.hl.DiffOp
+---@param mod string|flemma.hl.DiffOp|flemma.hl.HlOp
+---@param ratio? number
 ---@return flemma.hl.BlendOp
-function HlOp:blend(attr, mod)
-  return BlendOp.new(self, attr, mod)
+function HlOp:blend(attr, mod, ratio)
+  return BlendOp.new(self, attr, mod, ratio)
 end
 
 ---@param attr string
----@param hex string
+---@param mod string|flemma.hl.HlOp
+---@param ratio? number
 ---@return flemma.hl.TintOp
-function HlOp:tint(attr, hex)
-  return TintOp.new(self, attr, hex, "+")
+function HlOp:tint(attr, mod, ratio)
+  return TintOp.new(self, attr, mod, 1, ratio)
 end
 
 ---@param attr string
----@param hex string
+---@param mod string|flemma.hl.HlOp
+---@param ratio? number
 ---@return flemma.hl.TintOp
-function HlOp:mute(attr, hex)
-  return TintOp.new(self, attr, hex, "-")
+function HlOp:mute(attr, mod, ratio)
+  return TintOp.new(self, attr, mod, -1, ratio)
 end
 
 ---@param ... string
