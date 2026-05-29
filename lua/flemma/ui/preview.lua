@@ -163,56 +163,6 @@ function M.format_tool_preview_body(input, max_length)
   return str.truncate(body, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
----Format a compact preview string for a tool call (used by virt-line display).
----This is a plain-string context: no italic chunks. When both label and detail
----are present, renders as "name: label — detail" (em dash separator).
----@param tool_name string
----@param input table<string, any>
----@param max_length? integer Maximum total preview length (defaults to DEFAULT_MAX_LENGTH)
----@return string
-function M.format_tool_preview(tool_name, input, max_length)
-  max_length = max_length or DEFAULT_MAX_LENGTH
-
-  local name_prefix = tool_name .. ": "
-  local available = max_length - str.strwidth(name_prefix)
-
-  local tool_def = tools.get(tool_name)
-
-  local structured
-  if tool_def and tool_def.format_preview then
-    structured = normalize_preview(tool_def.format_preview(input, available))
-    if structured.detail then
-      structured.detail = structured.detail:gsub("\n", display.get_newline_char())
-    end
-  else
-    local keys = vim.tbl_keys(input)
-    if #keys == 0 then
-      return tool_name
-    end
-    structured = {
-      label = type(input.label) == "string" and input.label or nil,
-      detail = M.format_tool_preview_body(input, available),
-    }
-  end
-
-  -- Build body: "detail — label" or just detail or just label
-  local label = structured.label
-  local detail = structured.detail
-  local body
-  if detail and detail ~= "" and label then
-    body = detail .. " — " .. label
-  elseif detail and detail ~= "" then
-    body = detail
-  elseif label then
-    body = label
-  else
-    return tool_name
-  end
-
-  local preview = name_prefix .. body
-  return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
-end
-
 ---Extract the label for a tool call without computing the full multiline preview.
 ---@param tool_name string
 ---@param input table<string, any>
@@ -247,15 +197,7 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
   local structured
 
   if tool_def and tool_def.format_preview then
-    local raw = tool_def.format_preview(input, max_length)
-    if type(raw) == "string" then
-      structured = { detail = raw }
-    else
-      structured = raw --[[@as flemma.StructuredToolPreview]]
-      if type(structured.detail) == "table" then
-        structured.detail = table.concat(structured.detail --[[@as string[] ]], "  ")
-      end
-    end
+    structured = normalize_preview(tool_def.format_preview(input, max_length))
   else
     local keys = vim.tbl_keys(input)
     if #keys == 0 then
@@ -314,33 +256,6 @@ local SEGMENT_SEPARATOR = " | "
 -- Minimum width (in characters) for a tool preview to be meaningful.
 -- Below this, we show an overflow indicator instead of a truncated preview.
 local MIN_TOOL_PREVIEW_WIDTH = 12
-
----Format a compact preview string for a tool result.
----Shows the tool name with a content preview: `tool_name: content_preview`
----For errors: `tool_name: (error) content_preview`
----@param tool_name string
----@param content string
----@param is_error boolean
----@param max_length? integer Maximum total preview length (defaults to DEFAULT_MAX_LENGTH)
----@return string
-function M.format_tool_result_preview(tool_name, content, is_error, max_length)
-  max_length = max_length or DEFAULT_MAX_LENGTH
-
-  local name_prefix = tool_name .. ": "
-  if is_error then
-    name_prefix = name_prefix .. "(error) "
-  end
-  local available = max_length - str.strwidth(name_prefix)
-
-  local body = M.format_content_preview(content, available)
-
-  if body == "" then
-    -- Trim trailing ": " when there's no content to show
-    return tool_name .. (is_error and ": (error)" or "")
-  end
-
-  return name_prefix .. body
-end
 
 ---@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result"|"job_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.JobResultSegment|nil}
 
