@@ -350,12 +350,8 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
             error = "Failed to parse tool input: " .. parse_err,
             position = { start_line = tool_start_line },
           })
-          -- Skip to end of malformed block
-          local j = block_start + 1
-          while j <= #lines and not lines[j]:match("^@[%w]+:%s*$") do
-            j = j + 1
-          end
-          i = j
+          -- Fenced block delimiters parsed fine, only the content was malformed — skip to closing fence
+          i = block_end + 1
         else
           table.insert(
             segments,
