@@ -41,7 +41,7 @@ local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
 -- M.setup), NOT on a runtime keymaps config change — acceptable because keymaps
 -- are resolved when the buffer is set up, not per request. A user who rebinds
 -- approval keys mid-session sees the new hints after reopening the buffer.
----@type table<integer, {key_display: string, label: string}[]>
+---@type table<integer, {key_display: string, label: string, min_pending: integer|nil}[]>
 local keybind_hints_cache = {}
 local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
@@ -918,20 +918,21 @@ function M.update_approval_prompt(bufnr, doc, siblings)
   end
 
   if not keybind_hints_cache[bufnr] then
-    ---@type {key_display: string, label: string}[]
+    ---@type {key_display: string, label: string, min_pending: integer|nil}[]
     local hints = {}
     local keymaps_config = config_facade.get(bufnr).keymaps
     if keymaps_config.enabled then
       local bindings = {
         { key = keymaps_config.normal.tool_approve, label = "Approve" },
         { key = keymaps_config.normal.tool_reject, label = "Reject" },
-        { key = keymaps_config.normal.tool_approve_all, label = "All" },
+        { key = keymaps_config.normal.tool_approve_all, label = "All", min_pending = 2 },
       }
       for _, b in ipairs(bindings) do
         if type(b.key) == "string" and b.key ~= "" then
           hints[#hints + 1] = {
             key_display = b.key,
             label = b.label,
+            min_pending = b.min_pending,
           }
         end
       end
@@ -968,13 +969,17 @@ function M.update_approval_prompt(bufnr, doc, siblings)
       end
 
       if cursor_on_this and #keybind_hints > 0 then
-        for j, hint in ipairs(keybind_hints) do
-          if j > 1 then
-            table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
+        local rendered = 0
+        for _, hint in ipairs(keybind_hints) do
+          if not hint.min_pending or #pending_tools >= hint.min_pending then
+            if rendered > 0 then
+              table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
+            end
+            table.insert(prompt_chunks, { hint.key_display, "FlemmaApprovalKey" })
+            table.insert(prompt_chunks, { " ", "FlemmaApprovalLine" })
+            table.insert(prompt_chunks, { hint.label, "FlemmaApprovalAction" })
+            rendered = rendered + 1
           end
-          table.insert(prompt_chunks, { hint.key_display, "FlemmaApprovalKey" })
-          table.insert(prompt_chunks, { " ", "FlemmaApprovalLine" })
-          table.insert(prompt_chunks, { hint.label, "FlemmaApprovalAction" })
         end
       else
         table.insert(prompt_chunks, { "Awaiting approval…", "FlemmaApprovalIndicator" })

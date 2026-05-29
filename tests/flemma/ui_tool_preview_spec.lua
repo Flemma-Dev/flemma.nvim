@@ -257,6 +257,8 @@ describe("UI Tool Previews", function()
         ""
       )
       assert.is_truthy(text:find("⏸"), "approval virt_line should contain the pause indicator")
+      assert.is_truthy(text:find("<M%-a>"), "single pending tool should show Approve keybind")
+      assert.is_falsy(text:find("<M%-A>"), "single pending tool should not show All keybind")
     end)
 
     it("shows hint instead of keybinds when cursor is outside tool_result range", function()
@@ -376,6 +378,7 @@ describe("UI Tool Previews", function()
       )
       assert.is_truthy(first_text:find("1/2"), "first tool should show 1/2")
       assert.is_truthy(first_text:find("<M%-a>"), "focused tool should show keybinds")
+      assert.is_truthy(first_text:find("<M%-A>"), "focused tool should show All keybind with 2 pending")
 
       local second_vl = marks[2][4].virt_lines
       local second_text = table.concat(
@@ -443,6 +446,7 @@ describe("UI Tool Previews", function()
         ""
       )
       assert.is_truthy(text:find("2/2"), "should show 2/2 (position among all non-executed tools)")
+      assert.is_falsy(text:find("<M%-A>"), "single remaining pending tool should not show All keybind")
     end)
 
     it("paints role line bg across the virt_line text and padding", function()
