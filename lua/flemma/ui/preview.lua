@@ -4,6 +4,7 @@
 local M = {}
 
 local query = require("flemma.ast.query")
+local json = require("flemma.utilities.json")
 local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
 local buffer = require("flemma.utilities.buffer")
@@ -34,6 +35,7 @@ local LABEL_DETAIL_SEPARATOR = " — "
 local DEFAULT_MULTILINE_HEAD = 6
 local DEFAULT_MULTILINE_TAIL = 6
 local BASE_HL_GROUP = "FlemmaToolPreview"
+local GENERIC_PREVIEW_INLINE_THRESHOLD = 120
 
 ---@class flemma.ui.HighlightContext
 ---@field text string The raw multi-line detail text (before prefix/indent/truncation)
@@ -268,6 +270,52 @@ function M.format_tool_label(tool_name, input)
   return type(input.label) == "string" and input.label or nil
 end
 
+---Build a YAML-ish preview for a generic tool input (no custom format_preview).
+---Each value is JSON-encoded (valid YAML since YAML is a JSON superset).
+---When the inline flow mapping ({key: value, ...}) fits within available_width,
+---returns single-line detail. Otherwise returns multi-line block mapping with
+---highlight = { lang = "yaml" }.
+---@param input table<string, any>
+---@param available_width integer Width budget for the content (after tool name prefix)
+---@return flemma.StructuredToolPreview
+local function format_generic_preview(input, available_width)
+  local keys = vim.tbl_keys(input)
+  if #keys == 0 then
+    return { detail = "{}" }
+  end
+
+  local scalar_keys = {}
+  local table_keys = {}
+  for _, key in ipairs(keys) do
+    if type(input[key]) == "table" then
+      table.insert(table_keys, key)
+    else
+      table.insert(scalar_keys, key)
+    end
+  end
+  table.sort(scalar_keys)
+  table.sort(table_keys)
+
+  local ordered_keys = {}
+  vim.list_extend(ordered_keys, scalar_keys)
+  vim.list_extend(ordered_keys, table_keys)
+
+  local entries = {}
+  for _, key in ipairs(ordered_keys) do
+    entries[#entries + 1] = key .. ": " .. json.encode(input[key])
+  end
+
+  local inline = "{" .. table.concat(entries, ", ") .. "}"
+  if str.strwidth(inline) <= available_width then
+    return { detail = inline, highlight = { lang = "yaml" } }
+  end
+
+  return {
+    detail = table.concat(entries, "\n"),
+    highlight = { lang = "yaml" },
+  }
+end
+
 ---Format a multi-line preview for a tool call (used by virt_line display).
 ---Returns an array of plain strings (one per display line) and the label separately.
 ---The tool name prefix appears on the first line only. Lines exceeding the cap
@@ -296,11 +344,9 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
     if #keys == 0 then
       return { tool_name }, nil, nil
     end
-    local available = max_length - str.strwidth(name_prefix)
-    structured = {
-      label = type(input.label) == "string" and input.label or nil,
-      detail = M.format_tool_preview_body(input, available),
-    }
+    local available = math.min(max_length, GENERIC_PREVIEW_INLINE_THRESHOLD) - str.strwidth(name_prefix)
+    structured = format_generic_preview(input, math.max(0, available))
+    structured.label = type(input.label) == "string" and input.label or nil
   end
 
   local label = structured.label
