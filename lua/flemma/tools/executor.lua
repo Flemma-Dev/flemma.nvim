@@ -1098,9 +1098,11 @@ end
 ---Re-engages autopilot if it was paused waiting for approval.
 ---@param bufnr integer
 ---@param tool_id string
+---@param opts? { defer_ui?: boolean } defer_ui skips the synchronous UI refresh
+---  (used by approve_all_pending, which refreshes once after the whole batch)
 ---@return boolean success
 ---@return string|nil error
-function M.approve(bufnr, tool_id)
+function M.approve(bufnr, tool_id, opts)
   local valid, validate_err = validate_lifecycle_status(bufnr, tool_id)
   if not valid then
     return false, validate_err
@@ -1108,6 +1110,15 @@ function M.approve(bufnr, tool_id)
   local ok, update_err = injector.set_header_status(bufnr, tool_id, "approved")
   if not ok then
     return false, update_err
+  end
+  -- Refresh the full UI synchronously so the interactive approval prompt and the
+  -- settled "— <label>" preview footer swap in a single redraw frame. The prompt
+  -- (tool_approval_ns) is otherwise dropped on the incidental CursorMoved while
+  -- the footer (tool_preview_ns, rendered only by add_tool_previews inside
+  -- update_ui) doesn't appear until the next CursorHold-driven update_ui — which
+  -- made the buffer "dance" up then down ~updatetime ms apart.
+  if not (opts and opts.defer_ui) then
+    ui.update_ui(bufnr)
   end
   editing.auto_write(bufnr)
   autopilot.nudge(bufnr)
@@ -1138,6 +1149,9 @@ function M.reject(bufnr, tool_id, message)
       return false, content_err
     end
   end
+  -- Refresh synchronously for the same reason as M.approve: keep the approval
+  -- prompt → settled-state swap within one redraw frame instead of dancing.
+  ui.update_ui(bufnr)
   editing.auto_write(bufnr)
   autopilot.nudge(bufnr)
   return true, nil
@@ -1201,11 +1215,14 @@ function M.approve_all_pending(bufnr)
 
   local failures = {}
   for _, tool_id in ipairs(pending_ids) do
-    local ok, approve_err = M.approve(bufnr, tool_id)
+    -- Defer the per-tool UI refresh; render once after the whole batch below.
+    local ok, approve_err = M.approve(bufnr, tool_id, { defer_ui = true })
     if not ok then
       failures[#failures + 1] = tool_id .. ": " .. (approve_err or "unknown")
     end
   end
+
+  ui.update_ui(bufnr)
 
   if #failures > 0 then
     log.warn("approve_all_pending: " .. #failures .. " failure(s): " .. table.concat(failures, "; "))
