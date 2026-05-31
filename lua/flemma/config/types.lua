@@ -60,6 +60,8 @@
 ---@field lua_delimiter flemma.hl.HlOp
 ---@field lua_expression flemma.hl.HlOp
 ---@field progress_accent flemma.hl.HlOp
+---@field rejection_border flemma.hl.HlOp
+---@field rejection_input flemma.hl.HlOp
 ---@field role_name flemma.hl.HlOp
 ---@field system flemma.hl.HlOp
 ---@field thinking_block flemma.hl.HlOp
@@ -159,6 +161,7 @@
 ---@field jobs flemma.config.UiJobs
 ---@field pricing flemma.config.UiPricing
 ---@field progress flemma.config.UiProgress
+---@field rejection flemma.config.UiRejection
 ---@field statusline flemma.config.UiStatusline
 ---@field usage flemma.config.UiUsage
 
@@ -275,6 +278,10 @@
 ---@class flemma.config.UiProgress
 ---@field highlight string
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
+
+---@class flemma.config.UiRejection
+---@field enabled boolean
+---@field winblend integer
 
 ---@class flemma.config.UiStatusline
 ---@field format string|flemma.statusline.FormatFunction

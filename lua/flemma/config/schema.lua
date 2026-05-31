@@ -238,6 +238,15 @@ return s.object({
     approval_label = s.highlight(h.from("Folded"):omit("bg")),
     approval_key = s.highlight(h.link("MoreMsg")),
     approval_action = s.highlight(h.from("ModeMsg"):tint("fg", "#202122")),
+    rejection_input = s.highlight(
+      h.from("DiagnosticWarn")
+        :pick("fg")
+        :merge(h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")))
+        :contrast("fg", h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")), 4.5)
+    ),
+    rejection_border = s.highlight(
+      h.from("FlemmaRuler"):merge(h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")))
+    ),
     role_name = s.highlight(h.attrs({ bold = true })),
   }),
 
@@ -329,6 +338,10 @@ return s.object({
         end
         return value
       end),
+    }),
+    rejection = s.object({
+      enabled = s.boolean(true),
+      winblend = s.integer(15),
     }),
   }),
 

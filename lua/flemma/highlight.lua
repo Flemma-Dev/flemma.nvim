@@ -254,6 +254,10 @@ M.apply_syntax = function()
     end
   end
 
+  -- Rejection popup
+  syntax_config.highlights.rejection_input:set("FlemmaRejection")
+  syntax_config.highlights.rejection_border:set("FlemmaRejectionBorder")
+
   -- Tool indicator icon highlights
   h.link("DiagnosticInfo"):set("FlemmaToolIconPending")
   h.link("FlemmaToolResultTitle"):set("FlemmaToolIconExecuting")
