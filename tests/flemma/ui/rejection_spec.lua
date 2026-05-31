@@ -254,6 +254,15 @@ describe("flemma.ui.rejection", function()
       assert.truthy(winhl:find("FlemmaRejectionBorder"))
     end)
 
+    it("disables buffer-local completion by default", function()
+      local bufnr = create_chat_buffer(TOOL_RESULT_BUFFER)
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+      rejection.open(bufnr)
+
+      local float_buf = vim.api.nvim_win_get_buf(vim.api.nvim_get_current_win())
+      assert.is_false(vim.b[float_buf].completion)
+    end)
+
     it("has top and bottom borders only", function()
       local bufnr = create_chat_buffer(TOOL_RESULT_BUFFER)
       vim.api.nvim_win_set_cursor(0, { 4, 0 })

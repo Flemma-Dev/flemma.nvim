@@ -341,6 +341,7 @@ return s.object({
     }),
     rejection = s.object({
       enabled = s.boolean(true),
+      completion = s.boolean(false),
       winblend = s.integer(15),
     }),
   }),

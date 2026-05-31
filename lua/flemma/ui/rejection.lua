@@ -255,6 +255,7 @@ function M.open(bufnr)
     compute_geometry(parent_win, open_lnum, close_lnum)
 
   local float_buf = buffer_utils.create_scratch_buffer({ bufhidden = "wipe", undolevels = false })
+  vim.b[float_buf].completion = rejection_config.completion
 
   local prefill = "User feedback: "
   vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, { prefill })

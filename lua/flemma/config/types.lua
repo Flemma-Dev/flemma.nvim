@@ -280,6 +280,7 @@
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 
 ---@class flemma.config.UiRejection
+---@field completion boolean
 ---@field enabled boolean
 ---@field winblend integer
 
