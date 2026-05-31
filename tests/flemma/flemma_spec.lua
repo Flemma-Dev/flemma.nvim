@@ -134,8 +134,11 @@ describe("flemma.setup", function()
     assert.are.equal("openai", config.provider)
     assert.same({ fg = "#ff0000" }, config.highlights.user:get())
 
-    -- Check that default values are preserved (system default is h.link("Special"))
-    assert.same({ link = "Special" }, config.highlights.system:get())
+    -- Check that default values are preserved (system default derives fg from Special, no bg)
+    local system_hl = config.highlights.system:get()
+    assert.is_not_nil(system_hl.fg, "system highlight should have fg")
+    assert.is_nil(system_hl.bg, "system highlight should not carry bg")
+    assert.is_nil(system_hl.link, "system highlight should resolve to attrs, not a link")
     assert.are.equal(true, config.ui.pricing.enabled)
   end)
 

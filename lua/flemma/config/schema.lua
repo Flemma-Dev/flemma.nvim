@@ -200,9 +200,9 @@ return s.object({
   -- ---------------------------------------------------------------------------
 
   highlights = s.object({
-    system = s.highlight(h.link("Special")),
-    user = s.highlight(h.link("Normal")),
-    assistant = s.highlight(h.link("Normal")),
+    system = s.highlight(h.from("Special"):omit("bg")),
+    user = s.highlight(h.from("Normal"):omit("bg")),
+    assistant = s.highlight(h.from("Normal"):omit("bg")),
     lua_expression = s.highlight(h.link("PreProc")),
     lua_code_block = s.highlight(h.link("PreProc")),
     lua_delimiter = s.highlight(h.link("FlemmaLuaExpression")),
