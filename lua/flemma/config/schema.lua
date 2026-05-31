@@ -234,8 +234,8 @@ return s.object({
         h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
       )
     ),
-    approval_indicator = s.highlight(h.from("Folded"):omit("bg")),
-    approval_label = s.highlight(h.from("Folded"):omit("bg")),
+    approval_indicator = s.highlight(h.from("DiagnosticInfo"):omit("bg")),
+    approval_label = s.highlight(h.from("DiagnosticInfo"):omit("bg")),
     approval_key = s.highlight(h.link("MoreMsg")),
     approval_action = s.highlight(h.from("ModeMsg"):tint("fg", "#202122")),
     rejection_input = s.highlight(
