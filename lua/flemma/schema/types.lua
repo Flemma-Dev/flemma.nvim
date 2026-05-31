@@ -6,6 +6,7 @@ local M = {}
 
 local symbols = require("flemma.symbols")
 local loader = require("flemma.loader")
+local hl = require("flemma.hl")
 
 -- ---------------------------------------------------------------------------
 -- Coerce context type (used by Node:coerce and consumers)
@@ -1464,8 +1465,17 @@ end
 ---@param value any
 ---@return boolean, string?
 function HlOpNode:validate_value(value)
+  if type(value) == "string" then
+    if value == "" then
+      return false, "highlight string must not be empty"
+    end
+    if value:sub(1, 1) == "#" and not value:match("^#%x%x%x%x%x%x$") then
+      return false, "invalid hex color (expected #RRGGBB): " .. value
+    end
+    return true
+  end
   if type(value) ~= "table" then
-    return false, "expected flemma.hl.HlOp, got " .. type(value)
+    return false, "expected flemma.hl.HlOp or string, got " .. type(value)
   end
   if type(value.get) ~= "function" or type(value.set) ~= "function" then
     return false, "expected flemma.hl.HlOp instance (missing :get() or :set())"
@@ -1476,7 +1486,17 @@ end
 ---@param default? flemma.hl.HlOp
 ---@return flemma.schema.HlOpNode
 function HlOpNode.new(default)
-  return setmetatable({ _default = default }, HlOpNode)
+  local node = setmetatable({ _default = default }, HlOpNode)
+  node._coerce = function(value, _ctx)
+    if type(value) ~= "string" then
+      return value
+    end
+    if value:match("^#%x%x%x%x%x%x$") then
+      return hl.hex(value)
+    end
+    return hl.link(value)
+  end
+  return node
 end
 
 -- ---------------------------------------------------------------------------

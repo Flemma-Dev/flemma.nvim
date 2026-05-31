@@ -48,7 +48,22 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.progress_accent`      | Bold accent for tool name in the progress bar (`FlemmaProgressBarAccent`) |
 | `highlights.role_name`            | GUI attributes for role name text, e.g., bold (`FlemmaRole*Name`)         |
 
-Each value is a highlight builder from `require("flemma.hl")`. Simple cases use `h.link("Group")` for a direct link or `h.attrs({ bold = true })` for literal attributes. More complex cases chain operations like `:blend()`, `:omit()`, and `:pick()` to derive colours from existing groups.
+Each value is either a **string shorthand** or a **highlight builder** from `require("flemma.hl")`:
+
+- **String (group name)** — `"Comment"` is equivalent to `h.link("Comment")`
+- **String (hex colour)** — `"#ff0000"` is equivalent to `h.hex("#ff0000")`
+- **HlOp builder** — for anything more complex, use the full API: `h.from()`, `h.attrs()`, `:blend()`, `:omit()`, `:pick()`, etc.
+
+The string shorthand means most overrides don't need `require("flemma.hl")` at all:
+
+```lua
+require("flemma").setup({
+  highlights = {
+    tool_name = "Keyword",        -- link to an existing group
+    thinking_tag = "#6a6a6a",     -- direct hex colour (applied as fg)
+  },
+})
+```
 
 ### Job result highlights
 

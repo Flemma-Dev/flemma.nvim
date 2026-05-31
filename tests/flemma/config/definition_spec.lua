@@ -62,10 +62,29 @@ describe("config.schema.definition", function()
       assert.is_table(cfg.highlights.role_name)
       local rn = cfg.highlights.role_name:get()
       assert.is_true(rn.bold)
-      -- Verify HlOpNode validation rejects non-HlOp values
+      -- Verify HlOpNode validation accepts HlOp instances and coercible strings
       local schema_node = schema:get_child_schema("highlights"):get_child_schema("system")
       assert.is_true(schema_node:validate_value(hl.link("Foo")))
-      assert.is_false(schema_node:validate_value("NotAnOp"))
+      assert.is_true(schema_node:validate_value("Comment"))
+      assert.is_true(schema_node:validate_value("#ff0000"))
+      -- Rejects invalid values
+      assert.is_false(schema_node:validate_value(""))
+      assert.is_false(schema_node:validate_value("#gggggg"))
+      assert.is_false(schema_node:validate_value(42))
+    end)
+
+    it("coerces highlight strings to HlOp instances", function()
+      local L = config_facade.LAYERS
+      local w = config_facade.writer(nil, L.SETUP)
+      w.highlights.system = "Function"
+      local cfg = config_facade.get()
+      assert.is_table(cfg.highlights.system)
+      assert.is_function(cfg.highlights.system.get)
+      assert.same({ link = "Function" }, cfg.highlights.system:get())
+      -- Hex string → h.hex()
+      w.highlights.tool_name = "#ff0000"
+      cfg = config_facade.get()
+      assert.same({ fg = "#ff0000" }, cfg.highlights.tool_name:get())
     end)
 
     it("materializes ruler defaults", function()

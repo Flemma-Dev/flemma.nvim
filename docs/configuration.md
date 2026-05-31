@@ -81,7 +81,7 @@ require("flemma").setup({
   templating = {
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
-  highlights = {                             -- All values are highlight builders (see require("flemma.hl"))
+  highlights = {                             -- HlOp builders OR strings (group name → link, "#RRGGBB" → hex)
     system = h.link("Special"),
     user = h.link("Normal"),
     assistant = h.link("Normal"),
