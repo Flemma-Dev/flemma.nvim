@@ -323,7 +323,7 @@ end
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param max_length integer Maximum width per line
----@param opts? { head?: integer, tail?: integer }
+---@param opts? { head?: integer, tail?: integer, indent?: string }
 ---@return string[] lines
 ---@return string|nil label
 ---@return flemma.ui.HighlightContext|nil context
@@ -336,6 +336,7 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
 
   local tool_def = tools.get(tool_name)
   local structured
+  local is_generic = false
 
   if tool_def and tool_def.format_preview then
     structured = normalize_preview(tool_def.format_preview(input, max_length))
@@ -347,21 +348,13 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
     local available = math.min(max_length, GENERIC_PREVIEW_INLINE_THRESHOLD) - str.strwidth(name_prefix)
     structured = format_generic_preview(input, math.max(0, available))
     structured.label = type(input.label) == "string" and input.label or nil
+    is_generic = true
   end
 
   local label = structured.label
   local detail = structured.detail --[[@as string|nil]]
 
-  ---@type flemma.ui.HighlightContext|nil
-  local highlight_context = nil
-  if structured.highlight and structured.highlight.lang and detail and detail ~= "" then
-    highlight_context = {
-      text = detail,
-      lang = structured.highlight.lang,
-      name_prefix = name_prefix,
-      indent = string.rep(" ", str.strwidth(name_prefix)),
-    }
-  end
+  local indent = (opts and opts.indent) or string.rep(" ", str.strwidth(name_prefix))
 
   if not detail or detail == "" then
     if label then
@@ -371,13 +364,30 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
   end
 
   local raw_lines = vim.split(detail, "\n", { plain = true })
+  local detail_on_own_line = is_generic and #raw_lines > 1
+
+  if detail_on_own_line then
+    detail = "\n" .. detail
+    raw_lines = vim.split(detail, "\n", { plain = true })
+    name_prefix = tool_name .. ":"
+  end
+
+  ---@type flemma.ui.HighlightContext|nil
+  local highlight_context = nil
+  if structured.highlight and structured.highlight.lang then
+    highlight_context = {
+      text = detail,
+      lang = structured.highlight.lang,
+      name_prefix = name_prefix,
+      indent = indent,
+    }
+  end
 
   if #raw_lines == 1 then
     local line = name_prefix .. raw_lines[1]
     return { str.truncate(line, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER) }, label, highlight_context
   end
 
-  local indent = string.rep(" ", str.strwidth(name_prefix))
   local continuation_width = max_length - str.strwidth(indent)
 
   local result = {}

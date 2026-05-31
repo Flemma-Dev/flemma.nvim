@@ -680,6 +680,25 @@ describe("format_tool_preview_multiline", function()
     assert.is_true(#lines <= 13)
     assert.is_truthy(lines[1]:find("trailing_tool:"), "first line should have tool name prefix")
   end)
+
+  it("uses opts.indent for continuation lines with custom format_preview", function()
+    registry.register("bash", {
+      name = "bash",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("bash", {
+      body = "$ echo hello\necho world\necho done",
+    }, 80, { indent = "  " })
+    assert.are.equal(3, #lines)
+    assert.are.equal("bash: $ echo hello", lines[1])
+    assert.are.equal("  echo world", lines[2])
+    assert.are.equal("  echo done", lines[3])
+  end)
 end)
 
 describe("format_tool_preview_body", function()

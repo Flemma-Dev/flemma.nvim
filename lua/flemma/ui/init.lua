@@ -21,6 +21,7 @@ local activity = require("flemma.ui.activity")
 local indicators = require("flemma.ui.indicators")
 local highlight = require("flemma.highlight")
 local str = require("flemma.utilities.string")
+local buffer_utils = require("flemma.utilities.buffer")
 
 local PRIORITY = {
   LINE_HIGHLIGHT = 50,
@@ -849,7 +850,9 @@ function M.add_tool_previews(bufnr, doc)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
   local approval_config = config_facade.get(bufnr).ui.approval
-  local preview_opts = { head = approval_config.preview_lines.head, tail = approval_config.preview_lines.tail }
+  local indent = buffer_utils.get_indent_string(bufnr)
+  local preview_opts =
+    { head = approval_config.preview_lines.head, tail = approval_config.preview_lines.tail, indent = indent }
 
   for _, msg in ipairs(doc.messages) do
     if roles.is_user(msg.role) then
@@ -1026,6 +1029,8 @@ function M.update_approval_prompt(bufnr, doc, siblings)
       if label then
         table.insert(prompt_chunks, { APPROVAL_OPEN .. " " .. label, "FlemmaApprovalLabel" })
         table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
+      else
+        table.insert(prompt_chunks, { APPROVAL_OPEN .. " ", "FlemmaApprovalLabel" })
       end
 
       table.insert(prompt_chunks, { "⏸ ", "FlemmaApprovalIndicator" })
@@ -1186,6 +1191,17 @@ function M.setup()
     pattern = "*.chat",
     callback = function(ev)
       processor.evaluate_frontmatter_if_changed(ev.buf)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup,
+    pattern = "shiftwidth,tabstop,expandtab",
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "chat" then
+        bridge.update_ui(bufnr)
+      end
     end,
   })
 

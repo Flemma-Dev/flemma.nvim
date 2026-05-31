@@ -90,4 +90,18 @@ function M.create_scratch_buffer(opts)
   return bufnr
 end
 
+---Get the buffer's one-level indent string, respecting shiftwidth, tabstop, and expandtab.
+---@param bufnr integer Buffer handle
+---@return string
+function M.get_indent_string(bufnr)
+  local sw = vim.bo[bufnr].shiftwidth
+  if sw == 0 then
+    sw = vim.bo[bufnr].tabstop
+  end
+  if vim.bo[bufnr].expandtab then
+    return string.rep(" ", sw)
+  end
+  return "\t"
+end
+
 return M
