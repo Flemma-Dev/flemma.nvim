@@ -12,6 +12,8 @@ local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local tool_context = require("flemma.tools.context")
 
+local rejection_ns = vim.api.nvim_create_namespace("flemma_rejection")
+
 ---@class flemma.ui.rejection.State
 ---@field float_buf integer Float buffer handle
 ---@field float_win integer Float window handle
@@ -20,6 +22,7 @@ local tool_context = require("flemma.tools.context")
 ---@field tool_id string Tool ID captured at open time
 ---@field parent_cursorline boolean Saved cursorline state for parent window
 ---@field augroup integer Autocmd group handle
+---@field status_extmark_id integer|nil Overlay extmark replacing (pending) with (rejected)
 
 ---Active popup state, nil when no popup is open.
 ---@type flemma.ui.rejection.State|nil
@@ -40,6 +43,9 @@ local function close(state)
     return
   end
   pcall(vim.api.nvim_del_augroup_by_id, state.augroup)
+  if state.status_extmark_id and vim.api.nvim_buf_is_valid(state.parent_buf) then
+    pcall(vim.api.nvim_buf_del_extmark, state.parent_buf, rejection_ns, state.status_extmark_id)
+  end
   if vim.api.nvim_win_is_valid(state.float_win) then
     vim.api.nvim_win_close(state.float_win, true)
   end
@@ -290,6 +296,19 @@ function M.open(bufnr)
   local parent_cursorline = vim.wo[parent_win].cursorline
   vim.wo[parent_win].cursorline = false
 
+  local status_extmark_id = nil
+  local header_line_0 = result_seg.position.start_line - 1
+  local header_text = vim.api.nvim_buf_get_lines(bufnr, header_line_0, header_line_0 + 1, false)[1] or ""
+  local pending_start = header_text:find("%(pending%)")
+  if pending_start then
+    status_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, rejection_ns, header_line_0, pending_start - 1, {
+      end_col = pending_start - 1 + #"(pending)",
+      virt_text = { { "(rejected)", "FlemmaToolResultRejected" } },
+      virt_text_pos = "overlay",
+      hl_mode = "combine",
+    })
+  end
+
   local state = {
     float_buf = float_buf,
     float_win = float_win,
@@ -297,6 +316,7 @@ function M.open(bufnr)
     parent_win = parent_win,
     tool_id = ctx.tool_id,
     parent_cursorline = parent_cursorline,
+    status_extmark_id = status_extmark_id,
     augroup = 0,
   }
   active = state
