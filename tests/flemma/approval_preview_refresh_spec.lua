@@ -18,7 +18,6 @@ describe("approval preview synchronous refresh", function()
   local ui
   local executor
 
-  local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
   local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
 
   before_each(function()
@@ -88,58 +87,69 @@ describe("approval preview synchronous refresh", function()
     return bufnr
   end
 
-  --- Flatten an extmark's virt_lines into a single string.
-  ---@param mark table
-  ---@return string
-  local function join_virt_lines(mark)
-    local parts = {}
-    for _, vline in ipairs(mark[4].virt_lines or {}) do
-      for _, chunk in ipairs(vline) do
-        parts[#parts + 1] = chunk[1]
-      end
-    end
-    return table.concat(parts, "")
-  end
-
-  it("renders the approved tool's footer label without a deferred UI pass", function()
+  it("renders the approved tool's label on the fence widget without a deferred UI pass", function()
     local bufnr = setup_pending_tool()
 
     -- Steady state: multi-line preview + approval prompt, no footer yet.
     ui.update_ui(bufnr)
 
-    local before = vim.api.nvim_buf_get_extmarks(bufnr, tool_preview_ns, 0, -1, { details = true })
-    assert.are.equal(1, #before, "pending tool should have a preview")
-    assert.is_falsy(
-      join_virt_lines(before[1]):find("checking disk space"),
-      "pending preview must not show the footer label yet"
+    local before_approval = vim.api.nvim_buf_get_extmarks(bufnr, tool_approval_ns, 0, -1, { details = true })
+    assert.are.equal(1, #before_approval, "pending tool should have an approval widget")
+    local before_text = table.concat(
+      vim.tbl_map(function(c)
+        return c[1]
+      end, before_approval[1][4].virt_text),
+      ""
     )
+    assert.is_truthy(before_text:find("⏸"), "pending widget should show pause icon")
 
     -- Approving is what made the buffer dance.
     local ok = executor.approve_at_cursor(bufnr)
     assert.is_true(ok)
 
-    -- The footer must appear in the SAME synchronous pass — the buggy code only
-    -- added it on the next CursorHold-driven update_ui.
-    local after = vim.api.nvim_buf_get_extmarks(bufnr, tool_preview_ns, 0, -1, { details = true })
-    assert.are.equal(1, #after, "approved tool should still have a preview")
+    -- The approved widget must appear in the SAME synchronous pass.
+    local after_approval = vim.api.nvim_buf_get_extmarks(bufnr, tool_approval_ns, 0, -1, { details = true })
+    assert.are.equal(1, #after_approval, "approved tool should have an approved widget")
+    local after_text = table.concat(
+      vim.tbl_map(function(c)
+        return c[1]
+      end, after_approval[1][4].virt_text),
+      ""
+    )
+    assert.is_truthy(after_text:find("✓"), "approved widget should show check icon")
     assert.is_truthy(
-      join_virt_lines(after[1]):find("checking disk space"),
-      "approved tool footer must render synchronously after approval"
+      after_text:find("checking disk space"),
+      "approved widget must show label synchronously after approval"
     )
   end)
 
-  it("drops the approval prompt synchronously after approval", function()
+  it("transitions from pending prompt to approved widget synchronously", function()
     local bufnr = setup_pending_tool()
 
     ui.update_ui(bufnr)
 
     local before = vim.api.nvim_buf_get_extmarks(bufnr, tool_approval_ns, 0, -1, { details = true })
     assert.are.equal(1, #before, "pending tool should have an approval prompt")
+    local before_text = table.concat(
+      vim.tbl_map(function(c)
+        return c[1]
+      end, before[1][4].virt_text),
+      ""
+    )
+    assert.is_truthy(before_text:find("⏸"), "pending tool should show pause icon")
 
     local ok = executor.approve_at_cursor(bufnr)
     assert.is_true(ok)
 
     local after = vim.api.nvim_buf_get_extmarks(bufnr, tool_approval_ns, 0, -1, { details = true })
-    assert.are.equal(0, #after, "approval prompt must be removed synchronously after approval")
+    assert.are.equal(1, #after, "approved tool should have an approved widget")
+    local after_text = table.concat(
+      vim.tbl_map(function(c)
+        return c[1]
+      end, after[1][4].virt_text),
+      ""
+    )
+    assert.is_truthy(after_text:find("✓"), "approved tool should show check icon")
+    assert.is_falsy(after_text:find("⏸"), "approved tool should not show pause icon")
   end)
 end)

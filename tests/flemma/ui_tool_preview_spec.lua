@@ -234,7 +234,7 @@ describe("UI Tool Previews", function()
       assert.is_true(#virt_lines >= 3, "multi-line tool should produce multiple virt_lines")
     end)
 
-    it("renders approval prompt when cursor is within pending tool_result range", function()
+    it("renders approval prompt as virt_text on closing fence", function()
       local bufnr = setup_buffer({ status = "pending" })
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       for i, line in ipairs(lines) do
@@ -249,14 +249,16 @@ describe("UI Tool Previews", function()
 
       local marks = get_approval_extmarks(bufnr)
       assert.are.equal(1, #marks, "should have one approval extmark")
-      local virt_lines = marks[1][4].virt_lines
+      local details = marks[1][4]
+      assert.is_truthy(details.virt_text, "extmark should use virt_text (not virt_lines)")
+      assert.is_nil(details.virt_lines, "extmark must not use virt_lines")
       local text = table.concat(
         vim.tbl_map(function(c)
           return c[1]
-        end, virt_lines[1]),
+        end, details.virt_text),
         ""
       )
-      assert.is_truthy(text:find("⏸"), "approval virt_line should contain the pause indicator")
+      assert.is_truthy(text:find("⏸"), "approval virt_text should contain the pause indicator")
       assert.is_truthy(text:find("<M%-a>"), "single pending tool should show Approve keybind")
       assert.is_falsy(text:find("<M%-A>"), "single pending tool should not show All keybind")
     end)
@@ -270,14 +272,15 @@ describe("UI Tool Previews", function()
 
       local marks = get_approval_extmarks(bufnr)
       assert.are.equal(1, #marks, "should still render approval extmark")
-      local virt_lines = marks[1][4].virt_lines
+      local details = marks[1][4]
+      assert.is_truthy(details.virt_text, "should use virt_text")
       local text = table.concat(
         vim.tbl_map(function(c)
           return c[1]
-        end, virt_lines[1]),
+        end, details.virt_text),
         ""
       )
-      assert.is_truthy(text:find("⏸"), "should contain ┕ connector")
+      assert.is_truthy(text:find("⏸"), "should contain pause indicator")
       assert.is_truthy(text:find("Awaiting approval…"), "should show hint text")
       assert.is_falsy(text:find("<M%-a>"), "should not show keybinds")
     end)
@@ -304,21 +307,25 @@ describe("UI Tool Previews", function()
       cfg.writer(nil, cfg.LAYERS.RUNTIME).ui.approval.enabled = true
     end)
 
-    it("does not render approval prompt for approved tools", function()
+    it("renders check icon for approved-not-executed tools", function()
       local bufnr = setup_buffer({ status = "approved" })
-      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-      for i, line in ipairs(lines) do
-        if line:find("Tool Result") then
-          vim.api.nvim_win_set_cursor(0, { i, 0 })
-          break
-        end
-      end
 
       local doc = parser.get_parsed_document(bufnr)
       ui.add_tool_previews(bufnr, doc)
 
       local marks = get_approval_extmarks(bufnr)
-      assert.are.equal(0, #marks, "approved tool should not have approval prompt")
+      assert.are.equal(1, #marks, "approved-not-executed tool should have a widget")
+      local details = marks[1][4]
+      assert.is_truthy(details.virt_text, "should use virt_text")
+      local text = table.concat(
+        vim.tbl_map(function(c)
+          return c[1]
+        end, details.virt_text),
+        ""
+      )
+      assert.is_truthy(text:find("✓"), "approved tool should show check icon")
+      assert.is_falsy(text:find("⏸"), "approved tool should not show pause icon")
+      assert.is_falsy(text:find("Awaiting approval"), "approved tool should not show awaiting text")
     end)
 
     it("shows queue counter when cursor is on one of multiple pending tools", function()
@@ -369,26 +376,22 @@ describe("UI Tool Previews", function()
       local marks = get_approval_extmarks(bufnr)
       assert.are.equal(2, #marks, "should have two approval extmarks")
 
-      local first_vl = marks[1][4].virt_lines
-      local first_text = table.concat(
-        vim.tbl_map(function(c)
-          return c[1]
-        end, first_vl[1]),
-        ""
-      )
-      assert.is_truthy(first_text:find("1/2"), "first tool should show 1/2")
+      local function join_virt_text(mark)
+        return table.concat(
+          vim.tbl_map(function(c)
+            return c[1]
+          end, mark[4].virt_text),
+          ""
+        )
+      end
+
+      local first_text = join_virt_text(marks[1])
       assert.is_truthy(first_text:find("<M%-a>"), "focused tool should show keybinds")
       assert.is_truthy(first_text:find("<M%-A>"), "focused tool should show All keybind with 2 pending")
+      assert.is_falsy(first_text:find("%(1/2%)"), "focused tool should not show counter (keybinds replace it)")
 
-      local second_vl = marks[2][4].virt_lines
-      local second_text = table.concat(
-        vim.tbl_map(function(c)
-          return c[1]
-        end, second_vl[1]),
-        ""
-      )
-      assert.is_truthy(second_text:find("2/2"), "second tool should show 2/2")
-      assert.is_truthy(second_text:find("Awaiting approval…"), "unfocused tool should show hint")
+      local second_text = join_virt_text(marks[2])
+      assert.is_truthy(second_text:find("Awaiting approval… %(2/2%)"), "unfocused tool should show hint with counter")
     end)
 
     it("counts all non-executed tools in queue counter, not just pending", function()
@@ -437,15 +440,23 @@ describe("UI Tool Previews", function()
       ui.add_tool_previews(bufnr, doc)
 
       local marks = get_approval_extmarks(bufnr)
-      assert.are.equal(1, #marks, "only pending tool gets an approval prompt")
 
-      local text = table.concat(
-        vim.tbl_map(function(c)
-          return c[1]
-        end, marks[1][4].virt_lines[1]),
-        ""
-      )
-      assert.is_truthy(text:find("2/2"), "should show 2/2 (position among all non-executed tools)")
+      local function find_pending_mark()
+        for _, mark in ipairs(marks) do
+          local text = table.concat(
+            vim.tbl_map(function(c)
+              return c[1]
+            end, mark[4].virt_text),
+            ""
+          )
+          if text:find("⏸") then
+            return text
+          end
+        end
+      end
+
+      local text = find_pending_mark()
+      assert.is_truthy(text, "should have a pending approval mark")
       assert.is_falsy(text:find("<M%-A>"), "single remaining pending tool should not show All keybind")
     end)
 
@@ -532,27 +543,28 @@ describe("UI Tool Previews", function()
       local marks = get_approval_extmarks(bufnr)
       assert.are.equal(2, #marks)
 
-      local function join(mark)
+      local function join_vt(mark)
         return table.concat(
           vim.tbl_map(function(c)
             return c[1]
-          end, mark[4].virt_lines[1]),
+          end, mark[4].virt_text),
           ""
         )
       end
 
-      -- Focused tool: "꜖ checking disk space  ⏸ 1/2 · <M-a> ..."
-      local a = join(marks[1])
-      assert.is_truthy(a:find("^꜖ checking disk space"), "label must lead: " .. a)
-      assert.is_true((a:find("checking disk space")) < (a:find("⏸")), "label must precede the ⏸ indicator: " .. a)
-      assert.is_truthy(a:find("⏸ 1/2 · "), "indicator + counter follow the label: " .. a)
-      assert.is_truthy(a:find("<M%-a>"), "focused tool shows keybinds after the indicator: " .. a)
+      -- Focused tool: " ⏸ checking disk space · <M-a> Approve ..."
+      local a = join_vt(marks[1])
+      assert.is_truthy(a:find("⏸"), "should contain pause indicator: " .. a)
+      assert.is_truthy(a:find("checking disk space"), "should contain label: " .. a)
+      assert.is_truthy(a:find("<M%-a>"), "focused tool shows keybinds: " .. a)
+      assert.is_falsy(a:find("%(1/2%)"), "focused tool should not show counter: " .. a)
 
-      -- Unfocused tool: "꜖ second task  ⏸ 2/2 · Awaiting approval…"
-      local b = join(marks[2])
-      assert.is_truthy(b:find("^꜖ second task"), "label must lead: " .. b)
-      assert.is_true((b:find("second task")) < (b:find("⏸")), "label must precede the ⏸ indicator: " .. b)
-      assert.is_truthy(b:find("⏸ 2/2 · Awaiting approval…"), "awaiting hint follows the indicator: " .. b)
+      -- Unfocused tool: "  ⏸ second task · Awaiting approval… (2/2)"
+      local b = join_vt(marks[2])
+      assert.is_truthy(b:find("⏸"), "should contain pause indicator: " .. b)
+      assert.is_truthy(b:find("second task"), "should contain label: " .. b)
+      assert.is_truthy(b:find("Awaiting approval…"), "unfocused shows hint: " .. b)
+      assert.is_truthy(b:find("%(2/2%)"), "should show counter: " .. b)
     end)
   end)
 end)

@@ -50,8 +50,9 @@ local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
 ---@type string
 local FENCE_BAR_CHAR = "╌"
-local APPROVAL_OPEN = "꜖"
-local APPROVAL_CLOSE = ""
+local APPROVAL_ICON_PENDING = "⏸"
+local APPROVAL_ICON_APPROVED = "✓"
+local APPROVAL_ICON_SETTLED = "⧖"
 
 ---Build the virt_text chunks for a fence overlay on the given line.
 ---Returns nil when the line is not a fence delimiter.
@@ -869,7 +870,7 @@ function M.add_tool_previews(bufnr, doc)
 
             if line_idx >= 0 and line_idx < line_count then
               local role_hl = roles.highlight_group("FlemmaLine", msg.role)
-              local preview_lines, label, highlight_context =
+              local preview_lines, _, highlight_context =
                 preview.format_tool_preview_multiline(tool_use.name, tool_use.input, max_length, preview_opts)
 
               ---@type {[1]:string, [2]:string|string[]}[][]
@@ -911,17 +912,6 @@ function M.add_tool_previews(bufnr, doc)
                 end
               end
 
-              if seg.status ~= "pending" and label and #preview_lines > 1 then
-                local footer = "— " .. label
-                local pad_width = math.max(0, max_length - str.strwidth(footer))
-                ---@type {[1]:string, [2]:string|string[]}[]
-                local footer_chunks = { { footer, { "FlemmaToolLabel", role_hl } } }
-                if pad_width > 0 then
-                  table.insert(footer_chunks, { string.rep(" ", pad_width), role_hl })
-                end
-                virt_lines[#virt_lines + 1] = footer_chunks
-              end
-
               vim.api.nvim_buf_set_extmark(bufnr, tool_preview_ns, line_idx, 0, {
                 virt_lines = virt_lines,
               })
@@ -936,12 +926,11 @@ function M.add_tool_previews(bufnr, doc)
   M.update_approval_prompt(bufnr, doc, siblings)
 end
 
----Render the approval prompt line for each pending tool_result.
----Layout: `— <label>  ⏸ N/M · <hints>` — the label leads (mirroring the
----settled footer) so it stays in a fixed position when the tool is approved;
----the pause indicator (⏸) and affordance follow. When the cursor is within a
----pending tool_result's range, that tool gets full keybind hints; others get
----a brief "Awaiting approval…".
+---Render the approval widget as inline virt_text on the closing fence line
+---for each pending tool_result.
+---Layout: `  ⏸ [label · ] <hints|Awaiting approval…> (N/M)`
+---When the cursor is within a pending tool_result's range, that tool gets
+---full keybind hints; others get "Awaiting approval…".
 ---@param bufnr integer
 ---@param doc? flemma.ast.DocumentNode
 ---@param siblings? table<string, flemma.ast.ToolSibling> Prebuilt sibling table; built from doc when omitted (lets add_tool_previews share its table)
@@ -963,10 +952,11 @@ function M.update_approval_prompt(bufnr, doc, siblings)
   local cursor_line = vim.api.nvim_win_get_cursor(winid)[1]
 
   siblings = siblings or ast.build_tool_sibling_table(doc)
-  local max_length = preview.get_text_area_width(winid)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
   local pending_tools = {}
+  local approved_tools = {}
+  local labeled_tools = {}
   local queue_total = 0
   for _, msg in ipairs(doc.messages) do
     if roles.is_user(msg.role) then
@@ -976,7 +966,11 @@ function M.update_approval_prompt(bufnr, doc, siblings)
           if sibling and sibling.use then
             queue_total = queue_total + 1
             if seg.status == "pending" then
-              pending_tools[#pending_tools + 1] = { seg = seg, msg = msg, queue_index = queue_total }
+              pending_tools[#pending_tools + 1] = { seg = seg, queue_index = queue_total }
+            elseif seg.status == "approved" then
+              approved_tools[#approved_tools + 1] = { seg = seg, use = sibling.use }
+            elseif seg.status or indicators.has_indicator(bufnr, seg.tool_use_id) then
+              labeled_tools[#labeled_tools + 1] = { seg = seg, use = sibling.use }
             end
           end
         end
@@ -984,7 +978,7 @@ function M.update_approval_prompt(bufnr, doc, siblings)
     end
   end
 
-  if #pending_tools == 0 then
+  if #pending_tools == 0 and #approved_tools == 0 and #labeled_tools == 0 then
     return
   end
 
@@ -1024,21 +1018,13 @@ function M.update_approval_prompt(bufnr, doc, siblings)
       local label = tool_use and preview.format_tool_label(tool_use.name, tool_use.input) or nil
 
       ---@type {[1]:string, [2]:string}[]
-      local prompt_chunks = {}
+      local virt_text = {}
+
+      table.insert(virt_text, { " " .. APPROVAL_ICON_PENDING .. " ", "FlemmaApprovalLabel" })
 
       if label then
-        table.insert(prompt_chunks, { APPROVAL_OPEN .. " " .. label, "FlemmaApprovalLabel" })
-        table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
-      else
-        table.insert(prompt_chunks, { APPROVAL_OPEN .. " ", "FlemmaApprovalLabel" })
-      end
-
-      table.insert(prompt_chunks, { "⏸ ", "FlemmaApprovalIndicator" })
-
-      if queue_total > 1 then
-        local counter = string.format("%d/%d", entry.queue_index, queue_total)
-        table.insert(prompt_chunks, { counter, "FlemmaApprovalIndicator" })
-        table.insert(prompt_chunks, { " · ", "FlemmaApprovalIndicator" })
+        table.insert(virt_text, { label, "FlemmaApprovalLabel" })
+        table.insert(virt_text, { " · ", "FlemmaApprovalLabel" })
       end
 
       if cursor_on_this and #keybind_hints > 0 then
@@ -1046,59 +1032,65 @@ function M.update_approval_prompt(bufnr, doc, siblings)
         for _, hint in ipairs(keybind_hints) do
           if not hint.min_pending or #pending_tools >= hint.min_pending then
             if rendered > 0 then
-              table.insert(prompt_chunks, { "  ", "FlemmaApprovalLine" })
+              table.insert(virt_text, { "  ", "FlemmaApprovalIndicator" })
             end
-            table.insert(prompt_chunks, { hint.key_display, "FlemmaApprovalKey" })
-            table.insert(prompt_chunks, { " ", "FlemmaApprovalLine" })
-            table.insert(prompt_chunks, { hint.label, "FlemmaApprovalAction" })
+            table.insert(virt_text, { hint.key_display, "FlemmaApprovalKey" })
+            table.insert(virt_text, { " ", "FlemmaApprovalIndicator" })
+            table.insert(virt_text, { hint.label, "FlemmaApprovalAction" })
             rendered = rendered + 1
           end
         end
       else
-        table.insert(prompt_chunks, { "Awaiting approval…", "FlemmaApprovalIndicator" })
-      end
-
-      local prompt_text_width = 0
-      for _, c in ipairs(prompt_chunks) do
-        prompt_text_width = prompt_text_width + str.strwidth(c[1])
-      end
-      local remaining_pad = max_length - prompt_text_width
-      if approval_config.layout == "block" then
-        if remaining_pad > 0 then
-          table.insert(prompt_chunks, { string.rep(" ", remaining_pad), "FlemmaApprovalLine" })
+        local status = "Awaiting approval…"
+        if queue_total > 1 then
+          status = string.format("%s (%d/%d)", status, entry.queue_index, queue_total)
         end
-      else
-        if APPROVAL_CLOSE ~= "" then
-          local close_str = " " .. APPROVAL_CLOSE
-          local close_width = str.strwidth(close_str)
-          if remaining_pad >= close_width then
-            table.insert(prompt_chunks, { close_str, "FlemmaApprovalLabel" })
-            remaining_pad = remaining_pad - close_width
-          end
-        end
-        if remaining_pad > 0 then
-          table.insert(prompt_chunks, { " ", "FlemmaApprovalLine" })
-          remaining_pad = remaining_pad - 1
-        end
-        local fade_steps = math.min(remaining_pad, approval_config.fade or 0)
-        for i = 1, fade_steps do
-          table.insert(prompt_chunks, { " ", string.format("FlemmaApprovalFade%d", i) })
-        end
-        remaining_pad = remaining_pad - fade_steps
-        if remaining_pad > 0 then
-          local current_config = config_facade.get(bufnr)
-          local line_hl = current_config.line_highlights
-              and current_config.line_highlights.enabled
-              and roles.highlight_group("FlemmaLine", entry.msg.role)
-            or "Normal"
-          table.insert(prompt_chunks, { string.rep(" ", remaining_pad), line_hl })
-        end
+        table.insert(virt_text, { status, "FlemmaApprovalIndicator" })
       end
 
       vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
-        virt_lines = { prompt_chunks },
-        virt_lines_above = true,
+        virt_text = virt_text,
+        virt_text_pos = "eol",
+        hl_mode = "combine",
       })
+    end
+  end
+
+  for _, entry in ipairs(approved_tools) do
+    local seg = entry.seg
+    local closing_fence_row = seg.position.end_line - 1
+    if closing_fence_row >= 0 and closing_fence_row < line_count then
+      local label = preview.format_tool_label(entry.use.name, entry.use.input)
+
+      ---@type {[1]:string, [2]:string}[]
+      local virt_text = { { " " .. APPROVAL_ICON_APPROVED .. " ", "FlemmaToolResultApproved" } }
+      if label then
+        table.insert(virt_text, { label, "FlemmaApprovalLabel" })
+      end
+
+      vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
+        virt_text = virt_text,
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+      })
+    end
+  end
+
+  for _, entry in ipairs(labeled_tools) do
+    local seg = entry.seg
+    local closing_fence_row = seg.position.end_line - 1
+    if closing_fence_row >= 0 and closing_fence_row < line_count then
+      local label = preview.format_tool_label(entry.use.name, entry.use.input)
+      if label then
+        vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
+          virt_text = {
+            { " " .. APPROVAL_ICON_SETTLED .. " ", "FlemmaApprovalLabel" },
+            { label, "FlemmaApprovalLabel" },
+          },
+          virt_text_pos = "eol",
+          hl_mode = "combine",
+        })
+      end
     end
   end
 end

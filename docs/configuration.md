@@ -108,12 +108,11 @@ require("flemma").setup({
     fence_bar = h.link("FlemmaFenceLabel"),           -- Fence code block delimiter bar
     fold_preview = h.link("Comment"),
     fold_meta = h.link("Comment"),
-    approval_line = h.coalesce(                        -- Background for tool approval prompts
-      h.from("FlemmaLineUser"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1),
-      h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
+    approval_indicator = h.from("DiagnosticInfo"):omit("bg"), -- Status text on approval prompts
+    approval_label = h.coalesce(                       -- Icon, label, and separator on approval prompts
+      h.from("Folded"):pick("fg"):contrast("fg", h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")), 4.5),
+      h.from("Comment"):pick("fg")
     ),
-    approval_indicator = h.from("Folded"):omit("bg"), -- Status indicator on approval prompts
-    approval_label = h.from("Folded"):omit("bg"),     -- Tool name label on approval prompts
     approval_key = h.link("MoreMsg"),                 -- Keybinding hints on approval prompts
     approval_action = h.from("ModeMsg"):tint("fg", "#202122"), -- Action text on approval prompts
     busy = h.link("DiagnosticWarn"),                  -- Busy indicator icon in integrations (e.g., bufferline)

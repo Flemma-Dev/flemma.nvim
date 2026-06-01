@@ -39,7 +39,6 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                   |
 | `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)         |
 | `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)            |
-| `highlights.approval_line`        | Background for tool approval prompts (`FlemmaApprovalLine`)               |
 | `highlights.approval_indicator`   | Status indicator on approval prompts (`FlemmaApprovalIndicator`)          |
 | `highlights.approval_label`       | Tool name label on approval prompts (`FlemmaApprovalLabel`)               |
 | `highlights.approval_key`         | Keybinding hints on approval prompts (`FlemmaApprovalKey`)                |
@@ -103,7 +102,7 @@ ruler = { hl = h.from("Comment"):mute("fg", "#303030") }
 line_highlights = { user = h.from("Normal"):tint("bg", "#202122") }
 
 -- Tint bg using 10% of DiagnosticWarn's fg colour
-highlights = { approval_line = h.from("Normal"):tint("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10) }
+highlights = { assistant = h.from("Normal"):tint("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10) }
 ```
 
 For cases requiring truly different ops per theme (not just flipped blend direction), `h.themed()` is available:
@@ -236,27 +235,16 @@ When `padding.right > 0`, the top arc (`╭`) connects to the ruler for a seamle
 
 ## Approval prompt
 
-When a tool call requires manual approval, Flemma renders an inline prompt below the tool result block showing the tool label, a queue counter, and keybind hints. The prompt appears as a virtual line anchored to the tool result's opening fence.
+When a tool call requires manual approval, Flemma renders an inline widget at the end of the tool result's closing fence line showing a pause indicator, the tool label, a queue counter, and keybind hints. Approved-but-not-yet-executing tools show a check icon instead.
 
 ```lua
 ui = {
   approval = {
     enabled = true,       -- Show approval prompts (default: true)
-    layout = "inline",    -- "inline" or "block"
-    fade = 10,            -- Gradient steps at trailing edge (0 = off)
     preview_lines = { head = 6, tail = 6 },
   },
 }
 ```
-
-### Layout modes
-
-- **`"inline"`** (default) — the prompt spans only the content width plus a 1-character pad, then fades into the line highlight (or Normal) background over `fade` steps using an ease-out cubic curve.
-- **`"block"`** — the prompt fills the entire line with `FlemmaApprovalLine` background, matching the full-width style of rulers and line highlights.
-
-### Fade gradient
-
-When `fade > 0` and `layout = "inline"`, the trailing edge transitions smoothly from the approval line background to the surrounding line highlight (or Normal) background. The gradient uses an ease-out cubic easing for a natural falloff. Set `fade = 0` to disable the gradient and show a hard edge.
 
 ## Spinner behaviour
 

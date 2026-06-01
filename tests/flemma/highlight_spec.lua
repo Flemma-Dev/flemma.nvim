@@ -619,7 +619,6 @@ describe("HlOp-based exclusion and approval highlights", function()
 
     for _, group in ipairs({
       "FlemmaToolName",
-      "FlemmaApprovalLine",
       "FlemmaApprovalIndicator",
       "FlemmaApprovalLabel",
       "FlemmaApprovalKey",
@@ -645,7 +644,6 @@ describe("HlOp-based exclusion and approval highlights", function()
     vim.api.nvim_set_hl(0, "TestExclFgOnly", {})
     for _, group in ipairs({
       "FlemmaToolName",
-      "FlemmaApprovalLine",
       "FlemmaApprovalIndicator",
       "FlemmaApprovalLabel",
       "FlemmaApprovalKey",
@@ -712,7 +710,7 @@ describe("HlOp-based exclusion and approval highlights", function()
   end)
 
   describe("approval group highlights", function()
-    it("should use approval_bg fallback when sub-group omits bg", function()
+    it("should set approval sub-groups directly without bg inheritance", function()
       local h = require("flemma.hl")
       local config = require("flemma.config")
       config.apply(config.LAYERS.SETUP, {
@@ -726,28 +724,10 @@ describe("HlOp-based exclusion and approval highlights", function()
 
       local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
       assert.are.equal(0xaabbcc, hl.fg, "should keep fg from TestExclusion")
-      local approval_hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLine", link = false })
-      assert.is_not_nil(hl.bg, "should have bg from approval_line fallback")
-      assert.are.equal(approval_hl.bg, hl.bg, "bg should match approval_line bg")
+      assert.is_nil(hl.bg, "bg omitted → no bg fallback")
     end)
 
-    it("should fall back to approval_bg when group lacks bg", function()
-      local h = require("flemma.hl")
-      local config = require("flemma.config")
-      config.apply(config.LAYERS.SETUP, {
-        highlights = { approval_indicator = h.from("TestExclFgOnly") },
-      })
-      local bufnr = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
-      highlight.apply_syntax()
-
-      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
-      assert.is_not_nil(hl.bg, "should fall back to approval_bg when group has no bg")
-    end)
-
-    it("should preserve group's own bg instead of overriding with approval_bg", function()
+    it("should preserve group's own bg", function()
       local h = require("flemma.hl")
       local config = require("flemma.config")
       config.apply(config.LAYERS.SETUP, {
@@ -760,7 +740,7 @@ describe("HlOp-based exclusion and approval highlights", function()
       highlight.apply_syntax()
 
       local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
-      assert.are.equal(0x112233, hl.bg, "should keep group's own bg, not approval_bg")
+      assert.are.equal(0x112233, hl.bg, "should keep group's own bg")
     end)
 
     it("should inherit italic from group when present", function()
@@ -777,22 +757,6 @@ describe("HlOp-based exclusion and approval highlights", function()
 
       local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLabel", link = false })
       assert.is_true(hl.italic, "should keep group's own italic")
-    end)
-
-    it("should have no bg when approval_line resolves to nil bg", function()
-      local h = require("flemma.hl")
-      local config = require("flemma.config")
-      config.apply(config.LAYERS.SETUP, {
-        highlights = { approval_line = h.from("Normal"):omit("bg") },
-      })
-      local bufnr = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
-      highlight.apply_syntax()
-
-      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLine", link = false })
-      assert.is_nil(hl.bg, "should not set bg when approval_line has no bg")
     end)
   end)
 end)

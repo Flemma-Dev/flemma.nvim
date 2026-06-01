@@ -228,14 +228,15 @@ return s.object({
     tool_detail = s.highlight(h.link("Comment")),
     busy = s.highlight(h.link("DiagnosticWarn")),
     progress_accent = s.highlight(h.attrs({ bold = true })),
-    approval_line = s.highlight(
+    approval_indicator = s.highlight(h.from("DiagnosticInfo"):omit("bg")),
+    approval_label = s.highlight(
       h.coalesce(
-        h.from("FlemmaLineUser"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1),
-        h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
+        h.from("Folded")
+          :pick("fg")
+          :contrast("fg", h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")), 4.5),
+        h.from("Comment"):pick("fg")
       )
     ),
-    approval_indicator = s.highlight(h.from("DiagnosticInfo"):omit("bg")),
-    approval_label = s.highlight(h.from("DiagnosticInfo"):omit("bg")),
     approval_key = s.highlight(h.link("MoreMsg")),
     approval_action = s.highlight(h.from("ModeMsg"):tint("fg", "#202122")),
     rejection_input = s.highlight(
@@ -315,8 +316,6 @@ return s.object({
     }),
     approval = s.object({
       enabled = s.boolean(true),
-      layout = s.enum({ "inline", "block" }, "inline"),
-      fade = s.integer(10),
       syntax_highlighting = s.boolean(true),
       preview_lines = s.union(
         s.object({

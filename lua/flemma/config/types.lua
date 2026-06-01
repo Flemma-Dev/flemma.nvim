@@ -49,7 +49,6 @@
 ---@field approval_indicator flemma.hl.HlOp
 ---@field approval_key flemma.hl.HlOp
 ---@field approval_label flemma.hl.HlOp
----@field approval_line flemma.hl.HlOp
 ---@field assistant flemma.hl.HlOp
 ---@field busy flemma.hl.HlOp
 ---@field fence_bar flemma.hl.HlOp
@@ -263,8 +262,6 @@
 
 ---@class flemma.config.UiApproval
 ---@field enabled boolean
----@field fade integer
----@field layout "inline"|"block"
 ---@field preview_lines { head: integer, tail: integer }|integer
 ---@field syntax_highlighting boolean
 
