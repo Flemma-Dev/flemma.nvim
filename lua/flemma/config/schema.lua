@@ -228,7 +228,7 @@ return s.object({
     tool_detail = s.highlight(h.link("Comment")),
     busy = s.highlight(h.link("DiagnosticWarn")),
     progress_accent = s.highlight(h.attrs({ bold = true })),
-    approval_indicator = s.highlight(h.from("DiagnosticInfo"):omit("bg")),
+    approval_indicator = s.highlight(h.from("Comment"):omit("bg")),
     approval_label = s.highlight(
       h.coalesce(
         h.from("Folded")
