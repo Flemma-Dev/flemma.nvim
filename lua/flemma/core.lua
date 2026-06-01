@@ -614,8 +614,16 @@ local function advance_phase2(opts)
   end
 
   if throttled and opts.user_initiated then
+    local queued = #approved - executed_count
     notify.info(
-      "Executing " .. executed_count .. "/" .. #approved .. " tools (max_concurrent=" .. max_concurrent .. ")"
+      queued
+        .. " tool"
+        .. (queued == 1 and "" or "s")
+        .. " queued — max_concurrent limit reached ("
+        .. executor.count_running(bufnr)
+        .. "/"
+        .. max_concurrent
+        .. " running)"
     )
   end
 
