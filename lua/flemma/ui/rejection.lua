@@ -274,7 +274,7 @@ function M.open(bufnr)
     col = col_offset,
     width = width,
     height = initial_height,
-    border = { "", "╌", "", "", "", "╌", "", "" },
+    border = { "", "─", "", "", "", "─", "", "" },
     style = "minimal",
     noautocmd = true,
     zindex = 50,

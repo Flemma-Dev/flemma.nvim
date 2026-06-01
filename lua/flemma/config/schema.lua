@@ -239,10 +239,10 @@ return s.object({
     ),
     approval_key = s.highlight(h.link("MoreMsg")),
     approval_action = s.highlight(h.from("ModeMsg"):tint("fg", "#202122")),
-    rejection_input = s.highlight(
-      h.from("DiagnosticWarn"):merge(h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.from("Normal"):pick("bg")))
+    rejection_input = s.highlight(h.from("MsgArea")),
+    rejection_border = s.highlight(
+      h.coalesce(h.from("MsgArea"):pick("bg"), h.from("Normal")):merge(h.from("FloatBorder"):pick("fg"), "force")
     ),
-    rejection_border = s.highlight(h.link("FlemmaRejection")),
     role_name = s.highlight(h.attrs({ bold = true })),
   }),
 
