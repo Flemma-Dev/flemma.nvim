@@ -362,12 +362,13 @@ function M.format_tool_preview_multiline(tool_name, input, max_length, opts)
     end
     return { tool_name }, nil, nil
   end
+  ---@cast detail string
 
   local raw_lines = vim.split(detail, "\n", { plain = true })
   local detail_on_own_line = is_generic and #raw_lines > 1
 
   if detail_on_own_line then
-    detail = "\n" .. detail
+    detail = "\n" .. detail --[[@as string]]
     raw_lines = vim.split(detail, "\n", { plain = true })
     name_prefix = tool_name .. ":"
   end
