@@ -132,6 +132,7 @@ local tool_names = require("flemma.utilities.tools")
 ---@class flemma.provider.Base
 ---@field parameters flemma.provider.Parameters
 ---@field state flemma.provider.ProviderState
+---@field compact_headers? boolean Omit the blank line between tool headers and fences
 ---@field endpoint? string
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
@@ -749,8 +750,9 @@ function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
   local fence = string.rep("`", math.max(3, max_ticks + 1))
 
   local prefix = self:_get_content_prefix()
+  local header_gap = self.compact_headers and "\n" or "\n\n"
   local formatted = string.format(
-    "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+    "%s**Tool Use:** `%s` (`%s`)" .. header_gap .. "%sjson\n%s\n%s\n",
     prefix,
     decoded_name,
     id,

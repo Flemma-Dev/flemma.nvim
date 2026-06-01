@@ -36,6 +36,7 @@
 ---@field auto_close flemma.config.EditingAutoClose
 ---@field auto_prompt boolean
 ---@field auto_write boolean
+---@field compact_headers boolean
 ---@field conceal? string|integer|false
 ---@field disable_textwidth boolean
 ---@field fold flemma.config.EditingFold

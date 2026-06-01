@@ -329,7 +329,13 @@ local function do_completion(bufnr, tool_id, result, opts)
   end
 
   -- Inject result into buffer
-  local ok, err = injector.inject_result(bufnr, tool_id, result)
+  local completion_config = config_facade.get(bufnr)
+  local ok, err = injector.inject_result(
+    bufnr,
+    tool_id,
+    result,
+    { compact = completion_config.editing and completion_config.editing.compact_headers }
+  )
   if not ok then
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
@@ -343,8 +349,7 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
   if ok and autopilot.get_state(bufnr) ~= "armed" then
-    local config = config_facade.get(bufnr)
-    local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
+    local cursor_mode = completion_config.tools and completion_config.tools.cursor_after_result or "result"
     if cursor_mode ~= "stay" then
       move_cursor_after_result(bufnr, tool_id, cursor_mode)
     end
@@ -567,7 +572,13 @@ function M.execute(bufnr, context)
       else
         placeholder_text = messages.render("job-executing--untracked")
       end
-      local fence_ok, fence_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+      local readopt_config = config_facade.materialize(bufnr)
+      local fence_ok, fence_err = injector.set_fence_content(
+        bufnr,
+        tool_id,
+        placeholder_text,
+        { compact = readopt_config.editing and readopt_config.editing.compact_headers }
+      )
       if not fence_ok then
         log.warn("executor: failed to set re-adopt placeholder for " .. tool_id .. ": " .. (fence_err or "unknown"))
       end
@@ -634,8 +645,12 @@ function M.execute(bufnr, context)
   -- Lock buffer to prevent user edits during execution
   state.lock_buffer(bufnr)
 
+  local exec_config = config_facade.materialize(bufnr)
+  local exec_compact = exec_config.editing and exec_config.editing.compact_headers
+
   -- Phase 1: Inject placeholder (pcall to ensure cleanup on unexpected errors like textlock)
-  local ph_ok, header_line, inject_err, placeholder_opts = pcall(injector.inject_placeholder, bufnr, tool_id)
+  local ph_ok, header_line, inject_err, placeholder_opts =
+    pcall(injector.inject_placeholder, bufnr, tool_id, { compact = exec_compact })
   if not ph_ok then
     cleanup_pending(bufnr, tool_id)
     maybe_unlock_buffer(bufnr)
@@ -673,7 +688,7 @@ function M.execute(bufnr, context)
     else
       placeholder_text = messages.render("job-executing--untracked")
     end
-    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text, { compact = exec_compact })
     if not f_ok then
       log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
     end
@@ -688,8 +703,7 @@ function M.execute(bufnr, context)
   end
 
   -- Show execution indicator
-  local config = config_facade.materialize(bufnr)
-  if not config.tools or config.tools.show_spinner ~= false then
+  if not exec_config.tools or exec_config.tools.show_spinner ~= false then
     indicators.show_tool_indicator(bufnr, tool_id, header_line)
   end
 
@@ -705,7 +719,7 @@ function M.execute(bufnr, context)
   local dirname = buffer_context:get_dirname()
 
   -- Resolve cwd: config value may be a URN or variable
-  local tool_config = config.tools and config.tools[tool_name]
+  local tool_config = exec_config.tools and exec_config.tools[tool_name]
   local raw_cwd = tool_config and tool_config.cwd
   local resolved_cwd
   if raw_cwd then
@@ -717,7 +731,7 @@ function M.execute(bufnr, context)
   local exec_context = M.build_execution_context({
     bufnr = bufnr,
     cwd = resolved_cwd,
-    timeout = (config.tools and config.tools.default_timeout) or DEFAULT_TIMEOUT,
+    timeout = (exec_config.tools and exec_config.tools.default_timeout) or DEFAULT_TIMEOUT,
     tool_name = tool_name,
     tool_id = tool_id,
     __dirname = dirname,
@@ -946,7 +960,13 @@ function M.background_at_cursor(bufnr)
   else
     job_placeholder_text = messages.render("job-executing--untracked")
   end
-  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text)
+  local bg_config = config_facade.materialize(bufnr)
+  local content_ok, content_err = injector.set_fence_content(
+    bufnr,
+    ctx.tool_id,
+    job_placeholder_text,
+    { compact = bg_config.editing and bg_config.editing.compact_headers }
+  )
   if not content_ok then
     log.warn(
       "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
@@ -1029,13 +1049,16 @@ function M.resolve_orphaned_jobs(bufnr)
     log.trace("executor: no orphaned background jobs in buffer " .. bufnr)
   end
 
+  local orphan_config = #orphans > 0 and config_facade.materialize(bufnr) or nil
+  local orphan_compact_opts = orphan_config
+    and { compact = orphan_config.editing and orphan_config.editing.compact_headers }
   for _, orphan in ipairs(orphans) do
     log.debug("executor: resolving orphan " .. orphan.job_id .. " with error completion")
     injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
     injector.append_job_result(bufnr, orphan.job_id, {
       success = false,
       error = messages.render("job-lost"),
-    })
+    }, orphan_compact_opts)
   end
 
   return #orphans
@@ -1144,7 +1167,13 @@ function M.reject(bufnr, tool_id, message)
     return false, update_err
   end
   if message and message ~= "" then
-    local content_ok, content_err = injector.set_fence_content(bufnr, tool_id, message)
+    local reject_config = config_facade.materialize(bufnr)
+    local content_ok, content_err = injector.set_fence_content(
+      bufnr,
+      tool_id,
+      message,
+      { compact = reject_config.editing and reject_config.editing.compact_headers }
+    )
     if not content_ok then
       return false, content_err
     end
@@ -1251,10 +1280,11 @@ function M.execute_at_cursor(bufnr)
   if result_seg and result_seg.kind == "tool_result" then
     ---@cast result_seg flemma.ast.ToolResultSegment
     if result_seg.status and (result_seg.status == "rejected" or result_seg.status == "denied") then
+      local eac_config = config_facade.materialize(bufnr)
       injector.inject_result(bufnr, ctx.tool_id, {
         success = false,
         error = injector.resolve_error_message(result_seg.status --[[@as "rejected"|"denied"]], result_seg.content),
-      })
+      }, { compact = eac_config.editing and eac_config.editing.compact_headers })
       if autopilot.get_state(bufnr) == "paused" then
         autopilot.arm(bufnr)
       end

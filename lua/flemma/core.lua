@@ -60,6 +60,8 @@ local function drain_and_inject_completions(bufnr)
 
   local items = executor.drain_job_completions(bufnr)
   log.debug("drain_and_inject_completions(): draining " .. #items .. " completion(s) for buffer " .. bufnr)
+  local drain_config = config_facade.get(bufnr)
+  local drain_compact_opts = { compact = drain_config.editing and drain_config.editing.compact_headers }
   local user_is_typing = false
 
   for _, item in ipairs(items) do
@@ -118,7 +120,7 @@ local function drain_and_inject_completions(bufnr)
         )
       end
 
-      local placement = injector.append_job_result(bufnr, item.job_id, item.result)
+      local placement = injector.append_job_result(bufnr, item.job_id, item.result, drain_compact_opts)
       log.debug(
         "drain_and_inject_completions(): injected "
           .. item.job_id
@@ -544,6 +546,8 @@ local function advance_phase2(opts)
   end
 
   local autopilot_active = autopilot.is_enabled(bufnr)
+  local config = config_facade.get(bufnr)
+  local compact_opts = { compact = config.editing and config.editing.compact_headers }
 
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
 
@@ -566,7 +570,7 @@ local function advance_phase2(opts)
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
       error = injector.resolve_error_message("denied"),
-    })
+    }, compact_opts)
   end
 
   -- Process rejected → replace with user content or default error
@@ -575,7 +579,7 @@ local function advance_phase2(opts)
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
       error = injector.resolve_error_message("rejected", ctx.content),
-    })
+    }, compact_opts)
   end
 
   -- Process aborted → replace with abort message from the marker
@@ -584,7 +588,7 @@ local function advance_phase2(opts)
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
       error = ctx.aborted_message or messages.render("request-aborted"),
-    })
+    }, compact_opts)
   end
 
   -- Process approved → execute tool
@@ -595,7 +599,6 @@ local function advance_phase2(opts)
     -- Executing before sources finish would produce a false "tool not found" error.
     tools.ensure_ready()
   end
-  local config = config_facade.get(bufnr)
   local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
   local executed_count = 0
   local throttled = false
@@ -817,6 +820,8 @@ function M.send_or_execute(opts)
 
   if #pending > 0 then
     local first_placeholder_line = nil
+    local phase1_config = config_facade.get(bufnr)
+    local phase1_compact = phase1_config.editing and phase1_config.editing.compact_headers
 
     -- Partition into aborted (skip approval) and normal (run approval)
     local aborted_pending = {}
@@ -831,7 +836,7 @@ function M.send_or_execute(opts)
 
     -- Aborted tools: inject placeholder with status=aborted directly (no approval)
     for _, ctx in ipairs(aborted_pending) do
-      injector.inject_placeholder(bufnr, ctx.tool_id, { status = "aborted" })
+      injector.inject_placeholder(bufnr, ctx.tool_id, { status = "aborted", compact = phase1_compact })
     end
 
     -- Normal tools: run through approval flow
@@ -855,7 +860,7 @@ function M.send_or_execute(opts)
         }
       end
 
-      local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { status = status })
+      local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { status = status, compact = phase1_compact })
       if header_line and status == "pending" then
         if not first_placeholder_line or header_line < first_placeholder_line then
           first_placeholder_line = header_line
@@ -968,6 +973,7 @@ function M.build_prompt_and_provider(bufnr, opts)
   end
 
   local provider = loader.load(provider_module_path).new(flat_params)
+  provider.compact_headers = cfg.editing and cfg.editing.compact_headers
   return prompt, context, provider, evaluated, nil
 end
 
