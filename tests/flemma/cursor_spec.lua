@@ -175,6 +175,176 @@ describe("cursor engine", function()
     end)
   end)
 
+  describe("tail mode", function()
+    it("engages and queries tail mode", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      assert.is_false(cursor.is_tailing(bufnr))
+      cursor.tail(bufnr)
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("disengages tail mode", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      cursor.tail(bufnr)
+      cursor.untail(bufnr)
+      assert.is_false(cursor.is_tailing(bufnr))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("untail is a no-op when already off", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      cursor.untail(bufnr)
+      assert.is_false(cursor.is_tailing(bufnr))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("is buffer-scoped", function()
+      local buf_a = vim.api.nvim_create_buf(false, true)
+      local buf_b = vim.api.nvim_create_buf(false, true)
+
+      cursor.tail(buf_a)
+
+      assert.is_true(cursor.is_tailing(buf_a))
+      assert.is_false(cursor.is_tailing(buf_b))
+
+      vim.api.nvim_buf_delete(buf_a, { force = true })
+      vim.api.nvim_buf_delete(buf_b, { force = true })
+    end)
+
+    it("follow scrolls to bottom when tailing", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      cursor.tail(bufnr)
+      cursor.follow(bufnr)
+
+      local pos = vim.api.nvim_win_get_cursor(0)
+      assert.are.same({ 5, 0 }, pos)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("follow is a no-op when not tailing", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      cursor.follow(bufnr)
+
+      local pos = vim.api.nvim_win_get_cursor(0)
+      assert.are.same({ 2, 0 }, pos)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("follow tracks a growing buffer", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.tail(bufnr)
+
+      -- Simulate first streaming chunk
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:", "chunk 1" })
+      cursor.follow(bufnr)
+      assert.are.equal(vim.api.nvim_buf_line_count(bufnr), vim.api.nvim_win_get_cursor(0)[1])
+
+      -- Simulate second streaming chunk (buffer grows)
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "chunk 2", "chunk 3" })
+      cursor.follow(bufnr)
+      assert.are.equal(vim.api.nvim_buf_line_count(bufnr), vim.api.nvim_win_get_cursor(0)[1])
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("detects breakaway via drift when user moves above follow target", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.tail(bufnr)
+
+      -- First follow: scrolls to bottom, sets target
+      cursor.follow(bufnr)
+      assert.are.same({ 5, 0 }, vim.api.nvim_win_get_cursor(0))
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      -- Simulate user moving up (between event loop ticks, before CursorMoved fires)
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+      -- Buffer grows (new on_content chunk)
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "f", "g" })
+
+      -- Next follow detects cursor drifted below target — breakaway
+      cursor.follow(bufnr)
+      assert.is_false(cursor.is_tailing(bufnr))
+      -- Cursor should NOT have moved to bottom
+      assert.are.same({ 3, 0 }, vim.api.nvim_win_get_cursor(0))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not false-breakaway when buffer grows below cursor", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.tail(bufnr)
+      cursor.follow(bufnr)
+      assert.are.same({ 3, 0 }, vim.api.nvim_win_get_cursor(0))
+
+      -- Buffer grows (content appended below, cursor doesn't move)
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "d", "e", "f" })
+      -- Cursor is still at line 3 (= previous target), buffer has 6 lines
+
+      -- follow should NOT breakaway — cursor is at the target, buffer just grew
+      cursor.follow(bufnr)
+      assert.is_true(cursor.is_tailing(bufnr))
+      assert.are.same({ 6, 0 }, vim.api.nvim_win_get_cursor(0))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not false-breakaway after undo shrinks buffer below stale target", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e", "f", "g", "h" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.tail(bufnr)
+
+      -- Simulate first response: follow sets target to line 8
+      cursor.follow(bufnr)
+      assert.are.equal(8, vim.api.nvim_win_get_cursor(0)[1])
+
+      -- Simulate undo: buffer shrinks drastically
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b" })
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      -- Re-send: tail() must clear stale target even though auto_scroll is already true
+      cursor.tail(bufnr)
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      -- New response: follow should work, not false-breakaway
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:", "response" })
+      cursor.follow(bufnr)
+
+      assert.is_true(cursor.is_tailing(bufnr))
+      assert.are.equal(vim.api.nvim_buf_line_count(bufnr), vim.api.nvim_win_get_cursor(0)[1])
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("idle timer reset", function()
     it("resets timer when CursorMoved fires", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -197,6 +367,144 @@ describe("cursor engine", function()
       assert.are.same({ 2, 0 }, pos)
 
       cursor.cancel_pending(bufnr)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("breakaway", function()
+    it("disengages tail when user moves away from bottom during request", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local bufname = vim.fn.tempname() .. ".chat"
+      vim.api.nvim_buf_set_name(bufnr, bufname)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.setup()
+      cursor.tail(bufnr)
+
+      local buffer_state = state_module.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      -- Start at bottom, then user moves to line 2
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+
+      assert.is_false(cursor.is_tailing(bufnr))
+
+      buffer_state.current_request = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not disengage when cursor is at the last line", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local bufname = vim.fn.tempname() .. ".chat"
+      vim.api.nvim_buf_set_name(bufnr, bufname)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.setup()
+      cursor.tail(bufnr)
+
+      local buffer_state = state_module.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      buffer_state.current_request = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not disengage when no active request", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local bufname = vim.fn.tempname() .. ".chat"
+      vim.api.nvim_buf_set_name(bufnr, bufname)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.setup()
+      cursor.tail(bufnr)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("re-attach", function()
+    it("re-engages tail when user moves to last line during request", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local bufname = vim.fn.tempname() .. ".chat"
+      vim.api.nvim_buf_set_name(bufnr, bufname)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.setup()
+
+      local buffer_state = state_module.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      buffer_state.current_request = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not re-engage when no active request", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local bufname = vim.fn.tempname() .. ".chat"
+      vim.api.nvim_buf_set_name(bufnr, bufname)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.setup()
+
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+
+      assert.is_false(cursor.is_tailing(bufnr))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("round-trips breakaway and re-attach correctly", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local bufname = vim.fn.tempname() .. ".chat"
+      vim.api.nvim_buf_set_name(bufnr, bufname)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "a", "b", "c", "d", "e" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      cursor.setup()
+      cursor.tail(bufnr)
+
+      local buffer_state = state_module.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      -- Breakaway: move to line 2
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+      assert.is_false(cursor.is_tailing(bufnr))
+
+      -- Re-attach: move to last line
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+      assert.is_true(cursor.is_tailing(bufnr))
+
+      -- Breakaway again
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { pattern = bufname })
+      assert.is_false(cursor.is_tailing(bufnr))
+
+      buffer_state.current_request = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)

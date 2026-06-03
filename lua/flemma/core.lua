@@ -508,6 +508,7 @@ function M.cancel_request(opts)
 
       -- Disarm autopilot on cancellation
       autopilot.disarm(bufnr)
+      cursor.untail(bufnr)
 
       local msg = "Request cancelled"
       if log.is_enabled() then
@@ -790,6 +791,7 @@ function M.send_or_execute(opts)
     end
     log.trace("send_or_execute(): user-initiated send, draining job completions first")
     drain_and_inject_completions(bufnr)
+    cursor.tail(bufnr)
   end
 
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
@@ -1477,6 +1479,7 @@ function M._run_send_pipeline(bufnr, opts)
             ui.update_ui(bufnr)
           end
         end)
+        cursor.follow(bufnr)
       end)
     end,
 

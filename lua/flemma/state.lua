@@ -59,6 +59,8 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
 ---@field diagnostics_baseline_extra? table Provider-owned metadata expected on the next request
 ---@field diagnostics_current_extra_comparison? flemma.diagnostics.ExtraComparison Current request metadata compared against the baseline
+---@field auto_scroll? boolean Tail mode: nil=never engaged, true=following, false=broke away
+---@field auto_scroll_target? integer Line number where follow() last placed the cursor (for drift detection)
 ---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
 ---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
 ---@field file_reference_hashes? table<string, string> SHA256 hashes of included files from the last evaluation (keyed by absolute path)
