@@ -43,6 +43,8 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.approval_label`       | Tool name label on approval prompts (`FlemmaApprovalLabel`)               |
 | `highlights.approval_key`         | Keybinding hints on approval prompts (`FlemmaApprovalKey`)                |
 | `highlights.approval_action`      | Action text on approval prompts (`FlemmaApprovalAction`)                  |
+| `highlights.rejection_input`      | Rejection popup input area (`FlemmaRejectionInput`)                       |
+| `highlights.rejection_border`     | Rejection popup border (`FlemmaRejectionBorder`)                          |
 | `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)        |
 | `highlights.progress_accent`      | Bold accent for tool name in the progress bar (`FlemmaProgressBarAccent`) |
 | `highlights.role_name`            | GUI attributes for role name text, e.g., bold (`FlemmaRole*Name`)         |
@@ -120,15 +122,16 @@ Colours are derived from existing highlight groups using chainable operations. O
 
 **Constructors** — starting points for a highlight chain:
 
-| Constructor                             | What it does                                                                 |
-| --------------------------------------- | ---------------------------------------------------------------------------- |
-| `h.link("Group")`                       | Link to an existing group (no copy, follows changes)                         |
-| `h.from("Group")`                       | Resolve a group's concrete attributes as a starting point                    |
-| `h.attrs({ ... })`                      | Literal attributes (`{ bold = true }`, `{ fg = "#ff0000" }`)                 |
-| `h.hex("#aabbcc")`                      | Literal colour, defaults to `fg`; pass `"bg"` as second arg for background   |
-| `h.themed({ dark = ..., light = ... })` | Branch on `vim.o.background` (see [Theme-aware values](#theme-aware-values)) |
-| `h.coalesce(a, b, c)`                   | Try each operation in order, use the first that resolves                     |
-| `h.none()`                              | A no-op: resolves to nothing and sets no group — leaves it unmanaged         |
+| Constructor                             | What it does                                                                       |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `h.link("Group")`                       | Link to an existing group (no copy, follows changes)                               |
+| `h.from("Group")`                       | Resolve a group's concrete attributes as a starting point                          |
+| `h.attrs({ ... })`                      | Literal attributes (`{ bold = true }`, `{ fg = "#ff0000" }`)                       |
+| `h.hex("#aabbcc")`                      | Literal colour, defaults to `fg`; pass `"bg"` as second arg for background         |
+| `h.themed({ dark = ..., light = ... })` | Branch on `vim.o.background` (see [Theme-aware values](#theme-aware-values))       |
+| `h.coalesce(a, b, c)`                   | Try each operation in order, use the first that resolves                           |
+| `h.default(attr)`                       | The terminal default for an attribute — black or white based on `vim.o.background` |
+| `h.none()`                              | A no-op: resolves to nothing and sets no group — leaves it unmanaged               |
 
 **Chain operations** — transform the result of the constructor or a previous chain step:
 
@@ -165,6 +168,20 @@ h.from("Comment"):pick("fg")
 
 ```lua
 h.from("Comment"):style({ italic = true, bold = true })
+```
+
+**`:contrast(attr, against, ratio)`** — adjust an attribute's colour to ensure a minimum WCAG contrast ratio against a reference colour. `attr` is the colour to adjust (`"fg"` or `"bg"`), `against` is an HlOp providing the reference, and `ratio` is the minimum contrast ratio (e.g., `4.5` for WCAG AA). If the current colour already meets the ratio, it passes through unchanged:
+
+```lua
+-- Ensure approval label fg has at least 4.5:1 contrast against the line background
+h.from("Folded"):pick("fg"):contrast("fg", h.from("FlemmaLineUser"):pick("bg"), 4.5)
+```
+
+**`:merge(other, strategy?)`** — combine the resolved attributes of two operations. `other` is an HlOp whose attributes are merged into the result. `strategy` is `"keep"` (default, parent wins on conflict) or `"force"` (other wins):
+
+```lua
+-- Take MsgArea's bg, force FloatBorder's fg on top
+h.from("MsgArea"):pick("bg"):merge(h.from("FloatBorder"):pick("fg"), "force")
 ```
 
 **Coalesce** — `h.coalesce()` is particularly useful for fallback chains:
@@ -240,11 +257,39 @@ When a tool call requires manual approval, Flemma renders an inline widget at th
 ```lua
 ui = {
   approval = {
-    enabled = true,       -- Show approval prompts (default: true)
+    enabled = true,               -- Show approval prompts (default: true)
+    syntax_highlighting = true,   -- Treesitter-powered syntax highlighting in tool previews
     preview_lines = { head = 6, tail = 6 },
   },
 }
 ```
+
+When `syntax_highlighting` is enabled (the default), tool preview content inside the approval widget uses treesitter highlighting for the detected language — JSON tool inputs get proper syntax colours instead of a flat `FlemmaToolPreview` tint.
+
+## Rejection popup
+
+When you reject a tool call, Flemma opens an inline floating input overlaid on the tool result fence. Type your rejection reason and press <kbd>Enter</kbd> to confirm, or <kbd>Esc</kbd> to cancel. The rejection reason is sent to the model as the tool error message.
+
+```lua
+ui = {
+  rejection = {
+    enabled = true,        -- Show inline rejection popup (default: true)
+    completion = false,    -- Buffer-local completion in the popup (default: false)
+    winblend = 15,         -- Window transparency (default: 15)
+  },
+}
+```
+
+While the popup is open, a `(rejected)` overlay replaces the `(pending)` suffix on the tool result header so you can see the state change in real time.
+
+Two highlight groups control the popup appearance:
+
+| Group                   | Default                          | Applies to           |
+| ----------------------- | -------------------------------- | -------------------- |
+| `FlemmaRejectionInput`  | `MsgArea`                        | The popup input area |
+| `FlemmaRejectionBorder` | `FloatBorder` fg on `MsgArea` bg | The popup border     |
+
+Customise via `highlights.rejection_input` and `highlights.rejection_border` in your config. Set `ui.rejection.enabled = false` to fall back to `vim.ui.input` for rejection messages.
 
 ## Spinner behaviour
 
@@ -253,6 +298,10 @@ While a request is in flight, Flemma writes an `@Assistant:` marker on its own l
 The spinner transitions between phases automatically and is removed once streaming starts.
 
 When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
+
+### Auto-scroll during streaming
+
+While a response is streaming, Flemma automatically scrolls the viewport to keep new content visible — the buffer follows the growing response to the bottom. If you scroll away (e.g., to review an earlier message), auto-scroll disengages and the viewport stays where you put it. Auto-scroll re-engages when the next request starts.
 
 ### Booting indicator
 
@@ -287,7 +336,7 @@ vim.api.nvim_set_hl(0, "FlemmaToolIconError",   { link = "DiagnosticError" })
 
 When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
 
-Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **detail** (the raw command or path) and a **label** (the LLM's stated intent), separated by an em-dash and rendered detail-first: `bash: $ make test — running tests`. When width is limited, detail truncates first to preserve the label. The italic-label/dim-detail split is only visible in folded message previews, where each chunk gets its own highlight; the virt-line preview shown over pending placeholders uses a single combined `FlemmaToolPreview` highlight. Custom tools can provide their own previews via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
+Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **detail** (the raw command or path) and a **label** (the LLM's stated intent), separated by an em-dash and rendered detail-first: `bash: $ make test — running tests`. When width is limited, detail truncates first to preserve the label. The italic-label/dim-detail split is only visible in folded message previews, where each chunk gets its own highlight; the virt-line preview shown over pending placeholders uses a single combined `FlemmaToolPreview` highlight. Custom tools can provide their own previews via `format_preview` on the tool definition. Tools without a custom formatter get a YAML-style generic preview — scalar values as `key: value` pairs, compound values JSON-encoded — with treesitter syntax highlighting when `ui.approval.syntax_highlighting` is enabled.
 
 Preview lines use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). See [docs/tools.md](tools.md#tool-previews) for the full reference on built-in formatters, the generic fallback, and writing custom preview functions.
 

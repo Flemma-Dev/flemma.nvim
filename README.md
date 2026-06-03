@@ -236,17 +236,20 @@ All commands live under `:Flemma` with tab completion. Misspelled commands get d
 
 ### Keymaps (buffer-local to `.chat` files, all configurable)
 
-| Mode               | Key                  | Action                                                |
-| ------------------ | -------------------- | ----------------------------------------------------- |
-| Normal<br />Insert | <kbd>Ctrl-]</kbd>    | Send to provider (or advance the tool approval cycle) |
-| Normal             | <kbd>Ctrl-C</kbd>    | Cancel (double-tap to cancel all)                     |
-| Normal             | <kbd>Alt-Enter</kbd> | Execute the tool under cursor                         |
-| Normal             | <kbd>Alt-B</kbd>     | Move executing tool to background                     |
-| Normal             | `]m` / `[m`          | Next / previous message                               |
-| Normal             | <kbd>Space</kbd>     | Toggle message fold                                   |
-| Normal             | `zy` / `zY`          | Fold intermediate messages in current / all turns     |
-| Normal             | `yoe`                | Toggle Markdown conceal (`[oe` / `]oe` to set on/off) |
-| Operator           | `im` / `am`          | Inner / around message text objects                   |
+| Mode               | Key                    | Action                                                |
+| ------------------ | ---------------------- | ----------------------------------------------------- |
+| Normal<br />Insert | <kbd>Ctrl-]</kbd>      | Send to provider (or advance the tool approval cycle) |
+| Normal             | <kbd>Ctrl-C</kbd>      | Cancel (double-tap to cancel all)                     |
+| Normal             | <kbd>Alt-Enter</kbd>   | Execute the tool under cursor                         |
+| Normal             | <kbd>Alt-B</kbd>       | Move executing tool to background                     |
+| Normal             | <kbd>Alt-A</kbd>       | Approve tool at cursor                                |
+| Normal             | <kbd>Alt-R</kbd>       | Open rejection popup for tool at cursor               |
+| Normal             | <kbd>Alt-Shift-A</kbd> | Approve all pending tools                             |
+| Normal             | `]m` / `[m`            | Next / previous message                               |
+| Normal             | <kbd>Space</kbd>       | Toggle message fold                                   |
+| Normal             | `zy` / `zY`            | Fold intermediate messages in current / all turns     |
+| Normal             | `yoe`                  | Toggle Markdown conceal (`[oe` / `]oe` to set on/off) |
+| Operator           | `im` / `am`            | Inner / around message text objects                   |
 
 ---
 

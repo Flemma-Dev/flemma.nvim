@@ -108,13 +108,17 @@ require("flemma").setup({
     fence_bar = h.link("FlemmaFenceLabel"),           -- Fence code block delimiter bar
     fold_preview = h.link("Comment"),
     fold_meta = h.link("Comment"),
-    approval_indicator = h.from("DiagnosticInfo"):omit("bg"), -- Status text on approval prompts
+    approval_indicator = h.from("Comment"):omit("bg"),        -- Status text on approval prompts
     approval_label = h.coalesce(                       -- Icon, label, and separator on approval prompts
       h.from("Folded"):pick("fg"):contrast("fg", h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")), 4.5),
       h.from("Comment"):pick("fg")
     ),
     approval_key = h.link("MoreMsg"),                 -- Keybinding hints on approval prompts
     approval_action = h.from("ModeMsg"):tint("fg", "#202122"), -- Action text on approval prompts
+    rejection_input = h.from("MsgArea"),              -- Rejection popup input area
+    rejection_border = h.coalesce(                    -- Rejection popup border
+      h.from("MsgArea"):pick("bg"), h.from("Normal")
+    ):merge(h.from("FloatBorder"):pick("fg"), "force"),
     busy = h.link("DiagnosticWarn"),                  -- Busy indicator icon in integrations (e.g., bufferline)
     progress_accent = h.attrs({ bold = true }),       -- Bold accent for tool name in the progress bar
     role_name = h.attrs({ bold = true }),             -- GUI attributes for role names
@@ -159,15 +163,20 @@ require("flemma").setup({
     },
     approval = {
       enabled = true,                          -- Show inline approval prompts on pending tool results
-      layout = "inline",                       -- "inline" (content-width + fade) or "block" (full line)
-      fade = 10,                               -- Gradient fade steps at trailing edge (0 = off)
+      syntax_highlighting = true,              -- Treesitter-powered syntax highlighting in tool previews
       preview_lines = { head = 6, tail = 6 },  -- Lines of tool input shown in the preview
+    },
+    rejection = {
+      enabled = true,                          -- Inline rejection popup for tool calls
+      completion = false,                      -- Buffer-local completion in the rejection popup
+      winblend = 15,                           -- Window transparency for the rejection popup
     },
   },
   editing = {
     auto_prompt = true,                      -- Prepend @You: to empty .chat buffers on open
     disable_textwidth = true,
     auto_write = false,                      -- Write buffer after each request
+    compact_headers = true,                  -- Omit blank line between tool headers and fences
     manage_updatetime = true,                -- Lower updatetime in chat buffers
     fold = {
       level = 1,                             -- 0=all closed, 1=thinking collapsed, 99=all open
@@ -233,6 +242,9 @@ require("flemma").setup({
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
       tool_background = "<M-b>",             -- Move executing tool to background
+      tool_approve = "<M-a>",                -- Approve tool at cursor
+      tool_reject = "<M-r>",                 -- Open rejection popup for tool at cursor
+      tool_approve_all = "<M-A>",            -- Approve all pending tools
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
@@ -336,6 +348,7 @@ Phase labeling is enabled by default. Set `false` to omit phase labels from the 
 | `editing.auto_prompt`       | `true`  | Prepend `@You:` to empty `.chat` buffers when opened, so new users have a clear starting point.                                                                                                                       |
 | `editing.disable_textwidth` | `true`  | Sets `textwidth = 0` in chat buffers to prevent hard wrapping.                                                                                                                                                        |
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
+| `editing.compact_headers`   | `true`  | When `true`, omit the blank line between `**Tool Use:**`/`**Tool Result:**` headers and their fenced code blocks. Produces a more compact buffer layout.                                                              |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
 | `editing.fold.level`        | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
 | `editing.fold.gap`          | `false` | Leave one blank line visible between consecutive folded messages for visual separation. Only applies to message-level folds; tool block folds always collapse fully.                                                  |

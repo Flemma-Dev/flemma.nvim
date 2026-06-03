@@ -270,6 +270,8 @@ Each preview has two parts: a **detail** (the raw technical summary — path, co
 
 Folded message previews use the same `detail — label` layout but render label and detail as separate highlight chunks. The virt-line placeholder preview is a single string with one combined highlight — see [Styling](#styling).
 
+When `ui.approval.syntax_highlighting` is enabled (the default), preview content receives treesitter syntax highlighting — JSON tool inputs and YAML-style generic previews render with proper syntax colours.
+
 ### Built-in preview formatters
 
 Every built-in tool ships with a tailored `format_preview` function that returns a structured `{ label, detail }` preview:
@@ -288,7 +290,7 @@ Every built-in tool's `input_schema` includes a required `label` field — the L
 
 ### Generic fallback
 
-Tools without a `format_preview` function get a generic key-value summary: `tool_name: key1="val1", key2="val2"`. Scalar values appear first (sorted alphabetically), followed by table values shown as `{key1, key2}` (≤ 2 keys), `{key1, key2, +N more}`, or `[N items]` for arrays. If the input table contains a string `label` field, it is auto-promoted to the label slot and the rendering becomes `tool_name: kv_body — label`. This auto-promotion only applies to the generic fallback — when a tool ships its own `format_preview`, that function controls label entirely.
+Tools without a `format_preview` function get a YAML-style generic preview. Scalar values appear as `key: value` pairs and compound values are JSON-encoded. When the inline rendering (`{key: "value", ...}`) fits within the available width, it displays on a single line; otherwise it splits into a multi-line block mapping — for example, `tool_name: {query: "search term", limit: 10}`. If the input table contains a string `label` field, it is auto-promoted to the label slot and the rendering becomes `tool_name: {kv_body} — label`. This auto-promotion only applies to the generic fallback — when a tool ships its own `format_preview`, that function controls label entirely.
 
 ### Custom preview formatters
 
@@ -321,11 +323,12 @@ The full type signature is `fun(input: table, max_length: integer): flemma.tools
 
 #### Return shapes
 
-| Return type                     | Behaviour                                                                                                                                                                  |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `string`                        | Treated as `{ detail = the_string }`. Label is **never** auto-promoted from `input.label` for explicit returns — only the [generic fallback](#generic-fallback) does that. |
-| `{ label?, detail? }`           | Rendered as `detail — label` when both are present; otherwise just whichever is given.                                                                                     |
-| `{ label?, detail = string[] }` | The `detail` array is joined with a **double space** before display.                                                                                                       |
+| Return type                     | Behaviour                                                                                                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `string`                        | Treated as `{ detail = the_string }`. Label is **never** auto-promoted from `input.label` for explicit returns — only the [generic fallback](#generic-fallback) does that.                                               |
+| `{ label?, detail? }`           | Rendered as `detail — label` when both are present; otherwise just whichever is given.                                                                                                                                   |
+| `{ label?, detail = string[] }` | The `detail` array is joined with a **double space** before display.                                                                                                                                                     |
+| `{ ..., highlight? }`           | When `highlight = { lang = "yaml" }` (or another treesitter language), the preview receives syntax highlighting if `ui.approval.syntax_highlighting` is enabled. The generic fallback uses this for YAML-style previews. |
 
 Newlines in either field are collapsed to the `eol` character from `listchars` (or `↵` by default) and the result is truncated to fit the editor width.
 
