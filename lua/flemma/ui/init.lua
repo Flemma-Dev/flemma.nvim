@@ -795,19 +795,27 @@ local function tool_result_anchor_row(seg)
   return opening_fence_line - 1 -- 0-indexed row for the extmark anchor
 end
 
+---@class flemma.ui.HighlightedVirtLinesOpts
+---@field lines_chunks {[1]: string, [2]: string}[][] Content-only highlighted chunks
+---@field ctx flemma.ui.HighlightContext Highlight context with prefix/indent/lang
+---@field role_hl string Role line highlight group
+---@field max_length integer Text area width (content truncation)
+---@field pad_target integer Padding width (background fill)
+---@field head integer Head line budget
+---@field tail integer Tail line budget
+
 ---Build virt_lines from highlighted chunk arrays with prefix, truncation, and trimming.
----@param lines_chunks {[1]: string, [2]: string}[][] Content-only highlighted chunks
----@param ctx flemma.ui.HighlightContext Highlight context with prefix/indent/lang
----@param role_hl string Role line highlight group
----@param max_length integer Text area width (content truncation)
----@param pad_target integer Padding width (background fill)
----@param head integer Head line budget
----@param tail integer Tail line budget
+---@param opts flemma.ui.HighlightedVirtLinesOpts
 ---@return {[1]:string, [2]:string|string[]}[][] virt_lines
-local function build_highlighted_virt_lines(lines_chunks, ctx, role_hl, max_length, pad_target, head, tail)
+local function build_highlighted_virt_lines(opts)
+  local ctx = opts.ctx
+  local role_hl = opts.role_hl
+  local max_length = opts.max_length
+  local pad_target = opts.pad_target
+
   ---@type {[1]: string, [2]: string|string[]}[][]
   local prefixed = {}
-  for i, content_chunks in ipairs(lines_chunks) do
+  for i, content_chunks in ipairs(opts.lines_chunks) do
     local prefix = i == 1 and ctx.name_prefix or ctx.indent
     local prefix_width = str.strwidth(prefix)
     local content_budget = max_length - prefix_width
@@ -832,7 +840,7 @@ local function build_highlighted_virt_lines(lines_chunks, ctx, role_hl, max_leng
     prefixed[i] = line_chunks
   end
 
-  return preview.trim_chunks(prefixed, head, tail)
+  return preview.trim_chunks(prefixed, opts.head, opts.tail)
 end
 
 ---Add virtual line previews inside empty tool_result fences that carry a
@@ -884,15 +892,15 @@ function M.add_tool_previews(bufnr, doc)
                 highlighter.highlight(highlight_context.text, highlight_context.lang, function(lines_chunks)
                   if lines_chunks then
                     if in_sync_scope then
-                      virt_lines = build_highlighted_virt_lines(
-                        lines_chunks,
-                        highlight_context,
-                        role_hl,
-                        max_length,
-                        pad_target,
-                        preview_opts.head or 6,
-                        preview_opts.tail or 6
-                      )
+                      virt_lines = build_highlighted_virt_lines({
+                        lines_chunks = lines_chunks,
+                        ctx = highlight_context,
+                        role_hl = role_hl,
+                        max_length = max_length,
+                        pad_target = pad_target,
+                        head = preview_opts.head or 6,
+                        tail = preview_opts.tail or 6,
+                      })
                       used_highlighted = true
                     else
                       bridge.update_ui(bufnr)
