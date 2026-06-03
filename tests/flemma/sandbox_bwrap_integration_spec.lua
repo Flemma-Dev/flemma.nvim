@@ -174,7 +174,7 @@ describe("bash tool sandbox integration", function()
     -- urn:flemma:cwd should be expanded to vim.fn.getcwd() by sandbox/init.lua,
     -- making the working directory writable inside the sandbox.
     local cwd = vim.fn.getcwd()
-    local target = cwd .. "/sandbox_cwd_test_" .. tostring(os.time())
+    local target = cwd .. "/sandbox_cwd_test_" .. vim.fn.getpid()
     local result =
       execute_bash_tool("echo cwd_write > " .. target .. " && cat " .. target, sandbox_config({ "urn:flemma:cwd" }))
 
