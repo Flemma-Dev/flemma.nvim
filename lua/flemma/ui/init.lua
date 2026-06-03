@@ -799,11 +799,12 @@ end
 ---@param lines_chunks {[1]: string, [2]: string}[][] Content-only highlighted chunks
 ---@param ctx flemma.ui.HighlightContext Highlight context with prefix/indent/lang
 ---@param role_hl string Role line highlight group
----@param max_length integer Text area width
+---@param max_length integer Text area width (content truncation)
+---@param pad_target integer Padding width (background fill)
 ---@param head integer Head line budget
 ---@param tail integer Tail line budget
 ---@return {[1]:string, [2]:string|string[]}[][] virt_lines
-local function build_highlighted_virt_lines(lines_chunks, ctx, role_hl, max_length, head, tail)
+local function build_highlighted_virt_lines(lines_chunks, ctx, role_hl, max_length, pad_target, head, tail)
   ---@type {[1]: string, [2]: string|string[]}[][]
   local prefixed = {}
   for i, content_chunks in ipairs(lines_chunks) do
@@ -823,7 +824,7 @@ local function build_highlighted_virt_lines(lines_chunks, ctx, role_hl, max_leng
     for _, chunk in ipairs(truncated) do
       used = used + str.strwidth(chunk[1])
     end
-    local pad = math.max(0, max_length - used)
+    local pad = math.max(0, pad_target - used)
     if pad > 0 then
       line_chunks[#line_chunks + 1] = { string.rep(" ", pad), role_hl }
     end
@@ -847,6 +848,7 @@ function M.add_tool_previews(bufnr, doc)
 
   local winid = vim.fn.bufwinid(bufnr)
   local max_length = preview.get_text_area_width(winid)
+  local pad_target = math.max(max_length, vim.o.columns)
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
@@ -887,6 +889,7 @@ function M.add_tool_previews(bufnr, doc)
                         highlight_context,
                         role_hl,
                         max_length,
+                        pad_target,
                         preview_opts.head or 6,
                         preview_opts.tail or 6
                       )
@@ -902,7 +905,7 @@ function M.add_tool_previews(bufnr, doc)
               if not used_highlighted then
                 virt_lines = {}
                 for _, line_text in ipairs(preview_lines) do
-                  local pad_width = math.max(0, max_length - str.strwidth(line_text))
+                  local pad_width = math.max(0, pad_target - str.strwidth(line_text))
                   ---@type {[1]:string, [2]:string|string[]}[]
                   local chunks = { { line_text, { BASE_TOOL_PREVIEW_HL, role_hl } } }
                   if pad_width > 0 then
