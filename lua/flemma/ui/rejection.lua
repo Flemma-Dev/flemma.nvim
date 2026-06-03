@@ -251,6 +251,11 @@ function M.open(bufnr)
   end
   ---@cast result_seg flemma.ast.ToolResultSegment
 
+  if not result_seg.status or result_seg.status == "error" then
+    notify.error("Tool " .. ctx.tool_id .. " has already completed")
+    return
+  end
+
   local open_lnum, close_lnum = find_fence_lines(bufnr, result_seg)
   if not open_lnum then
     notify.error("No fence found in tool result for " .. ctx.tool_id)

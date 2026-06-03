@@ -42,6 +42,23 @@ local TOOL_RESULT_BUFFER = {
   "```",
 }
 
+local COMPLETED_TOOL_BUFFER = {
+  "@Assistant:",
+  "Running tool",
+  "",
+  "**Tool Use:** `calculator` (`toolu_01`)",
+  "```json",
+  '{ "expression": "2+2" }',
+  "```",
+  "",
+  "@You:",
+  "**Tool Result:** `toolu_01`",
+  "",
+  "```",
+  "4",
+  "```",
+}
+
 local MULTI_LINE_TOOL_RESULT = {
   "@Assistant:",
   "Running tool",
@@ -171,6 +188,13 @@ describe("flemma.ui.rejection", function()
       vim.api.nvim_win_set_cursor(0, { 10, 0 })
       rejection.open(bufnr)
       assert.is_true(rejection.is_open())
+    end)
+
+    it("does not open when tool has already completed", function()
+      local bufnr = create_chat_buffer(COMPLETED_TOOL_BUFFER)
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+      rejection.open(bufnr)
+      assert.is_false(rejection.is_open())
     end)
   end)
 
