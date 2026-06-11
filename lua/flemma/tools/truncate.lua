@@ -8,6 +8,7 @@ local M = {}
 
 local base = require("flemma.utilities.truncate")
 local config_facade = require("flemma.config")
+local path_util = require("flemma.utilities.path")
 local renderer = require("flemma.templating.renderer")
 local templating = require("flemma.templating")
 local variables = require("flemma.utilities.variables")
@@ -36,19 +37,6 @@ M.MAX_LINE_CHARS = base.MAX_LINE_CHARS
 ---@field overflow_path string|nil
 ---@field truncated boolean
 
----Normalize an absolute path into a flat filename-safe string.
----Strips the leading separator, then replaces all remaining separators with `-`.
----@param path string Absolute path
----@return string
-local function normalize_path(path)
-  local normalized = vim.fs.normalize(path)
-  if normalized:sub(1, 1) == "/" then
-    normalized = normalized:sub(2)
-  end
-  local result = normalized:gsub("/", "-")
-  return result
-end
-
 ---Resolve the output path format string into a concrete file path.
 ---@param format_str string The format string from config
 ---@param opts flemma.tools.TruncateOverflowOpts
@@ -57,7 +45,7 @@ local function resolve_output_path(format_str, opts)
   local env = templating.create_env()
   env.source = opts.source or ""
   env.id = opts.id or ""
-  env.path = opts.filename and normalize_path(opts.filename) or ""
+  env.path = opts.filename and path_util.flatten(opts.filename) or ""
 
   -- Order matters: Lua template expansion resolves {{ ... }} first, then expand_inline
   -- handles ${...} in the result. Reversing would let bare $VAR inside
