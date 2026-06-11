@@ -108,13 +108,13 @@ local function render_format(format_str, env)
 end
 
 ---@class flemma.tools.store.ResolveOpts
----@field __filename string|nil Chat file path (nil for unsaved buffers)
----@field __dirname string|nil Chat file directory (nil for unsaved buffers)
+---@field __filename string|nil Chat file path (nil for unnamed buffers)
+---@field __dirname string|nil Chat file directory (nil for unnamed buffers)
 ---@field source string "tool" or "job"
 ---@field id string Tool/job ID (will be escaped)
 ---@field path_format? string Override config (default: "$chat")
----@field unsaved_path_format? string Override config for unsaved buffers
----@field bufnr? integer Buffer number (required for unsaved buffers)
+---@field unnamed_path_format? string Override config for unnamed buffers
+---@field bufnr? integer Buffer number (required for unnamed buffers)
 
 ---Resolve the store file path for a tool/job result.
 ---@param opts flemma.tools.store.ResolveOpts
@@ -122,9 +122,9 @@ end
 function M.resolve_path(opts)
   local format_str
   if not opts.__filename or opts.__filename == "" then
-    format_str = opts.unsaved_path_format or "${TMPDIR:-/tmp}/flemma/unsaved-{{ bufnr }}/{{ source }}_{{ id }}.txt"
+    format_str = opts.unnamed_path_format or "${TMPDIR:-/tmp}/flemma/unsaved-{{ bufnr }}/{{ source }}_{{ id }}.txt"
     if format_str:match("^%$%w+$") then
-      error("Presets are not supported in unsaved_path_format (no chat file path to derive from)")
+      error("Presets are not supported in unnamed_path_format (no chat file path to derive from)")
     end
   else
     format_str = expand_preset(opts.path_format or "$chat")

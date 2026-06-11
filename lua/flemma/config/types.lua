@@ -148,7 +148,7 @@
 ---@field modules string[]
 ---@field require_approval boolean
 ---@field show_spinner boolean
----@field truncate flemma.config.ToolsTruncate
+---@field store flemma.config.ToolsStore
 ---@field [string] table|nil
 
 ---@class flemma.config.Turns
@@ -258,8 +258,12 @@
 ---@field startup flemma.config.ToolsMcporterStartup
 ---@field timeout integer
 
----@class flemma.config.ToolsTruncate
----@field output_path_format string
+---@class flemma.config.ToolsStore
+---@field backup string
+---@field materialize boolean
+---@field path_format string
+---@field preview flemma.config.ToolsStorePreview
+---@field unnamed_path_format string
 
 ---@class flemma.config.UiApproval
 ---@field enabled boolean
@@ -300,6 +304,10 @@
 
 ---@class flemma.config.ToolsMcporterStartup
 ---@field concurrency integer
+
+---@class flemma.config.ToolsStorePreview
+---@field bytes number
+---@field lines number
 
 ---User-facing setup options — alias for flemma.Config.
 ---@alias flemma.Config.Opts flemma.Config

@@ -161,20 +161,20 @@ describe("tools.store", function()
     end)
   end)
 
-  describe("resolve_path unsaved buffers", function()
-    it("uses unsaved_path_format when __filename is nil", function()
+  describe("resolve_path unnamed buffers", function()
+    it("uses unnamed_path_format when __filename is nil", function()
       local path = store.resolve_path({
         __filename = nil,
         __dirname = nil,
         source = "tool",
         id = "bash_1",
         bufnr = 42,
-        unsaved_path_format = "${TMPDIR:-/tmp}/flemma/unsaved-{{ bufnr }}/{{ source }}_{{ id }}.txt",
+        unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unsaved-{{ bufnr }}/{{ source }}_{{ id }}.txt",
       })
       assert.is_truthy(path:find("/flemma/unsaved%-42/tool_bash_1%.txt$"), "unexpected path: " .. path)
     end)
 
-    it("errors on preset in unsaved_path_format", function()
+    it("errors on preset in unnamed_path_format", function()
       assert.has_error(function()
         store.resolve_path({
           __filename = nil,
@@ -182,7 +182,7 @@ describe("tools.store", function()
           source = "tool",
           id = "1",
           bufnr = 1,
-          unsaved_path_format = "$chat",
+          unnamed_path_format = "$chat",
         })
       end)
     end)
