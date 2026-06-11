@@ -488,6 +488,11 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
+        local store_config
+        do
+          local cfg = config_facade.materialize(bufnr)
+          store_config = cfg.tools and cfg.tools.store or {}
+        end
         local bound = setmetatable({
           truncate_with_overflow = function(text, opts)
             opts.bufnr = bufnr
@@ -498,6 +503,13 @@ function M.build_execution_context(params)
             if not opts.id then
               opts.id = params.tool_id or ""
             end
+            opts.store_opts = {
+              __filename = params.__filename,
+              __dirname = params.__dirname,
+              path_format = store_config.path_format,
+              unnamed_path_format = store_config.unnamed_path_format,
+              backup = store_config.backup,
+            }
             return truncate_module.truncate_with_overflow(text, opts)
           end,
         }, { __index = truncate_module })

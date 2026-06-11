@@ -45,7 +45,12 @@ describe("tools.truncate", function()
         source = "tool",
         id = "test_123",
         bufnr = 0,
-        output_path_format = dir .. "/flemma_{{ source }}_{{ id }}.txt",
+        store_opts = {
+          __filename = dir .. "/test.chat",
+          __dirname = dir,
+          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ id }}.txt",
+          backup = false,
+        },
       }, overrides)
     end
 
@@ -130,14 +135,21 @@ describe("tools.truncate", function()
       )
 
       assert.is_truthy(result.overflow_path)
-      assert.is_truthy(result.overflow_path:find("flemma_mysource_myid%.txt"))
+      assert.is_truthy(result.overflow_path:find("mysource_myid%.txt"))
     end)
 
     it("creates parent directories for overflow path", function()
-      local base = vim.fn.tempname()
+      local base_dir = vim.fn.tempname()
       local result = tools_truncate.truncate_with_overflow(
         string.rep("x", base_truncate.MAX_BYTES + 1000),
-        make_opts({ output_path_format = base .. "/deep/nested/flemma_{{ source }}_{{ id }}.txt" })
+        make_opts({
+          store_opts = {
+            __filename = base_dir .. "/test.chat",
+            __dirname = base_dir,
+            path_format = base_dir .. "/deep/nested/{{ source }}_{{ id }}.txt",
+            backup = false,
+          },
+        })
       )
 
       assert.is_truthy(result.overflow_path)
@@ -147,7 +159,14 @@ describe("tools.truncate", function()
     it("omits Full output suffix when file write fails", function()
       local result = tools_truncate.truncate_with_overflow(
         string.rep("x", base_truncate.MAX_BYTES + 1000),
-        make_opts({ output_path_format = "/dev/null/impossible/flemma_{{ source }}_{{ id }}.txt" })
+        make_opts({
+          store_opts = {
+            __filename = "/dev/null/impossible.chat",
+            __dirname = "/dev/null",
+            path_format = "/dev/null/impossible/{{ source }}_{{ id }}.txt",
+            backup = false,
+          },
+        })
       )
 
       assert.is_true(result.truncated)
