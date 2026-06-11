@@ -840,7 +840,26 @@ local function build_highlighted_virt_lines(opts)
     prefixed[i] = line_chunks
   end
 
-  return preview.trim_chunks(prefixed, opts.head, opts.tail)
+  local trimmed = preview.trim_chunks(prefixed, opts.head, opts.tail)
+
+  if #trimmed > opts.head and #prefixed > #trimmed then
+    local indicator = trimmed[opts.head + 1]
+    for ci, chunk in ipairs(indicator) do
+      if type(chunk[2]) == "string" then
+        indicator[ci] = { chunk[1], { chunk[2] --[[@as string]], role_hl } }
+      end
+    end
+    local used = 0
+    for _, chunk in ipairs(indicator) do
+      used = used + str.strwidth(chunk[1])
+    end
+    local pad = math.max(0, pad_target - used)
+    if pad > 0 then
+      indicator[#indicator + 1] = { string.rep(" ", pad), role_hl }
+    end
+  end
+
+  return trimmed
 end
 
 ---Add virtual line previews inside empty tool_result fences that carry a

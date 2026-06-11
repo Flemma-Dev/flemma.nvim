@@ -492,6 +492,82 @@ describe("UI Tool Previews", function()
       end
     end)
 
+    it("paints role bg on the trimmed indicator line in highlighted previews", function()
+      local highlighter = require("flemma.ui.highlighter")
+      highlighter._clear_cache()
+
+      local cmd_lines = {}
+      for i = 1, 20 do
+        cmd_lines[i] = "echo line_" .. i
+      end
+      local long_command = table.concat(cmd_lines, "\n")
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_long`)",
+        "",
+        "```json",
+        vim.json.encode({ command = long_command }),
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_long` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      vim.wait(2000, function()
+        highlighter._clear_cache()
+        doc = parser.get_parsed_document(bufnr)
+        ui.add_tool_previews(bufnr, doc)
+
+        local marks = get_preview_extmarks(bufnr)
+        if #marks == 0 then
+          return false
+        end
+        local vlines = marks[1][4].virt_lines
+        if not vlines or #vlines <= 6 then
+          return false
+        end
+        local indicator_chunks = vlines[7]
+        return indicator_chunks and #indicator_chunks > 0 and type(indicator_chunks[1][2]) == "table"
+      end)
+
+      local marks = get_preview_extmarks(bufnr)
+      assert.are.equal(1, #marks, "should have one preview extmark")
+
+      local vlines = marks[1][4].virt_lines
+      assert.is_truthy(#vlines > 6, "should have enough virt_lines to include a trimmed indicator")
+
+      local indicator_chunks = vlines[7]
+      assert.is_truthy(#indicator_chunks >= 1, "indicator line should have chunks")
+
+      local indicator_text = indicator_chunks[1][1]
+      assert.is_truthy(indicator_text:find("more line"), "indicator should contain 'more line' text: " .. indicator_text)
+
+      local indicator_hl = indicator_chunks[1][2]
+      assert.is_truthy(
+        type(indicator_hl) == "table",
+        "indicator text hl should be a table (combined groups), got: " .. type(indicator_hl)
+      )
+      assert.same({ "FlemmaToolPreview", "FlemmaLineUser" }, indicator_hl)
+
+      local last_chunk = indicator_chunks[#indicator_chunks]
+      assert.are.equal("FlemmaLineUser", last_chunk[2], "padding chunk should carry role bg")
+      assert.is_truthy(last_chunk[1]:match("^ +$"), "padding chunk should be spaces only")
+    end)
+
     it("renders the label ahead of the ⏸ approval affordance", function()
       -- Canonical layout — the label leads so it stays in a fixed position
       -- across the pending → approved transition:
