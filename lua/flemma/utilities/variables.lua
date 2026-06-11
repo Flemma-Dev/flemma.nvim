@@ -139,19 +139,24 @@ end
 ---@param text string
 ---@return string
 function M.expand_inline(text)
-  -- ${VAR:-default} — greedy match on var name, non-greedy on default
-  text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
-    local val = os.getenv(var)
-    if val and val ~= "" then
-      return val
-    end
-    return expand_tilde(default)
-  end)
+  local prev
+  repeat
+    prev = text
 
-  -- Bare $VAR — only match word-character var names to avoid false positives
-  text = text:gsub("%$([%w_]+)", function(var)
-    return os.getenv(var) or ""
-  end)
+    -- ${VAR:-default} — greedy match on var name, non-greedy on default
+    text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
+      local val = os.getenv(var)
+      if val and val ~= "" then
+        return val
+      end
+      return expand_tilde(default)
+    end)
+
+    -- Bare $VAR — only match word-character var names to avoid false positives
+    text = text:gsub("%$([%w_]+)", function(var)
+      return os.getenv(var) or ""
+    end)
+  until text == prev
 
   -- Leading ~/
   if text:sub(1, 2) == "~/" or text == "~" then

@@ -146,6 +146,18 @@ describe("utilities.variables", function()
       local result = variables.expand_inline("~/documents/file.txt")
       assert.equals(home .. "/documents/file.txt", result)
     end)
+
+    it("expands $VAR inside ${VAR:-default} fallback", function()
+      local home = os.getenv("HOME")
+      local result = variables.expand_inline("${FLEMMA_TEST_NONEXISTENT_12345:-$HOME/.flemma}/store")
+      assert.equals(home .. "/.flemma/store", result)
+    end)
+
+    it("expands nested ${VAR:-default} in fallback", function()
+      local result =
+        variables.expand_inline("${FLEMMA_TEST_NONEXISTENT_12345:-${FLEMMA_TEST_ALSO_NONEXISTENT:-/final}}/x")
+      assert.equals("/final/x", result)
+    end)
   end)
 
   describe("deduplicate_by_prefix", function()
