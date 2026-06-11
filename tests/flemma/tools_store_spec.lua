@@ -200,4 +200,143 @@ describe("tools.store", function()
       assert.equals("/home/user/chats/.flemma/session.chat", dir)
     end)
   end)
+
+  describe("write", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    it("writes content to a new file", function()
+      local dir = temp_dir()
+      local path = dir .. "/result.txt"
+      local written_path, err = store.write(path, "hello world")
+      assert.is_nil(err)
+      assert.equals(path, written_path)
+      assert.equals("hello world", read_file(path))
+    end)
+
+    it("creates parent directories", function()
+      local dir = temp_dir()
+      local path = dir .. "/deep/nested/result.txt"
+      local written_path, err = store.write(path, "content")
+      assert.is_nil(err)
+      assert.equals(path, written_path)
+      assert.equals("content", read_file(path))
+    end)
+
+    it("applies version backup on overwrite", function()
+      local dir = temp_dir()
+      local path = dir .. "/result.txt"
+      store.write(path, "first")
+      store.write(path, "second", { backup = "version" })
+      assert.equals("second", read_file(path))
+      assert.equals("first", read_file(dir .. "/result.1.txt"))
+    end)
+
+    it("increments version numbers", function()
+      local dir = temp_dir()
+      local path = dir .. "/result.txt"
+      store.write(path, "v1")
+      store.write(path, "v2", { backup = "version" })
+      store.write(path, "v3", { backup = "version" })
+      assert.equals("v3", read_file(path))
+      assert.equals("v1", read_file(dir .. "/result.1.txt"))
+      assert.equals("v2", read_file(dir .. "/result.2.txt"))
+    end)
+
+    it("overwrites in place when backup is false", function()
+      local dir = temp_dir()
+      local path = dir .. "/result.txt"
+      store.write(path, "first")
+      store.write(path, "second", { backup = false })
+      assert.equals("second", read_file(path))
+      assert.is_nil(read_file(dir .. "/result.1.txt"))
+    end)
+
+    it("returns nil and error on write failure", function()
+      local written_path, err = store.write("/dev/null/impossible/file.txt", "content")
+      assert.is_nil(written_path)
+      assert.is_string(err)
+    end)
+  end)
+
+  describe("materialize", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    it("writes full output and returns path", function()
+      local dir = temp_dir()
+      local path, err = store.materialize({
+        __filename = dir .. "/session.chat",
+        __dirname = dir,
+        source = "tool",
+        id = "bash_1",
+        path_format = dir .. "/.flemma/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ id }}.txt",
+        content = "full tool output here",
+        backup = "version",
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path)
+      assert.equals("full tool output here", read_file(path))
+    end)
+
+    it("skips write when materialize_enabled is false and not truncated", function()
+      local dir = temp_dir()
+      local path, err = store.materialize({
+        __filename = dir .. "/session.chat",
+        __dirname = dir,
+        source = "tool",
+        id = "bash_1",
+        path_format = dir .. "/{{ source }}_{{ id }}.txt",
+        content = "short output",
+        materialize_enabled = false,
+        truncated = false,
+        backup = "version",
+      })
+      assert.is_nil(err)
+      assert.is_nil(path)
+    end)
+
+    it("writes even when materialize_enabled is false if truncated", function()
+      local dir = temp_dir()
+      local path, err = store.materialize({
+        __filename = dir .. "/session.chat",
+        __dirname = dir,
+        source = "tool",
+        id = "bash_1",
+        path_format = dir .. "/{{ source }}_{{ id }}.txt",
+        content = "truncated output",
+        materialize_enabled = false,
+        truncated = true,
+        backup = "version",
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path)
+    end)
+  end)
 end)

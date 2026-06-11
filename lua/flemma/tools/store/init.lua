@@ -8,6 +8,8 @@
 local M = {}
 
 local context_module = require("flemma.context")
+local loader = require("flemma.loader")
+local notify = require("flemma.notify")
 local path_util = require("flemma.utilities.path")
 local renderer = require("flemma.templating.renderer")
 local templating = require("flemma.templating")
@@ -136,6 +138,88 @@ end
 ---@return string dir Absolute path to the store directory
 function M.resolve_dir(opts)
   return path_util.dirname(M.resolve_path(opts))
+end
+
+---@type string[]
+local BUILTIN_BACKUP_STRATEGIES = {
+  "flemma.tools.store.backups.version",
+}
+
+---Resolve a backup strategy by name.
+---@param name string|false Strategy name or false to disable
+---@return { backup: fun(path: string): boolean, string|nil }|nil
+local function resolve_backup(name)
+  if name == false then
+    return nil
+  end
+  for _, module_path in ipairs(BUILTIN_BACKUP_STRATEGIES) do
+    local mod = loader.load(module_path)
+    if mod and module_path:match("%.([^.]+)$") == name then
+      return mod
+    end
+  end
+  local ok, mod = pcall(loader.load, name)
+  if ok and mod then
+    return mod
+  end
+  error(("Unknown backup strategy '%s'"):format(tostring(name)))
+end
+
+---Write content to a file, applying backup strategy and creating directories.
+---@param path string Absolute path to write
+---@param content string Content to write
+---@param opts? { backup?: string|false } Backup strategy (default: none for raw writes)
+---@return string|nil written_path
+---@return string|nil error
+function M.write(path, content, opts)
+  opts = opts or {}
+
+  local dir = path_util.dirname(path)
+  if dir and vim.fn.isdirectory(dir) == 0 then
+    local mkdir_ok = pcall(vim.fn.mkdir, dir, "p")
+    if not mkdir_ok then
+      return nil, ("Failed to create directory '%s'"):format(dir)
+    end
+  end
+
+  if opts.backup and opts.backup ~= false then
+    local strategy = resolve_backup(opts.backup)
+    if strategy then
+      local backup_ok, backup_err = strategy.backup(path)
+      if not backup_ok then
+        notify.warn("Store backup failed: " .. (backup_err or "unknown"))
+      end
+    end
+  end
+
+  local f = io.open(path, "w")
+  if not f then
+    return nil, ("Failed to open '%s' for writing"):format(path)
+  end
+  f:write(content)
+  f:close()
+  return path, nil
+end
+
+---@class flemma.tools.store.MaterializeOpts : flemma.tools.store.ResolveOpts
+---@field content string Full tool output to write
+---@field materialize_enabled? boolean Kill-switch (default true)
+---@field truncated? boolean Whether the result was truncated
+---@field backup? string|false Backup strategy name
+
+---Materialize a tool result to the store.
+---Writes full content; returns path on success, nil when skipped or on error.
+---@param opts flemma.tools.store.MaterializeOpts
+---@return string|nil path
+---@return string|nil error
+function M.materialize(opts)
+  local should_write = opts.materialize_enabled ~= false or opts.truncated == true
+  if not should_write then
+    return nil, nil
+  end
+
+  local path = M.resolve_path(opts)
+  return M.write(path, opts.content, { backup = opts.backup })
 end
 
 return M
