@@ -329,4 +329,103 @@ describe("tools.store", function()
       assert.is_truthy(path)
     end)
   end)
+
+  describe("materialize_for_completion", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    it("writes file and returns path", function()
+      local dir = temp_dir()
+      local path, err = store.materialize_for_completion({
+        bufnr = 0,
+        __filename = dir .. "/test.chat",
+        __dirname = dir,
+        tool_id = "bash_1",
+        source = "tool",
+        result = { success = true, output = "hello world" },
+        store_config = {
+          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ id }}.txt",
+          materialize = true,
+          backup = "version",
+        },
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path)
+      assert.equals("hello world", read_file(path))
+    end)
+
+    it("skips materialization when materialize is false", function()
+      local dir = temp_dir()
+      local path, err = store.materialize_for_completion({
+        bufnr = 0,
+        __filename = dir .. "/test.chat",
+        __dirname = dir,
+        tool_id = "bash_1",
+        source = "tool",
+        result = { success = true, output = "hello world" },
+        store_config = {
+          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ id }}.txt",
+          materialize = false,
+          backup = "version",
+        },
+      })
+      assert.is_nil(err)
+      assert.is_nil(path)
+    end)
+
+    it("materializes table output as JSON", function()
+      local dir = temp_dir()
+      local json = require("flemma.utilities.json")
+      local path, _ = store.materialize_for_completion({
+        bufnr = 0,
+        __filename = dir .. "/test.chat",
+        __dirname = dir,
+        tool_id = "bash_1",
+        source = "tool",
+        result = { success = true, output = { key = "value" } },
+        store_config = {
+          path_format = dir .. "/{{ source }}_{{ id }}.txt",
+          materialize = true,
+          backup = false,
+        },
+      })
+      assert.is_truthy(path)
+      local content = read_file(path)
+      local decoded = json.decode(content)
+      assert.equals("value", decoded.key)
+    end)
+
+    it("materializes error output", function()
+      local dir = temp_dir()
+      local path, _ = store.materialize_for_completion({
+        bufnr = 0,
+        __filename = dir .. "/test.chat",
+        __dirname = dir,
+        tool_id = "bash_1",
+        source = "tool",
+        result = { success = false, error = "command not found" },
+        store_config = {
+          path_format = dir .. "/{{ source }}_{{ id }}.txt",
+          materialize = true,
+          backup = false,
+        },
+      })
+      assert.is_truthy(path)
+      local content = read_file(path)
+      assert.is_truthy(content:find("command not found"))
+    end)
+  end)
 end)

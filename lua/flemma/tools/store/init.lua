@@ -9,6 +9,7 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local context_module = require("flemma.context")
+local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local notify = require("flemma.notify")
 local path_util = require("flemma.utilities.path")
@@ -239,6 +240,54 @@ function M.materialize(opts)
 
   local path = resolve_path(opts)
   return M.write(path, opts.content, { backup = opts.backup })
+end
+
+---@class flemma.tools.store.CompletionOpts
+---@field bufnr integer
+---@field __filename string|nil
+---@field __dirname string|nil
+---@field tool_id string
+---@field source string "tool" or "job"
+---@field result flemma.tools.ExecutionResult
+---@field store_config table Materialized tools.store config subtree
+
+---Materialize a tool result at completion time.
+---Called from the executor before buffer injection.
+---@param opts flemma.tools.store.CompletionOpts
+---@return string|nil path
+---@return string|nil error
+function M.materialize_for_completion(opts)
+  local store_config = opts.store_config
+  if store_config.materialize == false then
+    return nil, nil
+  end
+
+  local result = opts.result
+  local content ---@type string
+  if result.error then
+    content = result.error --[[@as string]]
+    if result.output and result.output ~= "" then
+      content = content .. "\n\nPartial output:\n" .. tostring(result.output)
+    end
+  elseif type(result.output) == "table" then
+    content = json.encode(result.output)
+  else
+    content = tostring(result.output or "")
+  end
+
+  return M.materialize({
+    __filename = opts.__filename,
+    __dirname = opts.__dirname,
+    source = opts.source,
+    id = opts.tool_id,
+    path_format = store_config.path_format,
+    unnamed_path_format = store_config.unnamed_path_format,
+    bufnr = opts.bufnr,
+    content = content,
+    materialize_enabled = true,
+    truncated = false,
+    backup = store_config.backup,
+  })
 end
 
 return M

@@ -16,6 +16,7 @@ local context_module = require("flemma.context")
 local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
+local store = require("flemma.tools.store")
 local navigation = require("flemma.navigation")
 local tool_context = require("flemma.tools.context")
 local path_util = require("flemma.utilities.path")
@@ -328,8 +329,26 @@ local function do_completion(bufnr, tool_id, result, opts)
     pcall(vim.cmd --[[@as function]], "undojoin")
   end
 
-  -- Inject result into buffer
+  -- Materialize result to store (before buffer injection)
   local completion_config = config_facade.get(bufnr)
+  do
+    local store_config = completion_config.tools and completion_config.tools.store or {}
+    local buffer_ctx = context_module.from_buffer(bufnr)
+    local _store_path, store_err = store.materialize_for_completion({
+      bufnr = bufnr,
+      __filename = buffer_ctx:get_filename(),
+      __dirname = buffer_ctx:get_dirname(),
+      tool_id = tool_id,
+      source = "tool",
+      result = result,
+      store_config = store_config,
+    })
+    if store_err then
+      log.warn("executor: failed to materialize result for " .. tool_id .. ": " .. store_err)
+    end
+  end
+
+  -- Inject result into buffer
   local ok, err = injector.inject_result(
     bufnr,
     tool_id,
