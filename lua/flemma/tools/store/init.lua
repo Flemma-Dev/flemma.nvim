@@ -7,6 +7,7 @@
 ---@class flemma.tools.Store
 local M = {}
 
+local config_facade = require("flemma.config")
 local context_module = require("flemma.context")
 local loader = require("flemma.loader")
 local notify = require("flemma.notify")
@@ -119,10 +120,10 @@ end
 ---Resolve the store file path for a tool/job result.
 ---@param opts flemma.tools.store.ResolveOpts
 ---@return string path Absolute path to the store file
-function M.resolve_path(opts)
+local function resolve_path(opts)
   local format_str
   if not opts.__filename or opts.__filename == "" then
-    format_str = opts.unnamed_path_format or "${TMPDIR:-/tmp}/flemma/unsaved-{{ bufnr }}/{{ source }}_{{ id }}.txt"
+    format_str = opts.unnamed_path_format or "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ id }}.txt"
     if format_str:match("^%$%w+$") then
       error("Presets are not supported in unnamed_path_format (no chat file path to derive from)")
     end
@@ -133,11 +134,29 @@ function M.resolve_path(opts)
   return render_format(format_str, env)
 end
 
----Resolve the store directory for a chat buffer.
+---Get the store directory path from explicit options.
 ---@param opts flemma.tools.store.ResolveOpts
 ---@return string dir Absolute path to the store directory
-function M.resolve_dir(opts)
-  return path_util.dirname(M.resolve_path(opts))
+function M.get_store_path(opts)
+  return path_util.dirname(resolve_path(opts))
+end
+
+---Get the store directory path for a buffer using its config.
+---@param bufnr integer
+---@return string dir
+function M.get_buffer_store_path(bufnr)
+  local config = config_facade.materialize(bufnr)
+  local store_config = config.tools and config.tools.store or {}
+  local buffer_ctx = context_module.from_buffer(bufnr)
+  return M.get_store_path({
+    __filename = buffer_ctx:get_filename(),
+    __dirname = buffer_ctx:get_dirname(),
+    source = "tool",
+    id = "_",
+    path_format = store_config.path_format or "$chat",
+    unnamed_path_format = store_config.unnamed_path_format,
+    bufnr = bufnr,
+  })
 end
 
 ---@type string[]
@@ -218,7 +237,7 @@ function M.materialize(opts)
     return nil, nil
   end
 
-  local path = M.resolve_path(opts)
+  local path = resolve_path(opts)
   return M.write(path, opts.content, { backup = opts.backup })
 end
 

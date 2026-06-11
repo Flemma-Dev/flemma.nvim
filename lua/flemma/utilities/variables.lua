@@ -10,6 +10,11 @@ local M = {}
 ---@type table<string, fun(context?: table): string|nil>
 local resolvers = {}
 
+--- Registered inline variable resolvers.
+--- Checked by expand_inline before falling back to os.getenv.
+---@type table<string, fun(context?: table): string|nil>
+local inline_resolvers = {}
+
 local URN_PREFIX = "urn:"
 
 --- Register a URN variable resolver.
@@ -19,9 +24,17 @@ function M.register(urn, resolver)
   resolvers[urn] = resolver
 end
 
+---Register a variable that expand_inline resolves before os.getenv.
+---@param name string Variable name (without $)
+---@param resolver fun(context?: table): string|nil
+function M.register_inline(name, resolver)
+  inline_resolvers[name] = resolver
+end
+
 --- Clear all registered resolvers (for testing).
 function M.clear()
   resolvers = {}
+  inline_resolvers = {}
 end
 
 --- Expand ~ at the start of a string to the home directory.
@@ -145,7 +158,12 @@ function M.expand_inline(text)
 
     -- ${VAR:-default} — greedy match on var name, non-greedy on default
     text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
-      local val = os.getenv(var)
+      local val
+      if inline_resolvers[var] then
+        val = inline_resolvers[var]()
+      else
+        val = os.getenv(var)
+      end
       if val and val ~= "" then
         return val
       end
@@ -154,6 +172,9 @@ function M.expand_inline(text)
 
     -- Bare $VAR — only match word-character var names to avoid false positives
     text = text:gsub("%$([%w_]+)", function(var)
+      if inline_resolvers[var] then
+        return inline_resolvers[var]() or ""
+      end
       return os.getenv(var) or ""
     end)
   until text == prev

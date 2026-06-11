@@ -160,6 +160,33 @@ describe("utilities.variables", function()
     end)
   end)
 
+  describe("register_inline", function()
+    it("resolves inline-registered variables before os.getenv", function()
+      variables.register_inline("FLEMMA_TEST_INLINE_VAR", function()
+        return "/resolved/path"
+      end)
+      local result = variables.expand_inline("prefix/$FLEMMA_TEST_INLINE_VAR/suffix")
+      assert.equals("prefix//resolved/path/suffix", result)
+    end)
+
+    it("falls back to default when inline resolver returns nil", function()
+      variables.register_inline("FLEMMA_TEST_NIL_VAR", function()
+        return nil
+      end)
+      local result = variables.expand_inline("${FLEMMA_TEST_NIL_VAR:-/fallback}/x")
+      assert.equals("/fallback/x", result)
+    end)
+
+    it("is cleared by clear()", function()
+      variables.register_inline("FLEMMA_TEST_CLEARED", function()
+        return "/value"
+      end)
+      variables.clear()
+      local result = variables.expand_inline("$FLEMMA_TEST_CLEARED")
+      assert.equals("", result)
+    end)
+  end)
+
   describe("deduplicate_by_prefix", function()
     it("removes paths subsumed by a parent", function()
       local result = variables.deduplicate_by_prefix({
