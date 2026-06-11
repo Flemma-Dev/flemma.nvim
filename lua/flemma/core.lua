@@ -35,6 +35,7 @@ local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
 local tools = require("flemma.tools")
+local store = require("flemma.tools.store")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local cursor = require("flemma.cursor")
@@ -118,6 +119,25 @@ local function drain_and_inject_completions(bufnr)
             .. tool_result_segment.position.start_line
             .. ", proceeding with injection"
         )
+      end
+
+      -- Materialize job result to store (before buffer injection)
+      do
+        local store_config = drain_config.tools and drain_config.tools.store or {}
+        local buffer_ctx = context_module.from_buffer(bufnr)
+        local _store_path, store_err = store.materialize_for_completion({
+          bufnr = bufnr,
+          __filename = buffer_ctx:get_filename(),
+          __dirname = buffer_ctx:get_dirname(),
+          tool_name = item.tool_name,
+          tool_id = item.job_id,
+          source = "job",
+          result = item.result,
+          store_config = store_config,
+        })
+        if store_err then
+          log.warn("core: failed to materialize job result for " .. item.job_id .. ": " .. store_err)
+        end
       end
 
       local placement = injector.append_job_result(bufnr, item.job_id, item.result, drain_compact_opts)

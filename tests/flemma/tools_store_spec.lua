@@ -527,5 +527,47 @@ describe("tools.store", function()
       local content = read_file(path)
       assert.is_truthy(content:find("command not found"))
     end)
+
+    it("materializes job results with source=job", function()
+      local dir = temp_dir()
+      local path, err = store.materialize_for_completion({
+        bufnr = 0,
+        __filename = dir .. "/test.chat",
+        __dirname = dir,
+        tool_name = "bash",
+        tool_id = "ab12cd34",
+        source = "job",
+        result = { success = true, output = "job output" },
+        store_config = {
+          path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
+          materialize = true,
+          backup = false,
+        },
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path)
+      assert.is_truthy(path:find("job_bash_ab12cd34%.txt$"), "expected job source in path: " .. path)
+      assert.equals("job output", read_file(path))
+    end)
+
+    it("materializes job results without tool_name", function()
+      local dir = temp_dir()
+      local path, err = store.materialize_for_completion({
+        bufnr = 0,
+        __filename = dir .. "/test.chat",
+        __dirname = dir,
+        tool_id = "ab12cd34",
+        source = "job",
+        result = { success = true, output = "job output" },
+        store_config = {
+          path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
+          materialize = true,
+          backup = false,
+        },
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path)
+      assert.is_truthy(path:find("job__ab12cd34%.txt$"), "expected empty name: " .. path)
+    end)
   end)
 end)
