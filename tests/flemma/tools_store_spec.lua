@@ -72,6 +72,7 @@ describe("tools.store", function()
         __filename = "/home/user/chats/session.chat",
         __dirname = "/home/user/chats",
         source = "tool",
+        name = "bash",
         id = "bash_1",
         path_format = "$chat",
       })
@@ -83,6 +84,7 @@ describe("tools.store", function()
         __filename = "/home/user/chats/session.chat",
         __dirname = "/home/user/chats",
         source = "tool",
+        name = "bash",
         id = "bash_1",
         path_format = "$state",
       })
@@ -94,8 +96,9 @@ describe("tools.store", function()
         __filename = "/home/user/chats/session.chat",
         __dirname = "/home/user/chats",
         source = "tool",
+        name = "bash",
         id = "bash_1",
-        path_format = "/tmp/store/{{ source }}_{{ id }}.txt",
+        path_format = "/tmp/store/{{ source }}_{{ name }}_{{ id }}.txt",
       })
       assert.equals("/tmp/store", dir)
     end)
@@ -106,6 +109,7 @@ describe("tools.store", function()
           __filename = "/tmp/x.chat",
           __dirname = "/tmp",
           source = "tool",
+          name = "bash",
           id = "1",
           path_format = "$unknown",
         })
@@ -118,8 +122,9 @@ describe("tools.store", function()
         __filename = "/tmp/x.chat",
         __dirname = "/tmp",
         source = "tool",
+        name = "bash",
         id = "1",
-        path_format = home .. "/.flemma/flemma/store/{{ source }}_{{ id }}.txt",
+        path_format = home .. "/.flemma/flemma/store/{{ source }}_{{ name }}_{{ id }}.txt",
       })
       assert.is_truthy(dir:find("/.flemma/store"), "expected collapsed path: " .. dir)
       assert.is_falsy(dir:find("/.flemma/flemma/store"), "double flemma not collapsed: " .. dir)
@@ -130,8 +135,9 @@ describe("tools.store", function()
         __filename = "/home/user/chats/session.chat",
         __dirname = "/home/user/chats",
         source = "tool",
+        name = "bash",
         id = "1",
-        path_format = "/tmp/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ id }}.txt",
+        path_format = "/tmp/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt",
       })
       assert.equals("/tmp/session.chat", dir)
     end)
@@ -141,8 +147,9 @@ describe("tools.store", function()
         __filename = "/tmp/x.chat",
         __dirname = "/tmp",
         source = "tool",
+        name = "bash",
         id = "1",
-        path_format = "$HOME/store/{{ source }}_{{ id }}.txt",
+        path_format = "$HOME/store/{{ source }}_{{ name }}_{{ id }}.txt",
       })
       local home = os.getenv("HOME")
       assert.equals(home .. "/store", dir)
@@ -155,9 +162,10 @@ describe("tools.store", function()
         __filename = nil,
         __dirname = nil,
         source = "tool",
+        name = "bash",
         id = "bash_1",
         bufnr = 42,
-        unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ id }}.txt",
+        unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",
       })
       assert.is_truthy(dir:find("/flemma/unnamed%-42$"), "unexpected path: " .. dir)
     end)
@@ -168,11 +176,61 @@ describe("tools.store", function()
           __filename = nil,
           __dirname = nil,
           source = "tool",
+          name = "bash",
           id = "1",
           bufnr = 1,
           unnamed_path_format = "$chat",
         })
       end)
+    end)
+  end)
+
+  describe("deduplicate_name_in_segment", function()
+    it("collapses name_name_ to name_ (Kimi-style ID)", function()
+      assert.equals("tool_bash_1", store.deduplicate_name_in_segment("tool_bash_bash_1", "bash"))
+    end)
+
+    it("collapses name-name_ to name_ (dash separator)", function()
+      assert.equals("bash_1", store.deduplicate_name_in_segment("bash-bash_1", "bash"))
+    end)
+
+    it("does not collapse when second occurrence is a prefix of a longer word", function()
+      assert.equals("tool_bash_basher", store.deduplicate_name_in_segment("tool_bash_basher", "bash"))
+    end)
+
+    it("collapses when second occurrence is at end of segment", function()
+      assert.equals("tool_bash", store.deduplicate_name_in_segment("tool_bash_bash", "bash"))
+    end)
+
+    it("collapses repeated occurrences to fixed point", function()
+      assert.equals("bash_1", store.deduplicate_name_in_segment("bash_bash_bash_1", "bash"))
+    end)
+
+    it("handles wire-encoded names with double underscore", function()
+      local segment = "tool_flemma__jobs__status_flemma__jobs__status--20"
+      local result = store.deduplicate_name_in_segment(segment, "flemma__jobs__status")
+      assert.equals("tool_flemma__jobs__status--20", result)
+    end)
+
+    it("preserves double-dash escaping after de-duplication", function()
+      local segment = "tool_bash_bash--8"
+      local result = store.deduplicate_name_in_segment(segment, "bash")
+      assert.equals("tool_bash--8", result)
+    end)
+
+    it("returns segment unchanged when name does not repeat", function()
+      assert.equals(
+        "tool_calculator_toolu_xyz",
+        store.deduplicate_name_in_segment("tool_calculator_toolu_xyz", "calculator")
+      )
+    end)
+
+    it("returns segment unchanged when name is empty", function()
+      assert.equals("tool_bash_1", store.deduplicate_name_in_segment("tool_bash_1", ""))
+    end)
+
+    it("does not cross path boundaries (operates on single segment)", function()
+      assert.equals("bash_1", store.deduplicate_name_in_segment("bash_bash_1", "bash"))
     end)
   end)
 
@@ -264,35 +322,71 @@ describe("tools.store", function()
       return content
     end
 
-    it("writes full output and returns path", function()
+    it("writes full output with tool name in filename", function()
       local dir = temp_dir()
       local path, err = store.materialize({
         __filename = dir .. "/session.chat",
         __dirname = dir,
         source = "tool",
-        id = "bash_1",
-        path_format = dir .. "/.flemma/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ id }}.txt",
+        name = "calculator",
+        id = "toolu_xyz",
+        path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
         content = "full tool output here",
         backup = "version",
       })
       assert.is_nil(err)
       assert.is_truthy(path)
+      assert.is_truthy(path:find("tool_calculator_toolu_xyz%.txt$"), "expected name in path: " .. path)
       assert.equals("full tool output here", read_file(path))
     end)
 
-    it("escapes hostile characters in ID", function()
+    it("de-duplicates when ID starts with tool name (Kimi-style)", function()
       local dir = temp_dir()
       local path, err = store.materialize({
         __filename = dir .. "/session.chat",
         __dirname = dir,
         source = "tool",
-        id = "bash:8",
-        path_format = dir .. "/{{ source }}_{{ id }}.txt",
+        name = "bash",
+        id = "bash_1",
+        path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
         content = "output",
         backup = false,
       })
       assert.is_nil(err)
-      assert.is_truthy(path:find("tool_bash%-%-8%.txt$"), "expected escaped ID: " .. path)
+      assert.is_truthy(path:find("tool_bash_1%.txt$"), "expected de-duped: " .. path)
+      assert.is_falsy(path:find("tool_bash_bash_1"), "name should not repeat: " .. path)
+    end)
+
+    it("de-duplicates wire-encoded dotted tool names", function()
+      local dir = temp_dir()
+      local path, err = store.materialize({
+        __filename = dir .. "/session.chat",
+        __dirname = dir,
+        source = "tool",
+        name = "flemma.jobs.status",
+        id = "flemma__jobs__status:20",
+        path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
+        content = "output",
+        backup = false,
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path:find("tool_flemma__jobs__status%-%-20%.txt$"), "expected de-duped: " .. path)
+    end)
+
+    it("escapes hostile characters in ID and de-duplicates name", function()
+      local dir = temp_dir()
+      local path, err = store.materialize({
+        __filename = dir .. "/session.chat",
+        __dirname = dir,
+        source = "tool",
+        name = "bash",
+        id = "bash:8",
+        path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
+        content = "output",
+        backup = false,
+      })
+      assert.is_nil(err)
+      assert.is_truthy(path:find("tool_bash%-%-8%.txt$"), "expected de-duped + escaped: " .. path)
     end)
 
     it("skips write when materialize_enabled is false and not truncated", function()
@@ -301,8 +395,9 @@ describe("tools.store", function()
         __filename = dir .. "/session.chat",
         __dirname = dir,
         source = "tool",
+        name = "bash",
         id = "bash_1",
-        path_format = dir .. "/{{ source }}_{{ id }}.txt",
+        path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
         content = "short output",
         materialize_enabled = false,
         truncated = false,
@@ -347,23 +442,25 @@ describe("tools.store", function()
       return content
     end
 
-    it("writes file and returns path", function()
+    it("writes file with tool name in path", function()
       local dir = temp_dir()
       local path, err = store.materialize_for_completion({
         bufnr = 0,
         __filename = dir .. "/test.chat",
         __dirname = dir,
-        tool_id = "bash_1",
+        tool_name = "bash",
+        tool_id = "toolu_xyz",
         source = "tool",
         result = { success = true, output = "hello world" },
         store_config = {
-          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ id }}.txt",
+          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ name }}_{{ id }}.txt",
           materialize = true,
           backup = "version",
         },
       })
       assert.is_nil(err)
       assert.is_truthy(path)
+      assert.is_truthy(path:find("tool_bash_toolu_xyz%.txt$"), "expected name in path: " .. path)
       assert.equals("hello world", read_file(path))
     end)
 
@@ -373,11 +470,12 @@ describe("tools.store", function()
         bufnr = 0,
         __filename = dir .. "/test.chat",
         __dirname = dir,
+        tool_name = "bash",
         tool_id = "bash_1",
         source = "tool",
         result = { success = true, output = "hello world" },
         store_config = {
-          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ id }}.txt",
+          path_format = dir .. "/.flemma/test.chat/{{ source }}_{{ name }}_{{ id }}.txt",
           materialize = false,
           backup = "version",
         },
@@ -393,11 +491,12 @@ describe("tools.store", function()
         bufnr = 0,
         __filename = dir .. "/test.chat",
         __dirname = dir,
-        tool_id = "bash_1",
+        tool_name = "bash",
+        tool_id = "toolu_1",
         source = "tool",
         result = { success = true, output = { key = "value" } },
         store_config = {
-          path_format = dir .. "/{{ source }}_{{ id }}.txt",
+          path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
           materialize = true,
           backup = false,
         },
@@ -414,11 +513,12 @@ describe("tools.store", function()
         bufnr = 0,
         __filename = dir .. "/test.chat",
         __dirname = dir,
+        tool_name = "bash",
         tool_id = "bash_1",
         source = "tool",
         result = { success = false, error = "command not found" },
         store_config = {
-          path_format = dir .. "/{{ source }}_{{ id }}.txt",
+          path_format = dir .. "/{{ source }}_{{ name }}_{{ id }}.txt",
           materialize = true,
           backup = false,
         },

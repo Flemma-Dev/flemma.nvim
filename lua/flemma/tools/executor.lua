@@ -338,6 +338,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       bufnr = bufnr,
       __filename = buffer_ctx:get_filename(),
       __dirname = buffer_ctx:get_dirname(),
+      tool_name = entry and entry.tool_name,
       tool_id = tool_id,
       source = "tool",
       result = result,
@@ -525,6 +526,7 @@ function M.build_execution_context(params)
             opts.store_opts = {
               __filename = params.__filename,
               __dirname = params.__dirname,
+              name = params.tool_name,
               path_format = store_config.path_format,
               unnamed_path_format = store_config.unnamed_path_format,
               backup = store_config.backup,

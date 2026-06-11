@@ -15,6 +15,7 @@ local notify = require("flemma.notify")
 local path_util = require("flemma.utilities.path")
 local renderer = require("flemma.templating.renderer")
 local templating = require("flemma.templating")
+local tool_names = require("flemma.utilities.tools")
 local variables = require("flemma.utilities.variables")
 
 ---Escape a tool/job ID for use in filenames.
@@ -24,6 +25,34 @@ local variables = require("flemma.utilities.variables")
 ---@return string
 function M.escape_id(id)
   return (id:gsub("[^A-Za-z0-9._%-]", "--"))
+end
+
+---Collapse consecutive occurrences of a tool name within a single path segment.
+---When a segment contains `{name}{sep}{name}` (same name repeated with a
+---non-alphanumeric separator, at a word boundary), the separator + second
+---occurrence are removed. Repeats to fixed point.
+---@param segment string A single path component (no slashes)
+---@param wire_name string Wire-encoded tool name to de-duplicate
+---@return string
+function M.deduplicate_name_in_segment(segment, wire_name)
+  if wire_name == "" then
+    return segment
+  end
+  local pattern = vim.pesc(wire_name) .. "([^%w])" .. vim.pesc(wire_name)
+  local prev
+  repeat
+    prev = segment
+    local start, finish = segment:find(pattern)
+    if start then
+      local after = finish + 1
+      if after > #segment or not segment:sub(after, after):match("%w") then
+        segment = segment:sub(1, start + #wire_name - 1) .. segment:sub(finish + 1)
+      else
+        break
+      end
+    end
+  until segment == prev
+  return segment
 end
 
 ---Collapse doubled `flemma` namespace segments in a rendered store path.
@@ -55,8 +84,8 @@ end
 
 ---@type table<string, string>
 local PRESETS = {
-  ["$chat"] = "{{ __dirname }}/.flemma/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ id }}.txt",
-  ["$state"] = "${XDG_STATE_HOME:-$HOME/.flemma}/flemma/store/{{ flemma.path.flatten(__filename) }}/{{ source }}_{{ id }}.txt",
+  ["$chat"] = "{{ __dirname }}/.flemma/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt",
+  ["$state"] = "${XDG_STATE_HOME:-$HOME/.flemma}/flemma/store/{{ flemma.path.flatten(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt",
 }
 
 ---Build the template environment for store path rendering.
@@ -71,6 +100,7 @@ local function build_env(opts)
   end
   local env = templating.from_context(ctx, opts.bufnr)
   env.source = opts.source or ""
+  env.name = tool_names.encode_tool_name(opts.name or "")
   env.id = M.escape_id(opts.id or "")
   if opts.bufnr then
     env.bufnr = opts.bufnr
@@ -98,7 +128,8 @@ local function expand_preset(format)
   return template
 end
 
----Render a format string: Lua template expansion → variable expansion → resolve → collapse.
+---Render a format string: Lua template expansion → variable expansion → resolve →
+---namespace collapse → per-segment name de-duplication.
 ---@param format_str string
 ---@param env table
 ---@return string
@@ -106,13 +137,23 @@ local function render_format(format_str, env)
   local expanded = renderer.parts_to_text(renderer.render(format_str, env))
   expanded = variables.expand_inline(expanded)
   expanded = path_util.resolve(expanded)
-  return M.collapse_namespace(expanded)
+  expanded = M.collapse_namespace(expanded)
+  local wire_name = env.name
+  if wire_name and wire_name ~= "" then
+    local segments = vim.split(expanded, "/", { plain = true })
+    for i, seg in ipairs(segments) do
+      segments[i] = M.deduplicate_name_in_segment(seg, wire_name)
+    end
+    expanded = table.concat(segments, "/")
+  end
+  return expanded
 end
 
 ---@class flemma.tools.store.ResolveOpts
 ---@field __filename string|nil Chat file path (nil for unnamed buffers)
 ---@field __dirname string|nil Chat file directory (nil for unnamed buffers)
 ---@field source string "tool" or "job"
+---@field name? string Tool name (dots → __ wire encoding; de-duplicated from ID)
 ---@field id string Tool/job ID (will be escaped)
 ---@field path_format? string Override config (default: "$chat")
 ---@field unnamed_path_format? string Override config for unnamed buffers
@@ -124,7 +165,8 @@ end
 local function resolve_path(opts)
   local format_str
   if not opts.__filename or opts.__filename == "" then
-    format_str = opts.unnamed_path_format or "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ id }}.txt"
+    format_str = opts.unnamed_path_format
+      or "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"
     if format_str:match("^%$%w+$") then
       error("Presets are not supported in unnamed_path_format (no chat file path to derive from)")
     end
@@ -246,6 +288,7 @@ end
 ---@field bufnr integer
 ---@field __filename string|nil
 ---@field __dirname string|nil
+---@field tool_name? string Tool name (e.g., "bash", "flemma.jobs.status")
 ---@field tool_id string
 ---@field source string "tool" or "job"
 ---@field result flemma.tools.ExecutionResult
@@ -279,6 +322,7 @@ function M.materialize_for_completion(opts)
     __filename = opts.__filename,
     __dirname = opts.__dirname,
     source = opts.source,
+    name = opts.tool_name,
     id = opts.tool_id,
     path_format = store_config.path_format,
     unnamed_path_format = store_config.unnamed_path_format,

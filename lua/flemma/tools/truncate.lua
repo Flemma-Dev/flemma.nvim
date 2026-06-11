@@ -27,7 +27,7 @@ M.MAX_LINE_CHARS = base.MAX_LINE_CHARS
 ---@field filename? string
 ---@field max_lines? integer
 ---@field max_bytes? integer
----@field store_opts? { __filename?: string, __dirname?: string, path_format?: string, unnamed_path_format?: string, backup?: string|false }
+---@field store_opts? { __filename?: string, __dirname?: string, name?: string, path_format?: string, unnamed_path_format?: string, backup?: string|false }
 
 ---@class flemma.tools.TruncateOverflowResult
 ---@field content string
@@ -123,6 +123,7 @@ function M.truncate_with_overflow(text, opts)
       __filename = opts.store_opts.__filename,
       __dirname = opts.store_opts.__dirname,
       source = opts.source or "tool",
+      name = opts.store_opts.name,
       id = opts.id or "",
       path_format = opts.store_opts.path_format,
       unnamed_path_format = opts.store_opts.unnamed_path_format,
