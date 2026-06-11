@@ -846,7 +846,13 @@ local function build_highlighted_virt_lines(opts)
     local indicator = trimmed[opts.head + 1]
     for ci, chunk in ipairs(indicator) do
       if type(chunk[2]) == "string" then
-        indicator[ci] = { chunk[1], { chunk[2] --[[@as string]], role_hl } }
+        indicator[ci] = {
+          chunk[1],
+          {
+            chunk[2] --[[@as string]],
+            role_hl,
+          },
+        }
       end
     end
     local used = 0

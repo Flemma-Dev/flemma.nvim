@@ -554,7 +554,10 @@ describe("UI Tool Previews", function()
       assert.is_truthy(#indicator_chunks >= 1, "indicator line should have chunks")
 
       local indicator_text = indicator_chunks[1][1]
-      assert.is_truthy(indicator_text:find("more line"), "indicator should contain 'more line' text: " .. indicator_text)
+      assert.is_truthy(
+        indicator_text:find("more line"),
+        "indicator should contain 'more line' text: " .. indicator_text
+      )
 
       local indicator_hl = indicator_chunks[1][2]
       assert.is_truthy(
