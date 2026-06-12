@@ -91,6 +91,45 @@ describe("tools.store", function()
       assert.is_truthy(dir:find("/store/"), "expected /store/ in path: " .. dir)
     end)
 
+    it("resolves $state under XDG_STATE_HOME when set", function()
+      local original = vim.uv.os_getenv("XDG_STATE_HOME")
+      vim.uv.os_setenv("XDG_STATE_HOME", "/xdg-spec-state")
+      local ok, dir = pcall(store.get_store_path, {
+        __filename = "/home/user/chats/session.chat",
+        __dirname = "/home/user/chats",
+        source = "tool",
+        name = "bash",
+        id = "bash_1",
+        path_format = "$state",
+      })
+      if original then
+        vim.uv.os_setenv("XDG_STATE_HOME", original)
+      else
+        vim.uv.os_unsetenv("XDG_STATE_HOME")
+      end
+      assert.is_true(ok, tostring(dir))
+      assert.equals("/xdg-spec-state/flemma/store/home--user--chats--session.chat", dir)
+    end)
+
+    it("falls back to ~/.flemma/store (collapsed) when XDG_STATE_HOME is unset", function()
+      local original = vim.uv.os_getenv("XDG_STATE_HOME")
+      vim.uv.os_unsetenv("XDG_STATE_HOME")
+      local ok, dir = pcall(store.get_store_path, {
+        __filename = "/home/user/chats/session.chat",
+        __dirname = "/home/user/chats",
+        source = "tool",
+        name = "bash",
+        id = "bash_1",
+        path_format = "$state",
+      })
+      if original then
+        vim.uv.os_setenv("XDG_STATE_HOME", original)
+      end
+      assert.is_true(ok, tostring(dir))
+      local home = vim.uv.os_homedir()
+      assert.equals(home .. "/.flemma/store/home--user--chats--session.chat", dir)
+    end)
+
     it("fails loudly when the format references an undefined variable", function()
       local ok, err = pcall(store.get_store_path, {
         __filename = "/home/user/chats/session.chat",
@@ -787,6 +826,35 @@ describe("tools.store", function()
       assert.equals("transcript content", read_file(dir .. "/transcript.txt"))
     end)
 
+    it("writes save_to destinations that @-references can read back", function()
+      local dir = temp_dir()
+      local stub, err = store.execute_redirect({
+        save_to = "./sym.txt",
+        content = "symmetry content",
+        chat_dirname = dir,
+        bufnr = 0,
+        preview = { lines = 5, bytes = 2048 },
+        backup = false,
+      })
+      assert.is_nil(err)
+      assert.is_truthy(stub)
+
+      -- @./sym.txt rewrites to include('./sym.txt'), resolved against the
+      -- chat file's directory at render time — same base as save_to.
+      local renderer = require("flemma.templating.renderer")
+      local templating = require("flemma.templating")
+      local eval = require("flemma.templating.eval")
+      local context_module = require("flemma.context")
+      local env = templating.from_context(context_module.from_file(dir .. "/session.chat"))
+      eval.ensure_env(env)
+      local parts, diagnostics = renderer.render("{{ include('./sym.txt') }}", env)
+      assert.equals(0, #diagnostics, vim.inspect(diagnostics))
+      assert.is_truthy(
+        renderer.parts_to_text(parts):find("symmetry content", 1, true),
+        "@-reference must read back the redirect destination"
+      )
+    end)
+
     it("rejects bare $FLEMMA_TOOLS_STORE_PATH before the store directory exists", function()
       local dir = temp_dir()
       local store_dir = dir .. "/.flemma/session.chat"
@@ -1021,6 +1089,26 @@ describe("tools.store", function()
       assert.equals(1, vim.fn.isdirectory(target))
 
       store.get_buffer_store_path = original
+    end)
+  end)
+
+  describe("stub parser round-trip", function()
+    it("parses a redirect stub back as an ordinary tool result", function()
+      local parser = require("flemma.parser")
+      local stub =
+        store.build_redirect_stub("line one\nline two\nline three", "/home/user/out.txt", { lines = 2, bytes = 2048 })
+      local lines = { "@You:", "**Tool Result:** `tool_rt_01`", "", "```" }
+      for _, stub_line in ipairs(vim.split(stub, "\n", { plain = true })) do
+        lines[#lines + 1] = stub_line
+      end
+      lines[#lines + 1] = "```"
+
+      local doc = parser.parse_lines(lines)
+      assert.equals(1, #doc.messages)
+      local segment = doc.messages[1].segments[1]
+      assert.equals("tool_result", segment.kind)
+      assert.equals("tool_rt_01", segment.tool_use_id)
+      assert.equals(stub, segment.content)
     end)
   end)
 

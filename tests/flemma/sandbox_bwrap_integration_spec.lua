@@ -125,6 +125,81 @@ describe("bash tool sandbox integration", function()
     )
   end)
 
+  it("writes into the store via the urn:flemma:store auto-grant", function()
+    if skip_unless_bwrap() then
+      return
+    end
+
+    -- rw_paths deliberately omit /tmp and friends: the store grant must
+    -- stand alone for the write to succeed.
+    local store_root = vim.fn.tempname() .. "-store-grant"
+    local result = execute_bash_tool(
+      'echo "store artifact" > "$FLEMMA_TOOLS_STORE_PATH/artifact.txt"',
+      sandbox_config({ "urn:flemma:store" }),
+      {
+        extra_config = {
+          tools = {
+            store = {
+              unnamed_path_format = store_root .. "/unnamed-{{ bufnr }}/{{ source }}_{{ id }}.txt",
+            },
+          },
+        },
+      }
+    )
+    assert.is_true(result.success, "store write must succeed via the auto-grant: " .. tostring(result.error))
+
+    local files = vim.fn.glob(store_root .. "/*/artifact.txt", false, true)
+    assert.equals(1, #files, "expected exactly one artifact under the store root")
+    local f = assert(io.open(files[1], "r"))
+    local content = f:read("*a")
+    f:close()
+    assert.is_truthy(content:find("store artifact", 1, true))
+    vim.fn.delete(store_root, "rf")
+  end)
+
+  it("runs commands even when a granted path does not exist yet", function()
+    if skip_unless_bwrap() then
+      return
+    end
+
+    -- The store directory is created lazily; until then the urn:flemma:store
+    -- grant resolves to a nonexistent path. bwrap hard-fails on --bind
+    -- sources that do not exist, so the policy must drop them instead.
+    local result = execute_bash_tool("echo alive", sandbox_config({ "urn:flemma:store" }), {
+      extra_config = {
+        tools = {
+          store = {
+            unnamed_path_format = vim.fn.tempname() .. "-never/unnamed-{{ bufnr }}/{{ source }}_{{ id }}.txt",
+          },
+        },
+      },
+    })
+    assert.is_true(result.success, "command must run despite a not-yet-created grant: " .. tostring(result.error))
+    assert.is_truthy(result.output:find("alive", 1, true))
+  end)
+
+  it("denies writes outside the store grant", function()
+    if skip_unless_bwrap() then
+      return
+    end
+
+    local outside = vim.fn.tempname() .. "-outside.txt"
+    local result = execute_bash_tool('echo nope > "' .. outside .. '"', sandbox_config({ "urn:flemma:store" }), {
+      extra_config = {
+        tools = {
+          store = {
+            unnamed_path_format = vim.fn.tempname() .. "-sg/unnamed-{{ bufnr }}/{{ source }}_{{ id }}.txt",
+          },
+        },
+      },
+    })
+    assert.is_false(result.success, "write outside the store grant must be denied")
+    -- The terminal backend captures PTY output which hard-wraps long lines
+    -- mid-word, so message matching is unreliable; the observable guarantee
+    -- of a denial is that the file never came into existence.
+    assert.equals(0, vim.fn.filereadable(outside), "denied write must not create the file")
+  end)
+
   it("does NOT wrap command when sandbox is disabled", function()
     if skip_unless_bwrap() then
       return
