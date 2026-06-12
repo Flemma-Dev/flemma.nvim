@@ -190,7 +190,10 @@ local function execute_terminal(input, ctx, callback)
       FLEMMA_TOOLS_STORE_PATH = store_path,
     })
     if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
-      store.ensure_buffer_store_path(ctx.bufnr)
+      local ensure_ok, ensure_err = pcall(store.ensure_buffer_store_path, ctx.bufnr)
+      if not ensure_ok then
+        log.warn("bash: could not create store directory: " .. tostring(ensure_err))
+      end
     end
   end
 
@@ -366,7 +369,10 @@ local function execute_jobstart(input, ctx, callback)
       FLEMMA_TOOLS_STORE_PATH = store_path,
     })
     if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
-      store.ensure_buffer_store_path(ctx.bufnr)
+      local ensure_ok, ensure_err = pcall(store.ensure_buffer_store_path, ctx.bufnr)
+      if not ensure_ok then
+        log.warn("bash: could not create store directory: " .. tostring(ensure_err))
+      end
     end
   end
 

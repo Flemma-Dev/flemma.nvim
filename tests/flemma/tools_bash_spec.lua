@@ -145,6 +145,22 @@ describe("Bash Tool", function()
       store.ensure_buffer_store_path = original_ensure
     end)
 
+    it("still executes when the store directory cannot be created", function()
+      local store = require("flemma.tools.store")
+      local original_ensure = store.ensure_buffer_store_path
+      store.ensure_buffer_store_path = function()
+        error("Failed to create directory '/blocked/store'")
+      end
+
+      -- Restore before asserting so a failure cannot leak the stub into
+      -- later tests (the sandbox resolves store paths through this module).
+      local result = run_bash({ label = "test", command = "echo ok $FLEMMA_TOOLS_STORE_PATH" }, ctx)
+      store.ensure_buffer_store_path = original_ensure
+
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:find("ok", 1, true))
+    end)
+
     it("returns cancel function that stops the job", function()
       local result = nil
       local cancel = bash_def.execute({ label = "test", command = "sleep 60" }, ctx, function(r)
