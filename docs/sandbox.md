@@ -67,6 +67,7 @@ require("flemma").setup({
       rw_paths = {                          -- Read-write paths (all others are read-only)
         "urn:flemma:cwd",                   --   Vim global working directory (from :cd)
         "urn:flemma:buffer:path",           --   Directory of the current .chat file
+        "urn:flemma:store",                 --   Tool result store directory for the buffer
         "/tmp",                             --   System temp directory
         "${TMPDIR:-/tmp}",                  --   TMPDIR (deduped with /tmp if same)
         "${XDG_CACHE_HOME:-~/.cache}",      --   Package manager caches
@@ -107,11 +108,11 @@ sandbox = {
 
 ### Policy options
 
-| Key                | Default                                                       | Effect                                                                        |
-| ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Everything else is read-only.                   |
-| `network`          | `true`                                                        | Allow network access inside the sandbox.                                      |
-| `allow_privileged` | `false`                                                       | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
+| Key                | Default                                                                           | Effect                                                                        |
+| ------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "urn:flemma:store", "/tmp", ... }` | Paths with read-write access. Everything else is read-only.                   |
+| `network`          | `true`                                                                            | Allow network access inside the sandbox.                                      |
+| `allow_privileged` | `false`                                                                           | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
 
 ### Path variables
 
@@ -125,10 +126,11 @@ Paths in `rw_paths` support three expansion forms:
 
 #### Flemma URN variables
 
-| URN                      | Expansion                                   | Source                                |
-| ------------------------ | ------------------------------------------- | ------------------------------------- |
-| `urn:flemma:cwd`         | Vim's global working directory              | `vim.fn.getcwd()` (set by `:cd`)      |
-| `urn:flemma:buffer:path` | Directory containing the current .chat file | `vim.fn.fnamemodify(bufname, ":p:h")` |
+| URN                      | Expansion                                   | Source                                                                      |
+| ------------------------ | ------------------------------------------- | --------------------------------------------------------------------------- |
+| `urn:flemma:cwd`         | Vim's global working directory              | `vim.fn.getcwd()` (set by `:cd`)                                            |
+| `urn:flemma:buffer:path` | Directory containing the current .chat file | `vim.fn.fnamemodify(bufname, ":p:h")`                                       |
+| `urn:flemma:store`       | Tool result store directory for the buffer  | `tools.store.path_format` (see [docs/tools.md](tools.md#tool-result-store)) |
 
 After expansion, all paths are normalized to absolute paths with symlinks resolved. Paths subsumed by a parent path are deduplicated (e.g., `/tmp` and `/tmp/foo` collapses to just `/tmp`).
 

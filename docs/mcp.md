@@ -164,7 +164,7 @@ mcporter call <server>.<tool> --args '<json>' --output json
 
 The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the response is not shaped like a `CallToolResult` (no `content` array), Flemma falls back to inserting the raw output text verbatim — so non-conforming MCP servers still return something usable. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
 
-Outputs run through `ctx.truncate.truncate_with_overflow` the same way every other tool's output does, so large responses get truncated and the full text saved to an overflow file.
+Outputs run through `ctx.truncate.truncate_with_overflow` the same way every other tool's output does, so large responses get truncated and the full text saved to the [tool result store](tools.md#tool-result-store).
 
 ### Timeouts
 

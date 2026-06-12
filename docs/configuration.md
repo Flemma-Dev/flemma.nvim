@@ -63,8 +63,15 @@ require("flemma").setup({
     ls = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
     },
-    truncate = {
-      output_path_format = "${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt",  -- Where overflow files are written
+    store = {                                -- Tool result store (see docs/tools.md#tool-result-store)
+      path_format = "$chat",                 -- Where results are written: "$chat", "$state", or a template string
+      unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",  -- Store path for unsaved buffers
+      materialize = false,                   -- Write every result to the store (not just truncation overflow and redirects)
+      preview = {
+        lines = 10,                          -- Preview lines kept in the buffer for flemma.save_to redirects
+        bytes = 2048,                        -- Preview size cap (bytes)
+      },
+      backup = "version",                    -- Backup strategy before overwriting store files (false to disable)
     },
     mcporter = {
       enabled = false,                       -- Discover MCP servers via mcporter CLI (see docs/mcp.md)
@@ -220,6 +227,7 @@ require("flemma").setup({
       rw_paths = {                              -- Read-write paths (all others read-only)
         "urn:flemma:cwd",                       --   Vim working directory
         "urn:flemma:buffer:path",               --   Directory of the .chat file
+        "urn:flemma:store",                     --   Tool result store directory for the buffer
         "/tmp",                                 --   System temp directory
         "${TMPDIR:-/tmp}",                      --   TMPDIR (deduped with /tmp if same)
         "${XDG_CACHE_HOME:-~/.cache}",          --   Package manager caches
