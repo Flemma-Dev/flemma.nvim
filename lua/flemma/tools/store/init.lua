@@ -12,7 +12,6 @@ local config_facade = require("flemma.config")
 local context_module = require("flemma.context")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
-local notify = require("flemma.notify")
 local path_util = require("flemma.utilities.path")
 local renderer = require("flemma.templating.renderer")
 local sandbox_module = require("flemma.sandbox")
@@ -46,8 +45,10 @@ function M.deduplicate_name_in_segment(segment, wire_name)
     prev = segment
     local start, finish = segment:find(pattern)
     if start then
+      local before_ok = start == 1 or not segment:sub(start - 1, start - 1):match("%w")
       local after = finish + 1
-      if after > #segment or not segment:sub(after, after):match("%w") then
+      local after_ok = after > #segment or not segment:sub(after, after):match("%w")
+      if before_ok and after_ok then
         segment = segment:sub(1, start + #wire_name - 1) .. segment:sub(finish + 1)
       else
         break
@@ -136,7 +137,15 @@ end
 ---@param env table
 ---@return string
 local function render_format(format_str, env)
-  local expanded = renderer.parts_to_text(renderer.render(format_str, env))
+  local parts, diagnostics = renderer.render(format_str, env)
+  if #diagnostics > 0 then
+    local messages = {}
+    for _, diagnostic in ipairs(diagnostics) do
+      messages[#messages + 1] = diagnostic.error or "unknown error"
+    end
+    error(("Invalid store path format '%s': %s"):format(format_str, table.concat(messages, "; ")))
+  end
+  local expanded = renderer.parts_to_text(parts)
   expanded = variables.expand_inline(expanded)
   expanded = path_util.resolve(expanded)
   expanded = M.collapse_namespace(expanded)
@@ -266,7 +275,9 @@ function M.write(path, content, opts)
     if strategy then
       local backup_ok, backup_err = strategy.backup(path)
       if not backup_ok then
-        notify.warn("Store backup failed: " .. (backup_err or "unknown"))
+        -- A failed backup must not clobber the existing file; the new
+        -- content survives in the buffer, the old version on disk.
+        return nil, ("Backup failed for '%s': %s"):format(path, backup_err or "unknown")
       end
     end
   end
@@ -275,8 +286,14 @@ function M.write(path, content, opts)
   if not f then
     return nil, ("Failed to open '%s' for writing"):format(path)
   end
-  f:write(content)
-  f:close()
+  local write_ok, write_err = f:write(content)
+  local close_ok, close_err = f:close()
+  if not write_ok then
+    return nil, ("Failed to write '%s': %s"):format(path, tostring(write_err))
+  end
+  if not close_ok then
+    return nil, ("Failed to write '%s': %s"):format(path, tostring(close_err))
+  end
   return path, nil
 end
 

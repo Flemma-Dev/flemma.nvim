@@ -91,6 +91,19 @@ describe("tools.store", function()
       assert.is_truthy(dir:find("/store/"), "expected /store/ in path: " .. dir)
     end)
 
+    it("fails loudly when the format references an undefined variable", function()
+      local ok, err = pcall(store.get_store_path, {
+        __filename = "/home/user/chats/session.chat",
+        __dirname = "/home/user/chats",
+        source = "tool",
+        name = "bash",
+        id = "bash_1",
+        path_format = "/x/flemma_{{ source }}_{{ path }}_{{ id }}.txt",
+      })
+      assert.is_false(ok)
+      assert.is_truthy(tostring(err):find("Undefined variable 'path'", 1, true))
+    end)
+
     it("renders free-form template", function()
       local dir = store.get_store_path({
         __filename = "/home/user/chats/session.chat",
@@ -232,6 +245,10 @@ describe("tools.store", function()
     it("does not cross path boundaries (operates on single segment)", function()
       assert.equals("bash_1", store.deduplicate_name_in_segment("bash_bash_1", "bash"))
     end)
+
+    it("does not collapse a name that is the suffix of a longer word", function()
+      assert.equals("flash_sh_1", store.deduplicate_name_in_segment("flash_sh_1", "sh"))
+    end)
   end)
 
   describe("write", function()
@@ -302,6 +319,34 @@ describe("tools.store", function()
       local written_path, err = store.write("/dev/null/impossible/file.txt", "content")
       assert.is_nil(written_path)
       assert.is_string(err)
+    end)
+
+    it("returns an error when the write fails mid-stream", function()
+      if not vim.uv.fs_stat("/dev/full") then
+        return -- /dev/full is Linux-only
+      end
+      local written_path, err = store.write("/dev/full", "data")
+      assert.is_nil(written_path)
+      assert.is_string(err)
+    end)
+
+    it("aborts the write when the backup strategy fails", function()
+      package.preload["flemma_spec.failing_backup"] = function()
+        return {
+          backup = function()
+            return false, "disk on fire"
+          end,
+        }
+      end
+      local dir = temp_dir()
+      local path = dir .. "/result.txt"
+      store.write(path, "first")
+      local written_path, err = store.write(path, "second", { backup = "flemma_spec.failing_backup" })
+      package.preload["flemma_spec.failing_backup"] = nil
+      package.loaded["flemma_spec.failing_backup"] = nil
+      assert.is_nil(written_path)
+      assert.is_truthy(tostring(err):find("disk on fire", 1, true))
+      assert.equals("first", read_file(path), "a failed backup must not clobber the existing file")
     end)
   end)
 
