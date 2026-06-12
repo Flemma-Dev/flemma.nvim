@@ -56,14 +56,11 @@ end
 ---@param opts flemma.client.BodyFileOptions
 ---@return string|nil tmp_file, string|nil err, string|nil raw_json
 local function create_tmp_file(opts)
-  -- Create temporary file for request body
-  local tmp_file = os.tmpname()
-  -- Handle both Unix and Windows paths
-  local tmp_dir = tmp_file:match("^(.+)[/\\]")
-  local tmp_name = tmp_file:match("[/\\]([^/\\]+)$")
-  -- Use the same separator that was in the original path
-  local sep = tmp_file:match("[/\\]")
-  tmp_file = tmp_dir .. sep .. "flemma_" .. tmp_name
+  -- Neovim's private per-instance temp dir (0700, removed on nvim exit):
+  -- request bodies must not land in shared /tmp — LuaJIT's os.tmpname()
+  -- mkstemp()s a /tmp/lua_XXXXXX file nothing ever removes, and a request
+  -- killed before on_exit would leak its world-readable body next to it.
+  local tmp_file = vim.fn.tempname() .. "_flemma_request.json"
 
   local f = io.open(tmp_file, "w")
   if not f then

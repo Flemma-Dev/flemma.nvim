@@ -163,6 +163,8 @@ Production file names prefer single words; multi-word descriptive names use snak
 
 - **`tostring(5.0)` returns `"5"` in LuaJIT**, not `"5.0"`. Account for this in assertions and string formatting involving numeric results.
 - **`a and b or c` fails when `b` is falsy.** `true and false or x` evaluates to `x`, not `false`. Always use explicit `if/else` when the "true" branch value could be `false` or `nil`. This bit a dual-call convention closure (`maybe_item ~= nil and maybe_item or self_or_item`) where `maybe_item` was legitimately `false`.
+- **`os.tmpname()` on LuaJIT creates and leaks a file.** It `mkstemp()`s `/tmp/lua_XXXXXX` (the file exists on disk, mode 0600) and returns the name; callers that only use the name leak one empty file per call into shared `/tmp`. Use `vim.fn.tempname()` — Neovim's private per-instance temp dir, removed on exit.
+
 - **`vim.NIL` is truthy.** JSON `null` decoded without `luanil` options produces `vim.NIL` userdata that passes `if x then` guards. This is why the JSON wrapper rule exists.
 
 ---
