@@ -125,6 +125,15 @@ local function execute_terminal(input, ctx, callback)
   -- input (isatty(0) = false) and don't block waiting for user input.
   local inner_cmd = { shell, "-c", "exec </dev/null\n" .. cmd }
 
+  -- Create the store directory before sandbox wrapping: rw_paths resolve at
+  -- wrap time, and a not-yet-created store directory drops out of the policy.
+  if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
+    local ensure_ok, ensure_err = pcall(store.ensure_buffer_store_path, ctx.bufnr)
+    if not ensure_ok then
+      log.warn("bash: could not create store directory: " .. tostring(ensure_err))
+    end
+  end
+
   -- Sandbox wrapping (if enabled)
   local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
   if not wrapped_cmd then
@@ -189,12 +198,6 @@ local function execute_terminal(input, ctx, callback)
     job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
       FLEMMA_TOOLS_STORE_PATH = store_path,
     })
-    if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
-      local ensure_ok, ensure_err = pcall(store.ensure_buffer_store_path, ctx.bufnr)
-      if not ensure_ok then
-        log.warn("bash: could not create store directory: " .. tostring(ensure_err))
-      end
-    end
   end
 
   -- Run the command inside the terminal buffer.
