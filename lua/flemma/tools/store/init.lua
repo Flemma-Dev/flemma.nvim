@@ -337,7 +337,7 @@ function M.materialize_for_completion(opts)
 end
 
 -- ---------------------------------------------------------------------------
--- Redirect (flemma:save_to)
+-- Redirect (flemma.save_to)
 -- ---------------------------------------------------------------------------
 
 ---@type string|nil

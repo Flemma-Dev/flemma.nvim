@@ -259,7 +259,7 @@ local function to_json_schema(definition)
 end
 
 ---Serialize a tool's input_schema for prompt inclusion, injecting harness
----parameters: `flemma:background` for async tools and `flemma:save_to` for all.
+---parameters: `flemma.background` for async tools and `flemma.save_to` for all.
 ---@param definition flemma.tools.ToolDefinition
 ---@return flemma.tools.JSONSchema
 function M.to_json_schema_for_prompt(definition)
@@ -267,18 +267,18 @@ function M.to_json_schema_for_prompt(definition)
   schema = vim.deepcopy(schema)
   schema.properties = schema.properties or {}
   if definition.async and definition.backgroundable ~= false then
-    schema.properties["flemma:background"] = {
+    schema.properties["flemma.background"] = {
       type = "boolean",
       default = false,
       description = messages.render("tool-parameter--background"),
     }
-    log.trace("tools: injected flemma:background parameter into schema for " .. definition.name)
+    log.trace("tools: injected flemma.background parameter into schema for " .. definition.name)
   end
-  schema.properties["flemma:save_to"] = {
+  schema.properties["flemma.save_to"] = {
     type = "string",
     description = messages.render("tool-parameter--save-to"),
   }
-  log.trace("tools: injected flemma:save_to parameter into schema for " .. definition.name)
+  log.trace("tools: injected flemma.save_to parameter into schema for " .. definition.name)
   return schema
 end
 

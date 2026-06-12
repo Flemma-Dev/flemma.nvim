@@ -521,7 +521,7 @@ describe("executor background filtering", function()
       local context = {
         tool_id = "tool_job_01",
         tool_name = "test_job_tool",
-        input = { cmd = "long task", ["flemma:background"] = true },
+        input = { cmd = "long task", ["flemma.background"] = true },
         node = {
           kind = "tool_use",
           id = "tool_job_01",
@@ -663,7 +663,7 @@ describe("executor background filtering", function()
         "**Tool Use:** `test_reuse_tool` (`tool_reuse_01`)",
         "",
         "```json",
-        '{"cmd": "work", "flemma:background": true}',
+        '{"cmd": "work", "flemma.background": true}',
         "```",
         "",
         "@You:",
@@ -685,7 +685,7 @@ describe("executor background filtering", function()
       local context = {
         tool_id = "tool_reuse_01",
         tool_name = "test_reuse_tool",
-        input = { cmd = "work", ["flemma:background"] = true },
+        input = { cmd = "work", ["flemma.background"] = true },
         node = {
           kind = "tool_use",
           id = "tool_reuse_01",
@@ -765,7 +765,7 @@ describe("executor background filtering", function()
         "**Tool Use:** `test_bg_cursor_tool` (`tool_bg_cursor`)",
         "",
         "```json",
-        '{"cmd": "slow task", "flemma:background": true}',
+        '{"cmd": "slow task", "flemma.background": true}',
         "```",
         "",
         "@You:",
@@ -890,7 +890,7 @@ describe("executor background filtering", function()
         "**Tool Use:** `test_suspense_tool` (`tool_suspense_01`)",
         "",
         "```json",
-        '{"cmd": "test", "flemma:background": true}',
+        '{"cmd": "test", "flemma.background": true}',
         "```",
         "",
         "@You:",
@@ -957,7 +957,7 @@ describe("executor background filtering", function()
         "**Tool Use:** `test_bg_ap_tool` (`tool_pending`)",
         "",
         "```json",
-        '{"cmd": "second", "flemma:background": true}',
+        '{"cmd": "second", "flemma.background": true}',
         "```",
         "",
         "@You:",
@@ -1362,7 +1362,7 @@ describe("executor background filtering", function()
       return {
         tool_id = "tool_readopt",
         tool_name = "test_readopt_tool",
-        input = { cmd = "test", ["flemma:background"] = true },
+        input = { cmd = "test", ["flemma.background"] = true },
         node = {
           kind = "tool_use",
           id = "tool_readopt",
