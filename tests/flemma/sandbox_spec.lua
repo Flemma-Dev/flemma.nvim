@@ -150,14 +150,30 @@ describe("sandbox policy layer", function()
     end)
 
     it("expands ${VAR:-default} with fallback", function()
+      -- The fallback must exist on disk: nonexistent paths are dropped from
+      -- the resolved policy (bwrap hard-fails on missing --bind sources).
+      local fallback = vim.fn.tempname()
+      vim.fn.mkdir(fallback, "p")
       apply_sandbox({
         enabled = true,
-        policy = { rw_paths = { "${FLEMMA_TEST_NONEXISTENT:-/fallback}" } },
+        policy = { rw_paths = { "${FLEMMA_TEST_NONEXISTENT:-" .. fallback .. "}" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
-      local expected = vim.fn.resolve(vim.fn.fnamemodify("/fallback", ":p"))
+      local expected = vim.fn.resolve(vim.fn.fnamemodify(fallback, ":p"))
       assert.are.same({ expected }, policy.rw_paths)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+      vim.fn.delete(fallback, "rf")
+    end)
+
+    it("drops rw_paths that do not exist", function()
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "/flemma-spec-nonexistent-grant" } },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local policy = sandbox.get_policy(bufnr)
+      assert.are.same({}, policy.rw_paths)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
@@ -197,31 +213,35 @@ describe("sandbox policy layer", function()
 
     it("expands urn:flemma:store to store directory for named buffers", function()
       -- Ensure the store module is loaded (registers the URN resolver)
-      require("flemma.tools.store")
+      local store = require("flemma.tools.store")
       apply_sandbox({
         enabled = true,
         policy = { rw_paths = { "urn:flemma:store" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_name(bufnr, "/tmp/test_store.chat")
+      -- The grant only takes effect once the lazily-created directory exists
+      local store_dir = store.ensure_buffer_store_path(bufnr)
       local policy = sandbox.get_policy(bufnr)
       assert.equals(1, #policy.rw_paths)
       assert.is_truthy(policy.rw_paths[1]:find("flemma"), "store path should contain flemma: " .. policy.rw_paths[1])
       vim.api.nvim_buf_delete(bufnr, { force = true })
+      vim.fn.delete(store_dir, "rf")
     end)
 
-    it("silently drops urn:flemma:store for unnamed buffers", function()
-      -- Store URN returns nil for unnamed buffers (no file path to derive from)
-      require("flemma.tools.store")
+    it("expands urn:flemma:store to the unnamed fallback once created", function()
+      local store = require("flemma.tools.store")
       apply_sandbox({
         enabled = true,
         policy = { rw_paths = { "urn:flemma:store" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
+      -- The grant only takes effect once the lazily-created directory exists
+      local store_dir = store.ensure_buffer_store_path(bufnr)
       local policy = sandbox.get_policy(bufnr)
-      -- Store resolves to the unnamed fallback path, not nil
       assert.equals(1, #policy.rw_paths)
       vim.api.nvim_buf_delete(bufnr, { force = true })
+      vim.fn.delete(store_dir, "rf")
     end)
   end)
 
