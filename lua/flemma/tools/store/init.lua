@@ -358,22 +358,30 @@ end
 ---@type string|nil
 local store_cwd = nil
 
+---Capture a pcall result list without truncating interior nils.
+---@param ok boolean
+---@param ... any
+---@return boolean ok, integer count, table results
+local function capture_call(ok, ...)
+  return ok, select("#", ...), { ... }
+end
+
 ---Run a function with $FLEMMA_TOOLS_STORE_PATH set to the given directory.
 ---The variable is restored to its previous value after the function returns
----(even on error).
----@generic T
+---(even on error). All callback return values are propagated, including
+---nils in `value, err` tuples.
 ---@param cwd string Store directory for inline variable expansion
----@param fn fun(): T
----@return T
+---@param fn fun(): ...
+---@return any ...
 function M.with_cwd(cwd, fn)
   local prev = store_cwd
   store_cwd = cwd
-  local ok, result = pcall(fn)
+  local ok, count, results = capture_call(pcall(fn))
   store_cwd = prev
   if not ok then
-    error(result, 2)
+    error(results[1], 2)
   end
-  return result
+  return unpack(results, 1, count)
 end
 
 ---Register $FLEMMA_TOOLS_STORE_PATH as a flemma-resolved inline variable.
@@ -426,7 +434,14 @@ function M.execute_redirect(opts)
   dest = variables.expand_inline(dest)
   dest = path_util.resolve(dest, opts.chat_dirname)
 
-  if vim.fn.isdirectory(dest) == 1 or dest:sub(-1) == "/" then
+  -- The store directory is created lazily, so isdirectory() cannot see it
+  -- yet; a destination equal to it (or an ancestor of it) would occupy a
+  -- path mkdir later needs as a directory. Compare resolved paths instead.
+  local store_dir = store_cwd ~= nil and path_util.resolve(store_cwd) or nil
+  local occludes_store = store_dir ~= nil
+    and (dest == store_dir or (vim.startswith(store_dir, dest) and store_dir:sub(#dest + 1, #dest + 1) == "/"))
+
+  if occludes_store or vim.fn.isdirectory(dest) == 1 or dest:sub(-1) == "/" then
     return nil, ("save_to target '%s' is a directory — append a filename"):format(dest)
   end
 

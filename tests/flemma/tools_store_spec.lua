@@ -726,6 +726,62 @@ describe("tools.store", function()
       assert.equals("transcript content", read_file(dir .. "/transcript.txt"))
     end)
 
+    it("rejects bare $FLEMMA_TOOLS_STORE_PATH before the store directory exists", function()
+      local dir = temp_dir()
+      local store_dir = dir .. "/.flemma/session.chat"
+      local stub, err = store.with_cwd(store_dir, function()
+        return store.execute_redirect({
+          save_to = "$FLEMMA_TOOLS_STORE_PATH",
+          content = "data",
+          chat_dirname = dir,
+          bufnr = 0,
+          preview = { lines = 5, bytes = 2048 },
+          backup = false,
+        })
+      end)
+      assert.is_nil(stub)
+      assert.is_truthy(err)
+      assert.is_truthy(err:find("append a filename", 1, true))
+      assert.equals(0, vim.fn.filereadable(store_dir), "no file may occupy the store directory path")
+    end)
+
+    it("rejects a destination that is an ancestor of the store directory", function()
+      local dir = temp_dir()
+      local store_dir = dir .. "/.flemma/session.chat"
+      local stub, err = store.with_cwd(store_dir, function()
+        return store.execute_redirect({
+          save_to = dir .. "/.flemma",
+          content = "data",
+          chat_dirname = dir,
+          bufnr = 0,
+          preview = { lines = 5, bytes = 2048 },
+          backup = false,
+        })
+      end)
+      assert.is_nil(stub)
+      assert.is_truthy(err)
+      assert.is_truthy(err:find("append a filename", 1, true))
+      assert.equals(0, vim.fn.filereadable(dir .. "/.flemma"), "no file may occupy a store ancestor path")
+    end)
+
+    it("writes into a not-yet-created store directory when a filename is given", function()
+      local dir = temp_dir()
+      local store_dir = dir .. "/.flemma/session.chat"
+      local stub, err = store.with_cwd(store_dir, function()
+        return store.execute_redirect({
+          save_to = "$FLEMMA_TOOLS_STORE_PATH/result.txt",
+          content = "data",
+          chat_dirname = dir,
+          bufnr = 0,
+          preview = { lines = 5, bytes = 2048 },
+          backup = false,
+        })
+      end)
+      assert.is_nil(err)
+      assert.is_truthy(stub)
+      assert.equals("data", read_file(store_dir .. "/result.txt"))
+    end)
+
     it("resolves relative paths against chat_dirname", function()
       local dir = temp_dir()
       local stub, err = store.execute_redirect({
@@ -818,6 +874,14 @@ describe("tools.store", function()
       store.with_cwd("/tmp/inner", function() end)
       local result = variables.expand_inline("$FLEMMA_TOOLS_STORE_PATH")
       assert.equals("", result)
+    end)
+
+    it("propagates multiple return values from the callback", function()
+      local first, second = store.with_cwd("/tmp/multi", function()
+        return nil, "second value"
+      end)
+      assert.is_nil(first)
+      assert.equals("second value", second)
     end)
 
     it("restores previous value on error", function()
