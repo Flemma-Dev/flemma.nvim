@@ -297,6 +297,7 @@ Flemma injects an optional `flemma.save_to` string parameter into **every** tool
 
 - Relative paths resolve against the chat file's directory; absolute and `~/…` paths work too.
 - `$FLEMMA_TOOLS_STORE_PATH/<filename>` targets the conversation's store directory.
+- An existing file at the destination is backed up first through `tools.store.backup` (the default `version` strategy renames it to the next free `<stem>.<n>.<ext>`), so a redirect never silently destroys prior content — set `tools.store.backup = false` to overwrite in place.
 - With the [sandbox](sandbox.md) enabled, the destination must be writable under the sandbox policy.
 - Redirects apply only to successful results, and work for both foreground results and background job deliveries.
 - If the redirect fails (destination is a directory, sandbox denies the write, …), the full output is injected as if `flemma.save_to` had not been set, and a warning is logged.

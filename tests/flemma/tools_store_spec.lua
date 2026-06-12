@@ -764,6 +764,26 @@ describe("tools.store", function()
       assert.equals(0, vim.fn.filereadable(dir .. "/.flemma"), "no file may occupy a store ancestor path")
     end)
 
+    it("backs up an existing destination file outside the store before overwriting", function()
+      local dir = temp_dir()
+      local dest = dir .. "/report.txt"
+      local f = assert(io.open(dest, "w"))
+      f:write("precious user data")
+      f:close()
+      local stub, err = store.execute_redirect({
+        save_to = dest,
+        content = "new output",
+        chat_dirname = dir,
+        bufnr = 0,
+        preview = { lines = 5, bytes = 2048 },
+        backup = "version",
+      })
+      assert.is_nil(err)
+      assert.is_truthy(stub)
+      assert.equals("new output", read_file(dest))
+      assert.equals("precious user data", read_file(dir .. "/report.1.txt"))
+    end)
+
     it("writes into a not-yet-created store directory when a filename is given", function()
       local dir = temp_dir()
       local store_dir = dir .. "/.flemma/session.chat"
