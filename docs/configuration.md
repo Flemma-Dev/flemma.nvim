@@ -65,7 +65,7 @@ require("flemma").setup({
     },
     store = {                                -- Tool result store (see docs/tools.md#tool-result-store)
       path_format = "$chat",                 -- Where results are written: "$chat", "$state", or a template string
-      unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",  -- Store path for unsaved buffers
+      unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",  -- Store path for unsaved buffers
       materialize = false,                   -- Write every result to the store (not just truncation overflow and redirects)
       preview = {
         lines = 10,                          -- Preview lines kept in the buffer for flemma.save_to redirects

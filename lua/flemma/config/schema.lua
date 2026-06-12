@@ -144,7 +144,9 @@ return s.object({
     modules = s.list(s.loadable(), {}),
     store = s.object({
       path_format = s.string("$chat"),
-      unnamed_path_format = s.string("${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"),
+      unnamed_path_format = s.string(
+        "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"
+      ),
       materialize = s.boolean(false),
       preview = s.object({
         lines = s.number(10),

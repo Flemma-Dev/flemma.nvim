@@ -222,6 +222,34 @@ describe("tools.store", function()
       assert.is_truthy(dir:find("/flemma/unnamed%-42$"), "unexpected path: " .. dir)
     end)
 
+    it("defaults to a process-unique path embedding the pid", function()
+      -- Cross-process safety: parallel Neovim instances (and the parallel
+      -- test matrix) share ${TMPDIR:-/tmp}, and buffer numbers restart per
+      -- process — the default must not collide across processes.
+      local dir = store.get_store_path({
+        __filename = nil,
+        __dirname = nil,
+        source = "tool",
+        name = "bash",
+        id = "bash_1",
+        bufnr = 42,
+      })
+      assert.is_truthy(
+        dir:find("/flemma/unnamed/" .. vim.fn.getpid() .. "/42$"),
+        "expected pid-scoped unnamed path, got: " .. dir
+      )
+    end)
+
+    it("get_buffer_store_path embeds the pid via the config default", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local dir = store.get_buffer_store_path(bufnr)
+      assert.is_truthy(
+        dir:find("/flemma/unnamed/" .. vim.fn.getpid() .. "/" .. bufnr .. "$"),
+        "expected pid-scoped unnamed path, got: " .. dir
+      )
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
     it("errors on preset in unnamed_path_format", function()
       assert.has_error(function()
         store.get_store_path({

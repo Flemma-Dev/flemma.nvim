@@ -218,15 +218,20 @@ describe("sandbox policy layer", function()
         enabled = true,
         policy = { rw_paths = { "urn:flemma:store" } },
       })
+      -- tempname is process-unique: the parallel test matrix shares /tmp, and
+      -- a fixed chat path would have concurrent runs create and delete the
+      -- same derived store directory, racing this test's existence check
+      local chat_dir = vim.fn.tempname()
+      vim.fn.mkdir(chat_dir, "p")
       local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_buf_set_name(bufnr, "/tmp/test_store.chat")
+      vim.api.nvim_buf_set_name(bufnr, chat_dir .. "/test_store.chat")
       -- The grant only takes effect once the lazily-created directory exists
-      local store_dir = store.ensure_buffer_store_path(bufnr)
+      store.ensure_buffer_store_path(bufnr)
       local policy = sandbox.get_policy(bufnr)
       assert.equals(1, #policy.rw_paths)
       assert.is_truthy(policy.rw_paths[1]:find("flemma"), "store path should contain flemma: " .. policy.rw_paths[1])
       vim.api.nvim_buf_delete(bufnr, { force = true })
-      vim.fn.delete(store_dir, "rf")
+      vim.fn.delete(chat_dir, "rf")
     end)
 
     it("expands urn:flemma:store to the unnamed fallback once created", function()

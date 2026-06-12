@@ -250,6 +250,8 @@ Fixed parser edge case with nested thinking blocks
 
 - **Never dismiss a `make qa` failure as "pre-existing".** If `make qa` fails, it's your problem. Fix it before committing — even if the failure looks unrelated to your change. The only way to prove a failure is pre-existing is to stash your changes and confirm it fails on the clean parent commit. Assuming without checking leads to shipping broken code.
 
+- **Tests must never create or delete fixed paths under `${TMPDIR:-/tmp}`.** `make qa` runs every spec file in parallel across multiple Neovim versions in the same `$TMPDIR`, and buffer numbers restart per process — a path keyed only by bufnr (or any fixed name) is byte-identical across sibling processes, and one process's `rm -rf` cleanup lands inside another's create→assert window. Use `vim.fn.tempname()` roots (process-unique) or the pid-scoped unnamed store default.
+
 - **Hook-payload mocks must honor type contracts.** `hooks.dispatch()` in a spec reaches every global subscriber registered by `flemma.setup()` (called by `tests/minimal_init.lua` and again by spec `before_each` blocks), and errors in their `vim.schedule`d continuations fail no test — they only surface as `attempt to call method` walls in failed-gate replays. Build payloads with real constructors (`session.Request.new(...)`, not bare field tables) and disable subsystems the spec doesn't exercise (e.g., `ui = { usage = { enabled = false } }`).
 
 ## Session Closure Checklist

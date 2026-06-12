@@ -282,7 +282,7 @@ Custom templates render with the standard [templating environment](templates.md)
 
 After template rendering, `$VAR` / `${VAR:-default}` environment expansion applies, doubled `flemma` namespace segments collapse (`.flemma/flemma/` → `.flemma/`), and a tool name repeated within a single path segment is de-duplicated — IDs that embed the tool name don't produce `tool_bash_bash--…` filenames.
 
-Unsaved buffers have no chat path to derive from, so they use `tools.store.unnamed_path_format` instead (default: `${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt`). Presets are not valid there.
+Unsaved buffers have no chat path to derive from, so they use `tools.store.unnamed_path_format` instead (default: `${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt` — the process ID keeps concurrent Neovim instances apart). Presets are not valid there.
 
 > [!NOTE]
 > The store replaces the `tools.truncate.output_path_format` option from v0.12 and earlier. Truncation overflow now follows `tools.store.path_format` — by default landing next to the chat file instead of in `$TMPDIR`.
@@ -316,7 +316,7 @@ The `bash` tool exports `$FLEMMA_TOOLS_STORE_PATH` into every command's environm
 tools = {
   store = {
     path_format = "$chat",          -- "$chat", "$state", or a template string
-    unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",
+    unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",
     materialize = false,            -- Write every result to the store, not just overflow and redirects
     preview = {
       lines = 10,                   -- Preview lines shown in the buffer for flemma.save_to redirects (0 = no preview)

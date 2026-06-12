@@ -108,7 +108,7 @@ local function build_env(opts)
   if opts.bufnr then
     env.bufnr = opts.bufnr
   end
-  env.flemma = { path = path_util }
+  env.flemma = { path = path_util, pid = vim.fn.getpid() }
   return env
 end
 
@@ -176,8 +176,10 @@ end
 local function resolve_path(opts)
   local format_str
   if not opts.__filename or opts.__filename == "" then
+    -- {{ flemma.pid }} keeps the path process-unique: buffer numbers restart
+    -- per Neovim instance, and concurrent instances share ${TMPDIR:-/tmp}.
     format_str = opts.unnamed_path_format
-      or "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"
+      or "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"
     if format_str:match("^%$%w+$") then
       error("Presets are not supported in unnamed_path_format (no chat file path to derive from)")
     end
