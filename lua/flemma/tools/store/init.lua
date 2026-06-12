@@ -460,6 +460,45 @@ function M.execute_redirect(opts)
   return stub, nil
 end
 
+---@class flemma.tools.store.ApplyRedirectOpts
+---@field save_to string Raw flemma.save_to value from the tool input
+---@field result flemma.tools.ExecutionResult Captured tool result (success only)
+---@field bufnr integer
+---@field store_config table Materialized tools.store config subtree
+
+---Apply a flemma.save_to redirect to a captured execution result.
+---On success the output is replaced by the stub; on failure the full output
+---is kept with a model-facing notice appended, so content is never lost.
+---The notice speaks plain filesystem language — the model knows the
+---save_to value it chose, not the machinery behind it.
+---@param opts flemma.tools.store.ApplyRedirectOpts
+---@return flemma.tools.ExecutionResult result Replacement execution result
+---@return string|nil error Redirect error (already reflected in the result)
+function M.apply_redirect(opts)
+  local result = opts.result
+  local content = type(result.output) == "table" and json.encode(result.output) or tostring(result.output or "")
+  local buffer_ctx = context_module.from_buffer(opts.bufnr)
+  local store_config = opts.store_config
+
+  local stub, redirect_err = M.with_cwd(M.get_buffer_store_path(opts.bufnr), function()
+    return M.execute_redirect({
+      save_to = opts.save_to,
+      content = content,
+      chat_dirname = buffer_ctx:get_dirname(),
+      bufnr = opts.bufnr,
+      preview = store_config.preview or { lines = 10, bytes = 2048 },
+      backup = store_config.backup,
+    })
+  end)
+
+  if stub then
+    return { success = true, output = stub }, nil
+  end
+
+  local notice = ("[Output not saved: %s. Showing the full output instead.]"):format(redirect_err or "unknown error")
+  return { success = true, output = content .. "\n\n" .. notice }, redirect_err
+end
+
 -- Register $FLEMMA_TOOLS_STORE_PATH for inline expansion at load time
 M.register_variable()
 

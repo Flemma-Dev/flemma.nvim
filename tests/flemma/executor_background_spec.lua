@@ -485,6 +485,57 @@ describe("executor background filtering", function()
     end)
   end)
 
+  describe("do_completion flemma.save_to fallback", function()
+    it("keeps the full output in the buffer with an LLM-facing notice when the redirect fails", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_redir_01`)",
+        "",
+        "```json",
+        '{"command": "work"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_redir_01` (approved)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_redir_01"] = {
+          tool_id = "tool_redir_01",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = false,
+          save_to = dir, -- existing directory: redirect must fail
+        },
+      }
+
+      executor._test_complete_execution(bufnr, "tool_redir_01", { success = true, output = "complete tool output" })
+
+      local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+      assert.is_truthy(text:find("complete tool output", 1, true), "full output must stay in the buffer:\n" .. text)
+      assert.is_truthy(text:find("[Output not saved:", 1, true), "notice must be present:\n" .. text)
+      assert.is_truthy(text:find("append a filename", 1, true))
+      assert.is_truthy(text:find("Showing the full output instead", 1, true))
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("execute with background option", function()
     it("allocates job_id and writes background placeholder", function()
       local executor = require("flemma.tools.executor")

@@ -846,6 +846,66 @@ describe("tools.store", function()
     end)
   end)
 
+  describe("apply_redirect", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    it("replaces output with a stub on success", function()
+      local dir = temp_dir()
+      local result, err = store.apply_redirect({
+        save_to = dir .. "/out.txt",
+        result = { success = true, output = "full content" },
+        bufnr = 0,
+        store_config = { preview = { lines = 5, bytes = 2048 }, backup = false },
+      })
+      assert.is_nil(err)
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:find("[Output saved:", 1, true))
+      assert.equals("full content", read_file(dir .. "/out.txt"))
+    end)
+
+    it("keeps the full output and appends a notice on failure", function()
+      local dir = temp_dir()
+      local result, err = store.apply_redirect({
+        save_to = dir, -- existing directory: redirect must fail
+        result = { success = true, output = "full content" },
+        bufnr = 0,
+        store_config = { preview = { lines = 5, bytes = 2048 }, backup = false },
+      })
+      assert.is_truthy(err)
+      assert.is_true(result.success)
+      assert.is_truthy(vim.startswith(result.output, "full content"))
+      assert.is_truthy(result.output:find("[Output not saved:", 1, true))
+      assert.is_truthy(result.output:find("append a filename", 1, true))
+      assert.is_truthy(result.output:find("Showing the full output instead", 1, true))
+    end)
+
+    it("encodes table output as JSON on the fallback path", function()
+      local dir = temp_dir()
+      local result = store.apply_redirect({
+        save_to = dir, -- existing directory: redirect must fail
+        result = { success = true, output = { key = "value" } },
+        bufnr = 0,
+        store_config = { preview = { lines = 5, bytes = 2048 }, backup = false },
+      })
+      assert.is_truthy(result.output:find('"key"', 1, true))
+      assert.is_truthy(result.output:find("[Output not saved:", 1, true))
+    end)
+  end)
+
   describe("ensure_buffer_store_path", function()
     it("creates the directory if it does not exist", function()
       local target = vim.fn.tempname() .. "/nested/store"

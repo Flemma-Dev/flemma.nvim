@@ -6,7 +6,6 @@ local M = {}
 local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local config_facade = require("flemma.config")
-local json = require("flemma.utilities.json")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local autopilot = require("flemma.autopilot")
@@ -356,23 +355,14 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- Handle redirect (flemma.save_to)
   local redirect_save_to = entry and entry.save_to
   if redirect_save_to and result.success then
-    local buffer_ctx = context_module.from_buffer(bufnr)
-    local content = type(result.output) == "table" and json.encode(result.output) or tostring(result.output or "")
-
-    local stub, redirect_err = store.with_cwd(store.get_buffer_store_path(bufnr), function()
-      return store.execute_redirect({
-        save_to = redirect_save_to,
-        content = content,
-        chat_dirname = buffer_ctx:get_dirname(),
-        bufnr = bufnr,
-        preview = store_config.preview or { lines = 10, bytes = 2048 },
-        backup = store_config.backup,
-      })
-    end)
-
-    if stub then
-      result = { success = true, output = stub }
-    elseif redirect_err then
+    local new_result, redirect_err = store.apply_redirect({
+      save_to = redirect_save_to,
+      result = result,
+      bufnr = bufnr,
+      store_config = store_config,
+    })
+    result = new_result
+    if redirect_err then
       log.warn("executor: redirect failed for " .. tool_id .. ": " .. redirect_err)
     end
   end
