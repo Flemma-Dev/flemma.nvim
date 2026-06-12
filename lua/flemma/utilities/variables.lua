@@ -153,9 +153,14 @@ end
 ---@param text string
 ---@return string
 function M.expand_inline(text)
+  -- Expansion is iterative so references inside substituted values resolve;
+  -- the pass cap stops mutually-referential resolvers from looping forever.
+  local MAX_PASSES = 8
+  local passes = 0
   local prev
   repeat
     prev = text
+    passes = passes + 1
 
     -- ${VAR:-default} — greedy match on var name, non-greedy on default
     text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
@@ -178,7 +183,7 @@ function M.expand_inline(text)
       end
       return os.getenv(var) or ""
     end)
-  until text == prev
+  until text == prev or passes >= MAX_PASSES
 
   -- Leading ~/
   if text:sub(1, 2) == "~/" or text == "~" then

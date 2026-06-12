@@ -90,6 +90,17 @@ describe("utilities.variables", function()
   end)
 
   describe("expand_inline", function()
+    it("terminates on mutually-referential inline resolvers", function()
+      variables.register_inline("SPEC_RING_A", function()
+        return "$SPEC_RING_B"
+      end)
+      variables.register_inline("SPEC_RING_B", function()
+        return "$SPEC_RING_A"
+      end)
+      local result = variables.expand_inline("x $SPEC_RING_A y")
+      assert.is_string(result)
+    end)
+
     it("expands ${VAR:-default} within a larger string", function()
       local original = os.getenv("FLEMMA_TEST_UNSET_VAR_1")
       assert.is_nil(original)
