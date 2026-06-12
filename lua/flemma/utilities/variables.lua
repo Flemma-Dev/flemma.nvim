@@ -94,15 +94,16 @@ function M.expand(value, context)
   return value
 end
 
---- Expand a list of variable strings, dropping nil results.
+--- Expand a list of variable strings, dropping nil results and
+--- silently skipping entries that error (e.g. unregistered URNs).
 ---@param values string[]
 ---@param context? table Optional context passed to URN resolvers
 ---@return string[]
 function M.expand_list(values, context)
   local result = {}
   for _, value in ipairs(values) do
-    local expanded = M.expand(value, context)
-    if expanded then
+    local ok, expanded = pcall(M.expand, value, context)
+    if ok and expanded then
       table.insert(result, expanded)
     end
   end

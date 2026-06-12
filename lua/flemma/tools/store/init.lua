@@ -7,6 +7,7 @@
 ---@class flemma.tools.Store
 local M = {}
 
+local base_truncate = require("flemma.utilities.truncate")
 local config_facade = require("flemma.config")
 local context_module = require("flemma.context")
 local json = require("flemma.utilities.json")
@@ -14,6 +15,7 @@ local loader = require("flemma.loader")
 local notify = require("flemma.notify")
 local path_util = require("flemma.utilities.path")
 local renderer = require("flemma.templating.renderer")
+local sandbox_module = require("flemma.sandbox")
 local templating = require("flemma.templating")
 local tool_names = require("flemma.utilities.tools")
 local variables = require("flemma.utilities.variables")
@@ -179,14 +181,14 @@ end
 
 ---Get the store directory path from explicit options.
 ---@param opts flemma.tools.store.ResolveOpts
----@return string dir Absolute path to the store directory
+---@return string path Absolute path to the store directory
 function M.get_store_path(opts)
   return path_util.dirname(resolve_path(opts))
 end
 
 ---Get the store directory path for a buffer using its config.
 ---@param bufnr integer
----@return string dir
+---@return string path
 function M.get_buffer_store_path(bufnr)
   local config = config_facade.materialize(bufnr)
   local store_config = config.tools and config.tools.store or {}
@@ -333,5 +335,115 @@ function M.materialize_for_completion(opts)
     backup = store_config.backup,
   })
 end
+
+-- ---------------------------------------------------------------------------
+-- Redirect (flemma:save_to)
+-- ---------------------------------------------------------------------------
+
+---@type string|nil
+local store_cwd = nil
+
+---Run a function with $FLEMMA_TOOLS_STORE_PATH set to the given directory.
+---The variable is restored to its previous value after the function returns
+---(even on error).
+---@generic T
+---@param cwd string Store directory for inline variable expansion
+---@param fn fun(): T
+---@return T
+function M.with_cwd(cwd, fn)
+  local prev = store_cwd
+  store_cwd = cwd
+  local ok, result = pcall(fn)
+  store_cwd = prev
+  if not ok then
+    error(result, 2)
+  end
+  return result
+end
+
+---Register $FLEMMA_TOOLS_STORE_PATH as a flemma-resolved inline variable.
+function M.register_variable()
+  variables.register_inline("FLEMMA_TOOLS_STORE_PATH", function()
+    return store_cwd
+  end)
+end
+
+---Build a redirect stub with preview for buffer injection.
+---@param content string Full tool output
+---@param dest_path string Resolved destination path
+---@param preview_config { lines: number, bytes: number }
+---@return string stub_content
+function M.build_redirect_stub(content, dest_path, preview_config)
+  local lines = {}
+
+  if preview_config.lines > 0 then
+    local preview = base_truncate.truncate_head(content, {
+      max_lines = preview_config.lines,
+      max_bytes = preview_config.bytes,
+    })
+    for _, line in ipairs(vim.split(preview.content, "\n", { plain = true })) do
+      lines[#lines + 1] = line
+    end
+    lines[#lines + 1] = ""
+  end
+
+  local size = base_truncate.format_size(#content)
+  local line_count = select(2, content:gsub("\n", "")) + 1
+  lines[#lines + 1] = ("[Output saved: %s — %s, %d lines]"):format(dest_path, size, line_count)
+
+  return table.concat(lines, "\n")
+end
+
+---@class flemma.tools.store.RedirectOpts
+---@field save_to string Raw save_to value from tool input
+---@field content string Full tool output
+---@field chat_dir string|nil Chat file directory for relative path resolution
+---@field bufnr integer Buffer number
+---@field preview { lines: number, bytes: number }
+---@field backup string|false Backup strategy name
+
+---Execute a redirect: resolve destination, write content, return stub.
+---@param opts flemma.tools.store.RedirectOpts
+---@return string|nil stub_content
+---@return string|nil error
+function M.execute_redirect(opts)
+  local dest = opts.save_to
+  dest = variables.expand_inline(dest)
+  dest = path_util.resolve(dest, opts.chat_dir)
+
+  if vim.fn.isdirectory(dest) == 1 or dest:sub(-1) == "/" then
+    return nil, ("save_to target '%s' is a directory — append a filename"):format(dest)
+  end
+
+  if sandbox_module.is_enabled(opts.bufnr) then
+    if not sandbox_module.is_path_writable(dest, opts.bufnr) then
+      return nil, ("save_to destination '%s' is not writable under sandbox policy"):format(dest)
+    end
+  end
+
+  local written, write_err = M.write(dest, opts.content, { backup = opts.backup })
+  if not written then
+    return nil, write_err
+  end
+
+  local stub = M.build_redirect_stub(opts.content, dest, opts.preview)
+  return stub, nil
+end
+
+-- Register $FLEMMA_TOOLS_STORE_PATH for inline expansion at load time
+M.register_variable()
+
+-- Register urn:flemma:store for sandbox rw_paths auto-grant
+variables.register("urn:flemma:store", function(context)
+  local bufnr = context and context.bufnr
+  if not bufnr then
+    return nil
+  end
+  local ok, dir = pcall(M.get_buffer_store_path, bufnr)
+  if ok and dir then
+    return dir
+  end
+  return nil
+end)
 
 return M

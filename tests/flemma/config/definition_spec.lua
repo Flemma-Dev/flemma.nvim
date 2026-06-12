@@ -217,7 +217,7 @@ describe("config.schema.definition", function()
       assert.is_true(cfg.sandbox.policy.network)
       assert.is_false(cfg.sandbox.policy.allow_privileged)
       assert.is_table(cfg.sandbox.policy.rw_paths)
-      assert.equals(6, #cfg.sandbox.policy.rw_paths)
+      assert.equals(7, #cfg.sandbox.policy.rw_paths)
       assert.equals("urn:flemma:cwd", cfg.sandbox.policy.rw_paths[1])
       -- backends object is empty at init — bwrap resolves via DISCOVER after registration
     end)

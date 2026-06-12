@@ -145,7 +145,7 @@ return s.object({
     store = s.object({
       path_format = s.string("$chat"),
       unnamed_path_format = s.string("${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"),
-      materialize = s.boolean(true),
+      materialize = s.boolean(false),
       preview = s.object({
         lines = s.number(10),
         bytes = s.number(2048),
@@ -410,6 +410,7 @@ return s.object({
       rw_paths = s.list(s.string(), {
         "urn:flemma:cwd",
         "urn:flemma:buffer:path",
+        "urn:flemma:store",
         "/tmp",
         "${TMPDIR:-/tmp}",
         "${XDG_CACHE_HOME:-~/.cache}",

@@ -11,6 +11,7 @@ local M = {}
 local log = require("flemma.logging")
 local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
+local store = require("flemma.tools.store")
 local truncate = require("flemma.tools.truncate")
 
 --- Neovim 0.12+ fixes a libuv bug (libuv#4992) where PTY master data is lost
@@ -183,6 +184,12 @@ local function execute_terminal(input, ctx, callback)
   if tool_config and tool_config.env then
     job_opts.env = tool_config.env
   end
+  local store_ok, store_path = pcall(store.get_buffer_store_path, ctx.bufnr)
+  if store_ok and store_path then
+    job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
+      FLEMMA_TOOLS_STORE_PATH = store_path,
+    })
+  end
 
   -- Run the command inside the terminal buffer.
   -- termopen is deprecated in newer Neovim but jobstart({term=true}) is
@@ -350,6 +357,12 @@ local function execute_jobstart(input, ctx, callback)
   if tool_config and tool_config.env then
     job_opts.env = tool_config.env
   end
+  local store_ok, store_path = pcall(store.get_buffer_store_path, ctx.bufnr)
+  if store_ok and store_path then
+    job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
+      FLEMMA_TOOLS_STORE_PATH = store_path,
+    })
+  end
 
   local shell = (tool_config and tool_config.shell) or "bash"
   -- Redirect stderr to stdout for the entire shell so output is interleaved
@@ -439,7 +452,9 @@ M.definitions = {
       .. " lines or "
       .. math.floor(truncate.MAX_BYTES / 1024)
       .. "KB (whichever is hit first). "
-      .. "If truncated, full output is saved to a temp file. "
+      .. "If truncated, full output is saved to a file. "
+      .. "$FLEMMA_TOOLS_STORE_PATH is set in the environment and points to a directory "
+      .. "where saved tool results for this conversation are stored. "
       .. "Optionally provide a timeout in seconds.",
     strict = true,
     input_schema = s.object({

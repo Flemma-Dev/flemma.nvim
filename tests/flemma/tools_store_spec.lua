@@ -570,4 +570,151 @@ describe("tools.store", function()
       assert.is_truthy(path:find("job__ab12cd34%.txt$"), "expected empty name: " .. path)
     end)
   end)
+
+  describe("build_redirect_stub", function()
+    it("includes preview and output-saved notice", function()
+      local content = "line 1\nline 2\nline 3\nline 4\nline 5"
+      local stub = store.build_redirect_stub(content, "/tmp/result.txt", { lines = 3, bytes = 2048 })
+      assert.is_truthy(stub:find("line 1"), "preview should include first line")
+      assert.is_truthy(stub:find("line 2"), "preview should include second line")
+      assert.is_truthy(stub:find("line 3"), "preview should include third line")
+      assert.is_truthy(stub:find("%[Output saved: /tmp/result%.txt"), "notice should include path")
+      assert.is_truthy(stub:find("5 lines%]"), "notice should include line count")
+    end)
+
+    it("omits preview when lines = 0", function()
+      local content = "line 1\nline 2"
+      local stub = store.build_redirect_stub(content, "/tmp/result.txt", { lines = 0, bytes = 2048 })
+      assert.is_falsy(stub:find("line 1"), "no preview when lines = 0")
+      assert.is_truthy(stub:find("%[Output saved:"), "notice should still be present")
+    end)
+
+    it("caps preview by bytes for single-line content", function()
+      local content = string.rep("x", 5000)
+      local stub = store.build_redirect_stub(content, "/tmp/result.txt", { lines = 10, bytes = 100 })
+      assert.is_truthy(#stub < 1000, "stub should be much shorter than content")
+      assert.is_truthy(stub:find("%[Output saved:"), "notice should be present")
+    end)
+  end)
+
+  describe("execute_redirect", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    it("writes content and returns stub", function()
+      local dir = temp_dir()
+      local dest = dir .. "/output.txt"
+      local stub, err = store.execute_redirect({
+        save_to = dest,
+        content = "full output content here",
+        chat_dir = dir,
+        bufnr = 0,
+        preview = { lines = 5, bytes = 2048 },
+        backup = false,
+      })
+      assert.is_nil(err)
+      assert.is_truthy(stub)
+      assert.is_truthy(stub:find("%[Output saved:"))
+      assert.equals("full output content here", read_file(dest))
+    end)
+
+    it("expands $FLEMMA_TOOLS_STORE_PATH in save_to", function()
+      local dir = temp_dir()
+      local stub, err = store.with_cwd(dir, function()
+        return store.execute_redirect({
+          save_to = "$FLEMMA_TOOLS_STORE_PATH/transcript.txt",
+          content = "transcript content",
+          chat_dir = "/tmp",
+          bufnr = 0,
+          preview = { lines = 5, bytes = 2048 },
+          backup = false,
+        })
+      end)
+      assert.is_nil(err)
+      assert.is_truthy(stub)
+      assert.equals("transcript content", read_file(dir .. "/transcript.txt"))
+    end)
+
+    it("resolves relative paths against chat_dir", function()
+      local dir = temp_dir()
+      local stub, err = store.execute_redirect({
+        save_to = "./output.txt",
+        content = "relative content",
+        chat_dir = dir,
+        bufnr = 0,
+        preview = { lines = 5, bytes = 2048 },
+        backup = false,
+      })
+      assert.is_nil(err)
+      assert.is_truthy(stub)
+      assert.equals("relative content", read_file(dir .. "/output.txt"))
+    end)
+
+    it("errors when save_to is a directory", function()
+      local dir = temp_dir()
+      local stub, err = store.execute_redirect({
+        save_to = dir,
+        content = "should not write",
+        chat_dir = "/tmp",
+        bufnr = 0,
+        preview = { lines = 5, bytes = 2048 },
+        backup = false,
+      })
+      assert.is_nil(stub)
+      assert.is_truthy(err)
+      assert.is_truthy(err:find("directory"), "error should mention directory: " .. err)
+    end)
+
+    it("falls back to nil stub on write failure", function()
+      local stub, err = store.execute_redirect({
+        save_to = "/dev/null/impossible/file.txt",
+        content = "should fail",
+        chat_dir = "/tmp",
+        bufnr = 0,
+        preview = { lines = 5, bytes = 2048 },
+        backup = false,
+      })
+      assert.is_nil(stub)
+      assert.is_truthy(err)
+    end)
+  end)
+
+  describe("with_cwd", function()
+    it("sets FLEMMA_TOOLS_STORE_PATH during callback", function()
+      local variables = require("flemma.utilities.variables")
+      local result = store.with_cwd("/tmp/store-test", function()
+        return variables.expand_inline("$FLEMMA_TOOLS_STORE_PATH/file.txt")
+      end)
+      assert.equals("/tmp/store-test/file.txt", result)
+    end)
+
+    it("restores previous value after callback", function()
+      local variables = require("flemma.utilities.variables")
+      store.with_cwd("/tmp/inner", function() end)
+      local result = variables.expand_inline("$FLEMMA_TOOLS_STORE_PATH")
+      assert.equals("", result)
+    end)
+
+    it("restores previous value on error", function()
+      local variables = require("flemma.utilities.variables")
+      pcall(store.with_cwd, "/tmp/will-error", function()
+        error("boom")
+      end)
+      local result = variables.expand_inline("$FLEMMA_TOOLS_STORE_PATH")
+      assert.equals("", result)
+    end)
+  end)
 end)

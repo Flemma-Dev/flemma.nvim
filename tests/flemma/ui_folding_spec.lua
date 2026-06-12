@@ -2843,7 +2843,7 @@ describe("UI Folding", function()
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
-        '{"command":"sleep 10 && df -h","background":true}',
+        '{"command":"sleep 10 && df -h","flemma:background":true}',
         "```",
         "",
         "@You:",

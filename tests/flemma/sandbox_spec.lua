@@ -194,6 +194,35 @@ describe("sandbox policy layer", function()
       assert.is_truthy(policy.rw_paths[1]:match("^/"))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("expands urn:flemma:store to store directory for named buffers", function()
+      -- Ensure the store module is loaded (registers the URN resolver)
+      require("flemma.tools.store")
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "urn:flemma:store" } },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/test_store.chat")
+      local policy = sandbox.get_policy(bufnr)
+      assert.equals(1, #policy.rw_paths)
+      assert.is_truthy(policy.rw_paths[1]:find("flemma"), "store path should contain flemma: " .. policy.rw_paths[1])
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("silently drops urn:flemma:store for unnamed buffers", function()
+      -- Store URN returns nil for unnamed buffers (no file path to derive from)
+      require("flemma.tools.store")
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "urn:flemma:store" } },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local policy = sandbox.get_policy(bufnr)
+      -- Store resolves to the unnamed fallback path, not nil
+      assert.equals(1, #policy.rw_paths)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("is_path_writable", function()

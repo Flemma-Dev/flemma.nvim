@@ -6,6 +6,7 @@ local M = {}
 local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local config_facade = require("flemma.config")
+local json = require("flemma.utilities.json")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local autopilot = require("flemma.autopilot")
@@ -44,6 +45,7 @@ local JOB_ID_LENGTH = 8
 ---@field completed boolean
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
+---@field save_to string|nil Redirect destination from flemma:save_to
 
 ---@class flemma.tools.JobDelivery
 ---@field job_id string
@@ -331,8 +333,8 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   -- Materialize result to store (before buffer injection)
   local completion_config = config_facade.get(bufnr)
+  local store_config = completion_config.tools and completion_config.tools.store or {}
   do
-    local store_config = completion_config.tools and completion_config.tools.store or {}
     local buffer_ctx = context_module.from_buffer(bufnr)
     local _store_path, store_err = store.materialize_for_completion({
       bufnr = bufnr,
@@ -346,6 +348,30 @@ local function do_completion(bufnr, tool_id, result, opts)
     })
     if store_err then
       log.warn("executor: failed to materialize result for " .. tool_id .. ": " .. store_err)
+    end
+  end
+
+  -- Handle redirect (flemma:save_to)
+  local redirect_save_to = entry and entry.save_to
+  if redirect_save_to and result.success then
+    local buffer_ctx = context_module.from_buffer(bufnr)
+    local content = type(result.output) == "table" and json.encode(result.output) or tostring(result.output or "")
+
+    local stub, redirect_err = store.with_cwd(store.get_buffer_store_path(bufnr), function()
+      return store.execute_redirect({
+        save_to = redirect_save_to,
+        content = content,
+        chat_dir = buffer_ctx:get_dirname(),
+        bufnr = bufnr,
+        preview = store_config.preview or { lines = 10, bytes = 2048 },
+        backup = store_config.backup,
+      })
+    end)
+
+    if stub then
+      result = { success = true, output = stub }
+    elseif redirect_err then
+      log.warn("executor: redirect failed for " .. tool_id .. ": " .. redirect_err)
     end
   end
 
@@ -560,13 +586,20 @@ function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
-  -- Extract execution directives from the tool input so that both the normal
-  -- flow (core.lua) and manual approval (execute_at_cursor) share one path.
-  local is_background = context.input and context.input.background == true
-  if is_background then
+  -- Extract harness directives (flemma:*) from the tool input so that both the
+  -- normal flow (core.lua) and manual approval (execute_at_cursor) share one path.
+  local is_background = context.input and context.input["flemma:background"] == true
+  local save_to = context.input and context.input["flemma:save_to"] --[[@as string|nil]]
+  if is_background or save_to then
     context.input = vim.tbl_extend("keep", {}, context.input)
-    context.input.background = nil
+    context.input["flemma:background"] = nil
+    context.input["flemma:save_to"] = nil
+  end
+  if is_background then
     log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested background execution")
+  end
+  if save_to then
+    log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested save_to: " .. save_to)
   end
 
   -- Check for API request in flight (mutually exclusive)
@@ -650,6 +683,7 @@ function M.execute(bufnr, context)
     started_at = os.time(),
     completed = false,
     placeholder_modified = false,
+    save_to = save_to,
   }
   if is_background then
     -- Reuse existing job_id from the tool_result header when re-executing, so that
