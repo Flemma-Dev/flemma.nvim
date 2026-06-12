@@ -101,7 +101,7 @@ describe("harness parameter schema injection", function()
     assert.is_nil(tool.input_schema.properties["flemma.save_to"])
   end)
 
-  it("preserves colon in property names through JSON encoding", function()
+  it("preserves dot in property names through JSON encoding", function()
     local json = require("flemma.utilities.json")
     ---@type flemma.tools.ToolDefinition
     local tool = {
@@ -118,7 +118,52 @@ describe("harness parameter schema injection", function()
 
     local schema = tools_module.to_json_schema_for_prompt(tool)
     local encoded = json.encode(schema)
-    assert.is_truthy(encoded:find('"flemma.background"'), "colon in flemma.background preserved")
-    assert.is_truthy(encoded:find('"flemma.save_to"'), "colon in flemma.save_to preserved")
+    assert.is_truthy(encoded:find('"flemma.background"'), "dot in flemma.background preserved")
+    assert.is_truthy(encoded:find('"flemma.save_to"'), "dot in flemma.save_to preserved")
+  end)
+
+  it("uses nullable types and adds to required for strict schemas", function()
+    ---@type flemma.tools.ToolDefinition
+    local tool = {
+      name = "test_strict",
+      description = "Strict tool",
+      async = true,
+      strict = true,
+      input_schema = {
+        type = "object",
+        properties = {
+          command = { type = "string" },
+        },
+        required = { "command" },
+        additionalProperties = false,
+      },
+    }
+
+    local schema = tools_module.to_json_schema_for_prompt(tool)
+    assert.are.same({ "boolean", "null" }, schema.properties["flemma.background"].type)
+    assert.are.same({ "string", "null" }, schema.properties["flemma.save_to"].type)
+    assert.is_truthy(vim.tbl_contains(schema.required, "flemma.background"))
+    assert.is_truthy(vim.tbl_contains(schema.required, "flemma.save_to"))
+    assert.is_truthy(vim.tbl_contains(schema.required, "command"))
+  end)
+
+  it("uses plain types for non-strict schemas", function()
+    ---@type flemma.tools.ToolDefinition
+    local tool = {
+      name = "test_non_strict",
+      description = "Non-strict tool",
+      async = true,
+      input_schema = {
+        type = "object",
+        properties = {
+          command = { type = "string" },
+        },
+        required = { "command" },
+      },
+    }
+
+    local schema = tools_module.to_json_schema_for_prompt(tool)
+    assert.equals("boolean", schema.properties["flemma.background"].type)
+    assert.equals("string", schema.properties["flemma.save_to"].type)
   end)
 end)
