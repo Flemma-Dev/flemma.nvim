@@ -186,6 +186,17 @@ function M.get_store_path(opts)
   return path_util.dirname(resolve_path(opts))
 end
 
+---Get the store directory path for a buffer, creating it if it does not exist.
+---@param bufnr integer
+---@return string path
+function M.ensure_buffer_store_path(bufnr)
+  local path = M.get_buffer_store_path(bufnr)
+  if vim.fn.isdirectory(path) == 0 then
+    vim.fn.mkdir(path, "p")
+  end
+  return path
+end
+
 ---Get the store directory path for a buffer using its config.
 ---@param bufnr integer
 ---@return string path

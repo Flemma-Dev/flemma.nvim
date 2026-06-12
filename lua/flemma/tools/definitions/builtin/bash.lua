@@ -189,6 +189,9 @@ local function execute_terminal(input, ctx, callback)
     job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
       FLEMMA_TOOLS_STORE_PATH = store_path,
     })
+    if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
+      store.ensure_buffer_store_path(ctx.bufnr)
+    end
   end
 
   -- Run the command inside the terminal buffer.
@@ -362,6 +365,9 @@ local function execute_jobstart(input, ctx, callback)
     job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
       FLEMMA_TOOLS_STORE_PATH = store_path,
     })
+    if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
+      store.ensure_buffer_store_path(ctx.bufnr)
+    end
   end
 
   local shell = (tool_config and tool_config.shell) or "bash"

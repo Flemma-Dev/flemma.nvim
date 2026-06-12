@@ -692,6 +692,40 @@ describe("tools.store", function()
     end)
   end)
 
+  describe("ensure_buffer_store_path", function()
+    it("creates the directory if it does not exist", function()
+      local target = vim.fn.tempname() .. "/nested/store"
+
+      local original = store.get_buffer_store_path
+      store.get_buffer_store_path = function()
+        return target
+      end
+
+      assert.equals(0, vim.fn.isdirectory(target))
+      local result = store.ensure_buffer_store_path(0)
+      assert.equals(target, result)
+      assert.equals(1, vim.fn.isdirectory(target))
+
+      store.get_buffer_store_path = original
+    end)
+
+    it("is a no-op when the directory already exists", function()
+      local target = vim.fn.tempname()
+      vim.fn.mkdir(target, "p")
+
+      local original = store.get_buffer_store_path
+      store.get_buffer_store_path = function()
+        return target
+      end
+
+      local result = store.ensure_buffer_store_path(0)
+      assert.equals(target, result)
+      assert.equals(1, vim.fn.isdirectory(target))
+
+      store.get_buffer_store_path = original
+    end)
+  end)
+
   describe("with_cwd", function()
     it("sets FLEMMA_TOOLS_STORE_PATH during callback", function()
       local variables = require("flemma.utilities.variables")
