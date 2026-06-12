@@ -817,15 +817,22 @@ function M.send_or_execute(opts)
     return
   end
 
+  if opts.user_initiated and buffer_state.resume_delay_timer then
+    buffer_state.resume_delay_timer:stop()
+    buffer_state.resume_delay_timer:close()
+    buffer_state.resume_delay_timer = nil
+    hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
+  end
+
+  -- Deliver queued background job results before any dispatch — user and
+  -- autopilot sends alike. Job results are protocol-free text at the wire
+  -- level (the placeholder tool_result satisfied adjacency when the job
+  -- started), so they can ride along with whatever this send carries.
+  -- Draining only at conversation idle delivers them turns late while the
+  -- model polls a job that has already finished.
+  drain_and_inject_completions(bufnr)
+
   if opts.user_initiated then
-    if buffer_state.resume_delay_timer then
-      buffer_state.resume_delay_timer:stop()
-      buffer_state.resume_delay_timer:close()
-      buffer_state.resume_delay_timer = nil
-      hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
-    end
-    log.trace("send_or_execute(): user-initiated send, draining job completions first")
-    drain_and_inject_completions(bufnr)
     cursor.tail(bufnr)
   end
 

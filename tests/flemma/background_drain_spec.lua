@@ -842,3 +842,263 @@ describe("job completion drain", function()
     assert.truthy(joined:match("direct enqueue output"), "Job output must appear in the buffer")
   end)
 end)
+
+describe("send_or_execute job completion drain", function()
+  local flemma, core, executor, client
+  local captured_notifications
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+
+    flemma = require("flemma")
+    -- Disable thinking for a predictable Anthropic request body. Disable the
+    -- usage bar so real sends don't schedule bar updates that outlive this
+    -- spec file (the closure crashes once later files reset module caches).
+    flemma.setup({ parameters = { thinking = false }, ui = { usage = { enabled = false } } })
+    core = require("flemma.core")
+    executor = require("flemma.tools.executor")
+    client = require("flemma.client")
+
+    captured_notifications = {}
+    local notify = require("flemma.notify")
+    notify._set_impl(function(notification)
+      table.insert(captured_notifications, notification)
+      return notification
+    end)
+  end)
+
+  after_each(function()
+    require("flemma.notify")._reset_impl()
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  ---Create a .chat buffer with the given lines, shown in a window.
+  ---@param lines string[]
+  ---@return integer bufnr
+  local function make_chat_buffer(lines)
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+    return bufnr
+  end
+
+  ---Scan an Anthropic request body for a user text block containing `needle`.
+  ---@param body table
+  ---@param needle string Plain text to search for (not a Lua pattern)
+  ---@return boolean
+  local function request_has_user_text(body, needle)
+    for _, msg in ipairs(body.messages or {}) do
+      if msg.role == "user" then
+        for _, block in ipairs(msg.content or {}) do
+          if type(block) == "table" and block.type == "text" and block.text:find(needle, 1, true) then
+            return true
+          end
+        end
+      end
+    end
+    return false
+  end
+
+  it("drains queued job completions on a non-user-initiated send (autopilot)", function()
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    local bufnr = make_chat_buffer({
+      "@You:",
+      "Check disk space in the background.",
+      "",
+      "@Assistant:",
+      "",
+      "**Tool Use:** `bash` (`tool_01`)",
+      "```json",
+      '{"command":"df -h"}',
+      "```",
+      "",
+      "@You:",
+      "",
+      "**Tool Result:** `tool_01` (job=job_send1)",
+      "```",
+      "Running as a background job `job_send1`.",
+      "```",
+      "",
+      "@Assistant:",
+      "The job is running; results will be delivered automatically.",
+      "",
+      "@You:",
+      "",
+    })
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_send1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "Filesystem use 41%" },
+    })
+
+    -- Act: autopilot-style dispatch — no user_initiated flag. This is the
+    -- bridge.send_or_execute({ bufnr }) call autopilot makes between cycles.
+    core.send_or_execute({ bufnr = bufnr })
+
+    -- The queued result must be in the buffer before the request goes out —
+    -- not parked until the conversation reaches full idle.
+    local joined = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    assert.truthy(
+      joined:match("%*%*Job Result:%*%*%s*`job_send1`"),
+      "Job result must be drained into the buffer by a non-user-initiated send"
+    )
+    assert.truthy(joined:find("Filesystem use 41%", 1, true), "Job output must appear in the buffer")
+
+    -- And the outgoing request must carry it to the model.
+    local body = core._get_last_request_body()
+    assert.is_not_nil(body, "request body was not captured — send did not reach the provider")
+    assert.is_true(
+      request_has_user_text(body, "[Job result for bash (tool_01)]"),
+      "outgoing request must include the drained job result"
+    )
+  end)
+
+  it("delivers the job result alongside a foreground tool result in the same @You", function()
+    -- The exact shape from the field report: the model polls job status, the
+    -- status tool result lands in the trailing @You, and the completed job's
+    -- result must ride along in the same outgoing request — with the protocol
+    -- tool_result first and the job result as a text block after it.
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    local bufnr = make_chat_buffer({
+      "@You:",
+      "Check disk space in the background.",
+      "",
+      "@Assistant:",
+      "",
+      "**Tool Use:** `bash` (`tool_01`)",
+      "```json",
+      '{"command":"df -h"}',
+      "```",
+      "",
+      "@You:",
+      "",
+      "**Tool Result:** `tool_01` (job=job_mix1)",
+      "```",
+      "Running as a background job `job_mix1`.",
+      "```",
+      "",
+      "@Assistant:",
+      "",
+      "**Tool Use:** `flemma.jobs.status` (`tool_02`)",
+      "```json",
+      '{"job_id":"job_mix1"}',
+      "```",
+      "",
+      "@You:",
+      "",
+      "**Tool Result:** `tool_02`",
+      "```",
+      '{"status":"running","job_id":"job_mix1"}',
+      "```",
+    })
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_mix1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "Filesystem use 41%" },
+    })
+
+    core.send_or_execute({ bufnr = bufnr })
+
+    local joined = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    assert.truthy(
+      joined:match("%*%*Job Result:%*%*%s*`job_mix1`"),
+      "Job result must be drained into the trailing @You holding the tool result"
+    )
+
+    local body = core._get_last_request_body()
+    assert.is_not_nil(body, "request body was not captured — send did not reach the provider")
+
+    -- The last user message carries both: the status tool_result first
+    -- (provider adjacency requirement), then the job result as a text block.
+    local last_message = body.messages[#body.messages]
+    assert.equals("user", last_message.role)
+    assert.equals("tool_result", last_message.content[1].type)
+    assert.equals("tool_02", last_message.content[1].tool_use_id)
+    local job_text_found = false
+    for _, block in ipairs(last_message.content) do
+      if
+        type(block) == "table"
+        and block.type == "text"
+        and block.text:find("[Job result for bash (tool_01)]", 1, true)
+      then
+        job_text_found = true
+      end
+    end
+    assert.is_true(job_text_found, "job result text block must follow the tool_result in the same user message")
+  end)
+
+  it("still drains queued job completions on user-initiated sends", function()
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    local bufnr = make_chat_buffer({
+      "@You:",
+      "Check disk space in the background.",
+      "",
+      "@Assistant:",
+      "",
+      "**Tool Use:** `bash` (`tool_01`)",
+      "```json",
+      '{"command":"df -h"}',
+      "```",
+      "",
+      "@You:",
+      "",
+      "**Tool Result:** `tool_01` (job=job_user1)",
+      "```",
+      "Running as a background job `job_user1`.",
+      "```",
+      "",
+      "@Assistant:",
+      "The job is running; results will be delivered automatically.",
+      "",
+      "@You:",
+      "",
+    })
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_user1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "Filesystem use 41%" },
+    })
+
+    core.send_or_execute({ bufnr = bufnr, user_initiated = true })
+
+    local joined = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    assert.truthy(
+      joined:match("%*%*Job Result:%*%*%s*`job_user1`"),
+      "Job result must still be drained on user-initiated sends"
+    )
+
+    local body = core._get_last_request_body()
+    assert.is_not_nil(body, "request body was not captured — send did not reach the provider")
+    assert.is_true(
+      request_has_user_text(body, "[Job result for bash (tool_01)]"),
+      "outgoing request must include the drained job result"
+    )
+  end)
+end)

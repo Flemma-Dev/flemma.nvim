@@ -72,7 +72,7 @@ describe("flemma.jobs.status", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("returns 'queued' for a completed but not yet drained job", function()
+    it("reports a completed but not yet drained job as completed with delivery pending", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {
@@ -82,25 +82,40 @@ describe("flemma.jobs.status", function()
           bufnr = bufnr,
           start_line = 1,
           end_line = 2,
-          started_at = os.time() - 5,
+          started_at = os.time() - 10,
           completed = true,
           placeholder_modified = true,
           job_id = "job_def34",
+        },
+      }
+      buffer_state.delivery_queue = {
+        {
+          job_id = "job_def34",
+          tool_id = "tool_02",
+          tool_name = "grep",
+          result = { success = true, output = "matches found" },
+          completed_at = os.time() - 7,
         },
       }
 
       local result = execute({ job_id = "job_def34" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
-      assert.equals("queued", data.status)
+      -- A bare "queued" reads as "waiting to start" to the model — the job has
+      -- finished and its result is queued for delivery, so say exactly that.
+      assert.equals("completed (delivery pending)", data.status)
       assert.equals("job_def34", data.job_id)
       assert.equals("tool_02", data.tool_id)
       assert.equals("grep", data.tool_name)
+      -- elapsed_seconds freezes at the actual runtime (completed_at - started_at).
+      -- A counter that keeps growing after completion compounds the "never
+      -- started" misread.
+      assert.equals(3, data.elapsed_seconds)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("returns 'queued' for a job in the completion queue", function()
+    it("reports a job in the completion queue as completed with delivery pending", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {}
@@ -116,10 +131,13 @@ describe("flemma.jobs.status", function()
       local result = execute({ job_id = "job_queue1" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
-      assert.equals("queued", data.status)
+      assert.equals("completed (delivery pending)", data.status)
       assert.equals("job_queue1", data.job_id)
       assert.equals("tool_q1", data.tool_id)
       assert.equals("find", data.tool_name)
+      -- No pending entry → runtime unknown. Omit elapsed_seconds rather than
+      -- report a misleading 0 ("just queued").
+      assert.is_nil(data.elapsed_seconds)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
