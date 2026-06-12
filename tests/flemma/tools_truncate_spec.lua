@@ -8,6 +8,35 @@ describe("tools.truncate", function()
     tools_truncate = require("flemma.tools.truncate")
   end)
 
+  describe("store resolution failure", function()
+    it("degrades without raising when the store preset is unknown", function()
+      local lines = {}
+      for i = 1, 50 do
+        lines[i] = "line " .. i
+      end
+      local text = table.concat(lines, "\n")
+
+      local result
+      assert.has_no.errors(function()
+        result = tools_truncate.truncate_with_overflow(text, {
+          direction = "head",
+          max_lines = 2,
+          id = "bash_1",
+          bufnr = 0,
+          store_opts = {
+            __filename = "/home/user/chats/session.chat",
+            __dirname = "/home/user/chats",
+            name = "bash",
+            path_format = "$nope",
+          },
+        })
+      end)
+      assert.is_true(result.truncated)
+      assert.is_nil(result.overflow_path)
+      assert.is_truthy(result.content:find("line 1", 1, true))
+    end)
+  end)
+
   describe("re-exports", function()
     it("exposes truncate_head from utilities", function()
       assert.equals(base_truncate.truncate_head, tools_truncate.truncate_head)

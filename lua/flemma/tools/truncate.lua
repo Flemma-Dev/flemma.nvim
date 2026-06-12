@@ -119,7 +119,10 @@ function M.truncate_with_overflow(text, opts)
 
   local overflow_path ---@type string|nil
   if opts.store_opts then
-    local store_path, store_err = store.materialize({
+    -- Config errors (unknown preset, unknown backup strategy) must degrade
+    -- to a warning: this runs mid-execution, and a raise here would leave
+    -- the tool spinner hanging forever.
+    local call_ok, store_path, store_err = pcall(store.materialize, {
       __filename = opts.store_opts.__filename,
       __dirname = opts.store_opts.__dirname,
       source = opts.source or "tool",
@@ -133,10 +136,13 @@ function M.truncate_with_overflow(text, opts)
       truncated = true,
       backup = opts.store_opts.backup,
     })
+    if not call_ok then
+      store_path, store_err = nil, tostring(store_path)
+    end
     if store_err then
       notify.warn("Could not save full tool output: " .. store_err)
     end
-    overflow_path = store_path
+    overflow_path = store_path --[[@as string|nil]]
   end
 
   local notice = build_notice(result, opts.direction, overflow_path)
