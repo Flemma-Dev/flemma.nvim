@@ -335,7 +335,10 @@ function M.materialize_for_completion(opts)
     content = tostring(result.output or "")
   end
 
-  return M.materialize({
+  -- Config errors (unknown preset, unknown backup strategy) must degrade to
+  -- a returned error: this runs after the tool, and a raise here would strand
+  -- the buffer before injection.
+  local ok, path, write_err = pcall(M.materialize, {
     __filename = opts.__filename,
     __dirname = opts.__dirname,
     source = opts.source,
@@ -349,6 +352,11 @@ function M.materialize_for_completion(opts)
     truncated = false,
     backup = store_config.backup,
   })
+  if not ok then
+    return nil, tostring(path)
+  end
+  return path, --[[@as string|nil]]
+    write_err --[[@as string|nil]]
 end
 
 -- ---------------------------------------------------------------------------
@@ -480,16 +488,25 @@ function M.apply_redirect(opts)
   local buffer_ctx = context_module.from_buffer(opts.bufnr)
   local store_config = opts.store_config
 
-  local stub, redirect_err = M.with_cwd(M.get_buffer_store_path(opts.bufnr), function()
-    return M.execute_redirect({
-      save_to = opts.save_to,
-      content = content,
-      chat_dirname = buffer_ctx:get_dirname(),
-      bufnr = opts.bufnr,
-      preview = store_config.preview or { lines = 10, bytes = 2048 },
-      backup = store_config.backup,
-    })
+  -- Config errors (unknown preset, unknown backup strategy) must degrade to
+  -- the inline-fallback notice: this runs after the tool, and a raise here
+  -- would strand the buffer before injection.
+  local call_ok, stub, redirect_err = pcall(function()
+    return M.with_cwd(M.get_buffer_store_path(opts.bufnr), function()
+      return M.execute_redirect({
+        save_to = opts.save_to,
+        content = content,
+        chat_dirname = buffer_ctx:get_dirname(),
+        bufnr = opts.bufnr,
+        preview = store_config.preview or { lines = 10, bytes = 2048 },
+        backup = store_config.backup,
+      })
+    end)
   end)
+  if not call_ok then
+    redirect_err = tostring(stub)
+    stub = nil
+  end
 
   if stub then
     return { success = true, output = stub }, nil

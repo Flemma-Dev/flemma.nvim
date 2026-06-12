@@ -504,6 +504,22 @@ describe("tools.store", function()
   end)
 
   describe("materialize_for_completion", function()
+    it("returns an error instead of raising on an unknown preset", function()
+      local ok, path, err = pcall(store.materialize_for_completion, {
+        bufnr = 0,
+        __filename = "/home/user/chats/session.chat",
+        __dirname = "/home/user/chats",
+        tool_name = "bash",
+        tool_id = "tool_x",
+        source = "tool",
+        result = { success = true, output = "content" },
+        store_config = { materialize = true, path_format = "$nope" },
+      })
+      assert.is_true(ok, "materialize_for_completion must not raise: " .. tostring(path))
+      assert.is_nil(path)
+      assert.is_truthy(tostring(err):find("Unknown store preset", 1, true))
+    end)
+
     local function temp_dir()
       local dir = vim.fn.tempname()
       vim.fn.mkdir(dir, "p")
@@ -903,6 +919,29 @@ describe("tools.store", function()
       })
       assert.is_truthy(result.output:find('"key"', 1, true))
       assert.is_truthy(result.output:find("[Output not saved:", 1, true))
+    end)
+
+    it("falls back with a notice when store-path resolution fails", function()
+      local config_facade = require("flemma.config")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      -- A named buffer is required: only saved chats go through preset expansion
+      vim.api.nvim_buf_set_name(bufnr, vim.fn.tempname() .. "-redirect.chat")
+      local writer = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      writer.tools.store.path_format = "$nope"
+
+      local result, err = store.apply_redirect({
+        save_to = "$FLEMMA_TOOLS_STORE_PATH/out.txt",
+        result = { success = true, output = "full content" },
+        bufnr = bufnr,
+        store_config = { preview = { lines = 5, bytes = 2048 }, backup = false },
+      })
+      assert.is_truthy(err)
+      assert.is_true(result.success)
+      assert.is_truthy(vim.startswith(result.output, "full content"))
+      assert.is_truthy(result.output:find("[Output not saved:", 1, true))
+      assert.is_truthy(result.output:find("Unknown store preset", 1, true))
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
 
