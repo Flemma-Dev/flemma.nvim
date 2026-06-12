@@ -52,6 +52,7 @@ local JOB_ID_LENGTH = 8
 ---@field tool_id string
 ---@field tool_name string
 ---@field result flemma.tools.ExecutionResult
+---@field save_to string|nil Redirect destination from flemma.save_to
 ---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
 
 ---Check whether a named tool is available for a buffer's resolved tool set.
@@ -287,6 +288,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       tool_id = tool_id,
       tool_name = entry.tool_name,
       result = result,
+      save_to = entry.save_to,
     })
     hooks.dispatch("tool:completed", {
       bufnr = bufnr,

@@ -564,6 +564,82 @@ describe("executor background filtering", function()
       buffer_state.pending_executions = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("carries flemma.save_to to pending entry and job delivery", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+
+      local captured_delivery ---@type flemma.tools.JobDelivery|nil
+      registry.register("test_save_tool", {
+        name = "test_save_tool",
+        description = "Test tool",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function(_input, _ctx, callback)
+          vim.schedule(function()
+            callback({ success = true, output = "saved output" })
+          end)
+          return function() end
+        end,
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `test_save_tool` (`tool_save_01`)",
+        "",
+        "```json",
+        '{"cmd": "work"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_save_01` (approved)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      ---@type flemma.tools.ToolContext
+      local context = {
+        tool_id = "tool_save_01",
+        tool_name = "test_save_tool",
+        input = { cmd = "work", ["flemma.background"] = true, ["flemma.save_to"] = "/tmp/output.txt" },
+        node = {
+          kind = "tool_use",
+          id = "tool_save_01",
+          name = "test_save_tool",
+          input = {},
+          position = { start_line = 2, end_line = 6 },
+        },
+        start_line = 2,
+        end_line = 6,
+      }
+
+      local ok, err = executor.execute(bufnr, context)
+      assert.is_true(ok, err)
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      local entry = buffer_state.pending_executions["tool_save_01"]
+      assert.truthy(entry)
+      assert.equals("/tmp/output.txt", entry.save_to)
+
+      vim.wait(2000, function()
+        return executor.has_job_completions(bufnr)
+      end)
+
+      local deliveries = executor.drain_job_completions(bufnr)
+      assert.equals(1, #deliveries)
+      captured_delivery = deliveries[1]
+      assert.equals("/tmp/output.txt", captured_delivery.save_to)
+
+      if entry.cancel_fn then
+        pcall(entry.cancel_fn)
+      end
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("re-execution reuses job_id and replaces Job Result in-place", function()

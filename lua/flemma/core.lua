@@ -22,6 +22,7 @@ local autopilot = require("flemma.autopilot")
 local bridge = require("flemma.bridge")
 local client = require("flemma.client")
 local context_module = require("flemma.context")
+local json = require("flemma.utilities.json")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
@@ -122,8 +123,8 @@ local function drain_and_inject_completions(bufnr)
       end
 
       -- Materialize job result to store (before buffer injection)
+      local store_config = drain_config.tools and drain_config.tools.store or {}
       do
-        local store_config = drain_config.tools and drain_config.tools.store or {}
         local buffer_ctx = context_module.from_buffer(bufnr)
         local _store_path, store_err = store.materialize_for_completion({
           bufnr = bufnr,
@@ -137,6 +138,30 @@ local function drain_and_inject_completions(bufnr)
         })
         if store_err then
           log.warn("core: failed to materialize job result for " .. item.job_id .. ": " .. store_err)
+        end
+      end
+
+      -- Handle redirect (flemma.save_to) for background jobs
+      if item.save_to and item.result.success then
+        local buffer_ctx = context_module.from_buffer(bufnr)
+        local content = type(item.result.output) == "table" and json.encode(item.result.output)
+          or tostring(item.result.output or "")
+
+        local stub, redirect_err = store.with_cwd(store.get_buffer_store_path(bufnr), function()
+          return store.execute_redirect({
+            save_to = item.save_to,
+            content = content,
+            chat_dirname = buffer_ctx:get_dirname(),
+            bufnr = bufnr,
+            preview = store_config.preview or { lines = 10, bytes = 2048 },
+            backup = store_config.backup,
+          })
+        end)
+
+        if stub then
+          item.result = { success = true, output = stub }
+        elseif redirect_err then
+          log.warn("core: redirect failed for job " .. item.job_id .. ": " .. redirect_err)
         end
       end
 
