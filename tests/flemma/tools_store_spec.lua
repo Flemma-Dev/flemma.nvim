@@ -305,6 +305,84 @@ describe("tools.store", function()
     end)
   end)
 
+  describe("backup strategy resolution", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    after_each(function()
+      package.preload["flemma_spec.custom_backup"] = nil
+      package.loaded["flemma_spec.custom_backup"] = nil
+      package.preload["flemma_spec.not_a_strategy"] = nil
+      package.loaded["flemma_spec.not_a_strategy"] = nil
+      package.preload["sneakymod"] = nil
+      package.loaded["sneakymod"] = nil
+    end)
+
+    it("loads a custom strategy from a module path", function()
+      package.preload["flemma_spec.custom_backup"] = function()
+        return {
+          backup = function(path)
+            if vim.fn.filereadable(path) == 0 then
+              return true, nil
+            end
+            local ok = os.rename(path, path .. ".bak")
+            return ok ~= nil, nil
+          end,
+        }
+      end
+      local dir = temp_dir()
+      local path = dir .. "/result.txt"
+      store.write(path, "first")
+      store.write(path, "second", { backup = "flemma_spec.custom_backup" })
+      assert.equals("second", read_file(path))
+      assert.equals("first", read_file(path .. ".bak"))
+    end)
+
+    it("rejects a module-path strategy without a backup export", function()
+      package.preload["flemma_spec.not_a_strategy"] = function()
+        return { unrelated = true }
+      end
+      local dir = temp_dir()
+      local ok, err = pcall(store.write, dir .. "/result.txt", "content", { backup = "flemma_spec.not_a_strategy" })
+      assert.is_false(ok)
+      assert.is_truthy(tostring(err):find("must export a 'backup' function", 1, true))
+    end)
+
+    it("does not resolve naked names as bare modules", function()
+      package.preload["sneakymod"] = function()
+        return {
+          backup = function()
+            return true, nil
+          end,
+        }
+      end
+      local dir = temp_dir()
+      local ok, err = pcall(store.write, dir .. "/result.txt", "content", { backup = "sneakymod" })
+      assert.is_false(ok)
+      assert.is_truthy(tostring(err):find("Unknown backup strategy 'sneakymod'", 1, true))
+    end)
+
+    it("lists known strategies in the unknown-strategy error", function()
+      local dir = temp_dir()
+      local ok, err = pcall(store.write, dir .. "/result.txt", "content", { backup = "versions" })
+      assert.is_false(ok)
+      assert.is_truthy(tostring(err):find("known: version", 1, true))
+    end)
+  end)
+
   describe("materialize", function()
     local function temp_dir()
       local dir = vim.fn.tempname()

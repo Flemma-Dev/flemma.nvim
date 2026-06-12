@@ -150,7 +150,7 @@ return s.object({
         lines = s.number(10),
         bytes = s.number(2048),
       }),
-      backup = s.string("version"),
+      backup = s.union(s.string("version"), s.literal(false)),
     }),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)

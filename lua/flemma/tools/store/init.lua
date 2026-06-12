@@ -215,29 +215,33 @@ function M.get_buffer_store_path(bufnr)
   })
 end
 
+---Built-in backup strategy names, resolved from `tools/store/backups/`.
 ---@type string[]
-local BUILTIN_BACKUP_STRATEGIES = {
-  "flemma.tools.store.backups.version",
-}
+local BUILTIN_BACKUP_STRATEGIES = { "version" }
 
----Resolve a backup strategy by name.
----@param name string|false Strategy name or false to disable
+local BUILTIN_BACKUP_NAMESPACE = "flemma.tools.store.backups."
+
+---Resolve a backup strategy by name, mirroring sandbox backend resolution:
+---naked names select built-in strategies from `tools/store/backups/`; module
+---paths (dot-notation) load user strategies via the flemma loader.
+---@param name string|false Strategy name, module path, or false to disable
 ---@return { backup: fun(path: string): boolean, string|nil }|nil
 local function resolve_backup(name)
   if name == false then
     return nil
   end
-  for _, module_path in ipairs(BUILTIN_BACKUP_STRATEGIES) do
-    local mod = loader.load(module_path)
-    if mod and module_path:match("%.([^.]+)$") == name then
-      return mod
+  ---@cast name string
+  if loader.is_module_path(name) then
+    local mod = loader.load(name)
+    if type(mod.backup) ~= "function" then
+      error(string.format("flemma: module '%s' must export a 'backup' function (expected backup strategy)", name))
     end
-  end
-  local ok, mod = pcall(loader.load, name)
-  if ok and mod then
     return mod
   end
-  error(("Unknown backup strategy '%s'"):format(tostring(name)))
+  if vim.tbl_contains(BUILTIN_BACKUP_STRATEGIES, name) then
+    return loader.load(BUILTIN_BACKUP_NAMESPACE .. name)
+  end
+  error(("Unknown backup strategy '%s' (known: %s)"):format(name, table.concat(BUILTIN_BACKUP_STRATEGIES, ", ")))
 end
 
 ---Write content to a file, applying backup strategy and creating directories.

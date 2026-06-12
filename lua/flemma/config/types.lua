@@ -259,7 +259,7 @@
 ---@field timeout integer
 
 ---@class flemma.config.ToolsStore
----@field backup string
+---@field backup string|false
 ---@field materialize boolean
 ---@field path_format string
 ---@field preview flemma.config.ToolsStorePreview
