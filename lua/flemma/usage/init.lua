@@ -334,16 +334,27 @@ function M.cleanup_buffer(bufnr)
   end
 end
 
-function M.setup()
-  hooks.on("buffer:destroyed", function(data)
-    M.cleanup_buffer(data.bufnr)
-  end)
+---Subscriptions registered by setup(), disposed and replaced when setup()
+---runs again so repeated setup() calls (config re-source, spec before_each)
+---swap subscribers instead of stacking duplicates.
+---@type flemma.hooks.Subscription[]
+local setup_subscriptions = {}
 
-  hooks.on("request:finished", function(data)
-    if data.request then
-      M.show(data.bufnr, data.request)
-    end
-  end)
+function M.setup()
+  for _, subscription in ipairs(setup_subscriptions) do
+    subscription:off()
+  end
+
+  setup_subscriptions = {
+    hooks.on("buffer:destroyed", function(data)
+      M.cleanup_buffer(data.bufnr)
+    end),
+    hooks.on("request:finished", function(data)
+      if data.request then
+        M.show(data.bufnr, data.request)
+      end
+    end),
+  }
 end
 
 return M

@@ -418,6 +418,38 @@ describe("flemma.usage driver", function()
       assert.equals(0, #bar_mock._handles)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("re-running setup replaces subscribers instead of stacking them", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "x" })
+      vim.api.nvim_set_current_buf(bufnr)
+      -- A second setup() (config re-source, repeated before_each in specs)
+      -- must not leave the old request:finished subscriber behind.
+      usage.setup()
+      local fake_request = {
+        model = "test-model",
+        provider = "test",
+        thoughts_tokens = 0,
+        cache_read_input_tokens = 0,
+        get_total_input_tokens = function()
+          return 100
+        end,
+        get_total_output_tokens = function()
+          return 50
+        end,
+        get_total_cost = function()
+          return 0.01
+        end,
+      }
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = fake_request })
+      assert.is_true(vim.wait(200, function()
+        return #bar_mock._handles > 0
+      end))
+      -- Settle so a duplicate subscriber's deferred show would have landed.
+      vim.wait(50)
+      assert.equals(1, #bar_mock._handles)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("cleanup_buffer", function()

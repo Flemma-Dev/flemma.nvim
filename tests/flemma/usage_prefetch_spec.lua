@@ -254,12 +254,19 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
   local prefetch
   local hooks
   local client = require("flemma.client")
+  local session = require("flemma.session")
   local bufnr
 
   before_each(function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.usage.prefetch"] = nil
-    require("flemma").setup({ parameters = { thinking = false } })
+    -- The usage-bar driver also subscribes to request:finished globally.
+    -- This spec exercises prefetch only — keep the bar disabled so its
+    -- deferred show never runs against this spec's buffers.
+    require("flemma").setup({
+      parameters = { thinking = false },
+      ui = { usage = { enabled = false } },
+    })
     hooks = require("flemma.hooks")
     prefetch = require("flemma.usage.prefetch")
     prefetch._DEBOUNCE_MS = 10
@@ -278,7 +285,9 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
 
   ---@return flemma.session.Request
   local function make_request(input_tokens, model)
-    return {
+    -- A real Request, not a bare table: dispatched payloads reach every
+    -- global request:finished subscriber, and those call Request methods.
+    return session.Request.new({
       provider = "anthropic",
       model = model or "claude-sonnet-4-6",
       input_tokens = input_tokens,
@@ -291,7 +300,7 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
       output_has_thoughts = false,
       cache_read_input_tokens = 0,
       cache_creation_input_tokens = 0,
-    }
+    })
   end
 
   it("request:sending sets request_active", function()
