@@ -45,6 +45,7 @@ local JOB_ID_LENGTH = 8
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
 ---@field save_to string|nil Redirect destination from flemma.save_to
+---@field overflow_path string|nil Store path of the full output when truncation overflowed
 
 ---@class flemma.tools.JobDelivery
 ---@field job_id string
@@ -332,10 +333,13 @@ local function do_completion(bufnr, tool_id, result, opts)
     pcall(vim.cmd --[[@as function]], "undojoin")
   end
 
-  -- Materialize result to store (before buffer injection)
+  -- Materialize result to store (before buffer injection). Skipped when
+  -- truncation overflow already wrote the full output to the same store path
+  -- (this result holds only the truncated content), and when flemma.save_to
+  -- makes the redirect destination the single home of the content.
   local completion_config = config_facade.get(bufnr)
   local store_config = completion_config.tools and completion_config.tools.store or {}
-  do
+  if not (entry and (entry.overflow_path or entry.save_to)) then
     local buffer_ctx = context_module.from_buffer(bufnr)
     local _store_path, store_err = store.materialize_for_completion({
       bufnr = bufnr,
@@ -549,7 +553,16 @@ function M.build_execution_context(params)
               unnamed_path_format = store_config.unnamed_path_format,
               backup = store_config.backup,
             }
-            return truncate_module.truncate_with_overflow(text, opts)
+            local result = truncate_module.truncate_with_overflow(text, opts)
+            if result.overflow_path then
+              -- Record on the pending entry so do_completion knows the store
+              -- file already holds the full output for this tool_id.
+              local entry = get_buffer_pending(bufnr)[params.tool_id or ""]
+              if entry then
+                entry.overflow_path = result.overflow_path
+              end
+            end
+            return result
           end,
         }, { __index = truncate_module })
         rawset(self, "truncate", bound)

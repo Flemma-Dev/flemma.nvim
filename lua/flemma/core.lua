@@ -121,9 +121,10 @@ local function drain_and_inject_completions(bufnr)
         )
       end
 
-      -- Materialize job result to store (before buffer injection)
+      -- Materialize job result to store (before buffer injection). Skipped
+      -- when flemma.save_to makes the redirect destination the single home.
       local store_config = drain_config.tools and drain_config.tools.store or {}
-      do
+      if not item.save_to then
         local buffer_ctx = context_module.from_buffer(bufnr)
         local _store_path, store_err = store.materialize_for_completion({
           bufnr = bufnr,

@@ -536,6 +536,180 @@ describe("executor background filtering", function()
     end)
   end)
 
+  describe("do_completion eager materialization", function()
+    local config_facade = require("flemma.config")
+
+    local function read_file(path)
+      local f = io.open(path, "r")
+      if not f then
+        return nil
+      end
+      local content = f:read("*a")
+      f:close()
+      return content
+    end
+
+    ---@param tool_id string
+    ---@param save_to string|nil
+    ---@return integer bufnr
+    local function make_buffer(tool_id, save_to)
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`" .. tool_id .. "`)",
+        "",
+        "```json",
+        '{"command": "work"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `" .. tool_id .. "` (approved)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+      -- Buffer numbers are reused across tests; wipe store leftovers
+      local store = require("flemma.tools.store")
+      vim.fn.delete(store.get_buffer_store_path(bufnr), "rf")
+      local writer = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      writer.tools.store.materialize = true
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        [tool_id] = {
+          tool_id = tool_id,
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = false,
+          save_to = save_to,
+        },
+      }
+      return bufnr
+    end
+
+    it("does not overwrite the full output written by truncation overflow", function()
+      local executor = require("flemma.tools.executor")
+      local store = require("flemma.tools.store")
+      local bufnr = make_buffer("tool_trunc_01", nil)
+
+      -- Simulate what truncate_with_overflow wrote during execution
+      local full_output = "FULL OUTPUT LINE 1\nFULL OUTPUT LINE 2"
+      local overflow_path = store.materialize({
+        source = "tool",
+        name = "bash",
+        id = "tool_trunc_01",
+        bufnr = bufnr,
+        content = full_output,
+        materialize_enabled = true,
+        truncated = true,
+        backup = false,
+      })
+      assert.is_truthy(overflow_path)
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions["tool_trunc_01"].overflow_path = overflow_path
+
+      local truncated_output = "FULL OUTPUT LINE 1\n\n[Showing lines 1-1 of 2. Full output: " .. overflow_path .. "]"
+      executor._test_complete_execution(bufnr, "tool_trunc_01", { success = true, output = truncated_output })
+
+      assert.equals(full_output, read_file(overflow_path), "store file must keep the full output")
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not write an eager store copy when flemma.save_to redirects", function()
+      local executor = require("flemma.tools.executor")
+      local store = require("flemma.tools.store")
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      local bufnr = make_buffer("tool_redir_02", dir .. "/dest.txt")
+
+      executor._test_complete_execution(bufnr, "tool_redir_02", { success = true, output = "CONTENT" })
+
+      assert.equals("CONTENT", read_file(dir .. "/dest.txt"))
+      local store_dir = store.get_buffer_store_path(bufnr)
+      local has_files = vim.fn.isdirectory(store_dir) == 1 and #vim.fn.readdir(store_dir) > 0
+      assert.is_false(has_files, "no eager store copy may exist alongside a redirect")
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("materializes a plain result to the store", function()
+      local executor = require("flemma.tools.executor")
+      local store = require("flemma.tools.store")
+      local bufnr = make_buffer("tool_plain_01", nil)
+
+      executor._test_complete_execution(bufnr, "tool_plain_01", { success = true, output = "PLAIN" })
+
+      local store_dir = store.get_buffer_store_path(bufnr)
+      local files = vim.fn.isdirectory(store_dir) == 1 and vim.fn.readdir(store_dir) or {}
+      assert.equals(1, #files, "expected exactly one materialized file")
+      assert.equals("PLAIN", read_file(store_dir .. "/" .. files[1]))
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("do_completion store-config resilience", function()
+    it("injects the result even when the store config is invalid", function()
+      local executor = require("flemma.tools.executor")
+      local config_facade = require("flemma.config")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_cfg_01`)",
+        "",
+        "```json",
+        '{"command": "work"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_cfg_01` (approved)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+      -- A named buffer is required: only saved chats go through preset expansion
+      vim.api.nvim_buf_set_name(bufnr, vim.fn.tempname() .. "-resilience.chat")
+      local writer = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      writer.tools.store.materialize = true
+      writer.tools.store.path_format = "$nope"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_cfg_01"] = {
+          tool_id = "tool_cfg_01",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = false,
+        },
+      }
+
+      assert.has_no.errors(function()
+        executor._test_complete_execution(bufnr, "tool_cfg_01", { success = true, output = "SURVIVES" })
+      end)
+
+      local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+      assert.is_truthy(text:find("SURVIVES", 1, true), "result must be injected despite store config error:\n" .. text)
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   describe("execute with background option", function()
     it("allocates job_id and writes background placeholder", function()
       local executor = require("flemma.tools.executor")
