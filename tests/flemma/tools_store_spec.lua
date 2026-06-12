@@ -620,7 +620,7 @@ describe("tools.store", function()
       local stub, err = store.execute_redirect({
         save_to = dest,
         content = "full output content here",
-        chat_dir = dir,
+        chat_dirname = dir,
         bufnr = 0,
         preview = { lines = 5, bytes = 2048 },
         backup = false,
@@ -637,7 +637,7 @@ describe("tools.store", function()
         return store.execute_redirect({
           save_to = "$FLEMMA_TOOLS_STORE_PATH/transcript.txt",
           content = "transcript content",
-          chat_dir = "/tmp",
+          chat_dirname = "/tmp",
           bufnr = 0,
           preview = { lines = 5, bytes = 2048 },
           backup = false,
@@ -648,12 +648,12 @@ describe("tools.store", function()
       assert.equals("transcript content", read_file(dir .. "/transcript.txt"))
     end)
 
-    it("resolves relative paths against chat_dir", function()
+    it("resolves relative paths against chat_dirname", function()
       local dir = temp_dir()
       local stub, err = store.execute_redirect({
         save_to = "./output.txt",
         content = "relative content",
-        chat_dir = dir,
+        chat_dirname = dir,
         bufnr = 0,
         preview = { lines = 5, bytes = 2048 },
         backup = false,
@@ -668,7 +668,7 @@ describe("tools.store", function()
       local stub, err = store.execute_redirect({
         save_to = dir,
         content = "should not write",
-        chat_dir = "/tmp",
+        chat_dirname = "/tmp",
         bufnr = 0,
         preview = { lines = 5, bytes = 2048 },
         backup = false,
@@ -682,7 +682,7 @@ describe("tools.store", function()
       local stub, err = store.execute_redirect({
         save_to = "/dev/null/impossible/file.txt",
         content = "should fail",
-        chat_dir = "/tmp",
+        chat_dirname = "/tmp",
         bufnr = 0,
         preview = { lines = 5, bytes = 2048 },
         backup = false,

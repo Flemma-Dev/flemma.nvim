@@ -397,7 +397,7 @@ end
 ---@class flemma.tools.store.RedirectOpts
 ---@field save_to string Raw save_to value from tool input
 ---@field content string Full tool output
----@field chat_dir string|nil Chat file directory for relative path resolution
+---@field chat_dirname string|nil Chat file directory for relative path resolution
 ---@field bufnr integer Buffer number
 ---@field preview { lines: number, bytes: number }
 ---@field backup string|false Backup strategy name
@@ -409,7 +409,7 @@ end
 function M.execute_redirect(opts)
   local dest = opts.save_to
   dest = variables.expand_inline(dest)
-  dest = path_util.resolve(dest, opts.chat_dir)
+  dest = path_util.resolve(dest, opts.chat_dirname)
 
   if vim.fn.isdirectory(dest) == 1 or dest:sub(-1) == "/" then
     return nil, ("save_to target '%s' is a directory — append a filename"):format(dest)

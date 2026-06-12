@@ -361,7 +361,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       return store.execute_redirect({
         save_to = redirect_save_to,
         content = content,
-        chat_dir = buffer_ctx:get_dirname(),
+        chat_dirname = buffer_ctx:get_dirname(),
         bufnr = bufnr,
         preview = store_config.preview or { lines = 10, bytes = 2048 },
         backup = store_config.backup,
