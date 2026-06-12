@@ -45,13 +45,14 @@ describe("harness parameter schema injection", function()
     assert.is_nil(schema.properties["flemma.background"])
   end)
 
-  it("respects backgroundable = false opt-out", function()
+  it("respects disables_background capability opt-out", function()
+    local registry = require("flemma.tools.registry")
     ---@type flemma.tools.ToolDefinition
     local tool = {
       name = "test_no_bg",
       description = "Async but not backgroundable",
       async = true,
-      backgroundable = false,
+      capabilities = { "disables_background" },
       input_schema = {
         type = "object",
         properties = {
@@ -59,9 +60,12 @@ describe("harness parameter schema injection", function()
         },
       },
     }
+    registry.register("test_no_bg", tool)
 
     local schema = tools_module.to_json_schema_for_prompt(tool)
     assert.is_nil(schema.properties["flemma.background"])
+
+    registry.unregister("test_no_bg")
   end)
 
   it("injects flemma.save_to for all tools", function()

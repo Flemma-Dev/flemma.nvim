@@ -171,7 +171,7 @@ The boolean shorthand (`flemma.opt.sandbox = true`) expands to `{ enabled = true
 
 ## Auto-approval of sandboxed tools
 
-When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"can_auto_approve_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
+When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"auto_approves_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
 
 The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below the unified config resolver (100) and the community default (50). Explicit user preferences — global or per-buffer via frontmatter — always win, because the config resolver reads the merged value from all layers before the sandbox resolver gets a chance to run.
 
@@ -201,7 +201,7 @@ flemma.opt.tools.auto_approve:remove("bash")
 The following conditions must all hold for sandbox auto-approval to activate:
 
 1. **`tools.auto_approve_sandboxed` is not `false`** — the user hasn't globally opted out of sandbox auto-approval.
-2. **The tool declares `can_auto_approve_if_sandboxed`** in its capabilities array. Currently only `bash` ships this capability.
+2. **The tool declares `auto_approves_if_sandboxed`** in its capabilities array. Currently only `bash` ships this capability.
 3. **Frontmatter hasn't excluded the tool.** A `remove` op for the tool (e.g., `flemma.opt.tools.auto_approve:remove("bash")`) opts this buffer out without changing global config.
 4. **Frontmatter hasn't set a full policy** for `tools.auto_approve`. A `set` op signals the user is taking complete ownership of approval for this buffer — sandbox auto-approval steps aside.
 5. **Sandbox is enabled and available** — `sandbox.enabled = true`, no runtime disable override (`:Flemma sandbox:disable`), and a backend (e.g., `bwrap`) validates successfully.

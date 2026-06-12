@@ -36,8 +36,8 @@ describe("Bash Tool", function()
     assert.is_true(bash_def.async)
   end)
 
-  it("declares can_auto_approve_if_sandboxed capability", function()
-    assert.is_truthy(vim.tbl_contains(bash_def.capabilities, "can_auto_approve_if_sandboxed"))
+  it("declares auto_approves_if_sandboxed capability", function()
+    assert.is_truthy(vim.tbl_contains(bash_def.capabilities, "auto_approves_if_sandboxed"))
   end)
 
   describe("execution", function()

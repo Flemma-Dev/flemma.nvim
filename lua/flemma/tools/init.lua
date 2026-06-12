@@ -259,7 +259,8 @@ local function to_json_schema(definition)
 end
 
 ---Serialize a tool's input_schema for prompt inclusion, injecting harness
----parameters: `flemma.background` for async tools and `flemma.save_to` for all.
+---parameters: `flemma.background` for async tools and `flemma.save_to` for all,
+---unless the tool declares `disables_background` or `disables_save_to` capabilities.
 ---@param definition flemma.tools.ToolDefinition
 ---@return flemma.tools.JSONSchema
 function M.to_json_schema_for_prompt(definition)
@@ -267,7 +268,8 @@ function M.to_json_schema_for_prompt(definition)
   schema = vim.deepcopy(schema)
   schema.properties = schema.properties or {}
   local is_strict = definition.strict == true
-  if definition.async and definition.backgroundable ~= false then
+  local has_cap = registry.has_capability
+  if definition.async and not has_cap(definition.name, "disables_background") then
     schema.properties["flemma.background"] = {
       type = is_strict and { "boolean", "null" } or "boolean",
       default = false,
@@ -279,15 +281,17 @@ function M.to_json_schema_for_prompt(definition)
     end
     log.trace("tools: injected flemma.background parameter into schema for " .. definition.name)
   end
-  schema.properties["flemma.save_to"] = {
-    type = is_strict and { "string", "null" } or "string",
-    description = messages.render("tool-parameter--save-to"),
-  }
-  if is_strict then
-    schema.required = schema.required or {}
-    table.insert(schema.required, "flemma.save_to")
+  if not has_cap(definition.name, "disables_save_to") then
+    schema.properties["flemma.save_to"] = {
+      type = is_strict and { "string", "null" } or "string",
+      description = messages.render("tool-parameter--save-to"),
+    }
+    if is_strict then
+      schema.required = schema.required or {}
+      table.insert(schema.required, "flemma.save_to")
+    end
+    log.trace("tools: injected flemma.save_to parameter into schema for " .. definition.name)
   end
-  log.trace("tools: injected flemma.save_to parameter into schema for " .. definition.name)
   return schema
 end
 

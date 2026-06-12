@@ -36,10 +36,11 @@ describe("flemma.jobs.status", function()
     assert.equals("flemma.jobs.status", jobs_module.definitions[1].name)
   end)
 
-  it("is synchronous and not backgroundable", function()
+  it("is synchronous with disables_background and disables_save_to capabilities", function()
     local definition = jobs_module.definitions[1]
     assert.is_false(definition.async)
-    assert.is_false(definition.backgroundable)
+    assert.is_truthy(vim.tbl_contains(definition.capabilities, "disables_background"))
+    assert.is_truthy(vim.tbl_contains(definition.capabilities, "disables_save_to"))
   end)
 
   describe("execute", function()

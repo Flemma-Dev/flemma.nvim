@@ -460,7 +460,7 @@ M.definitions = {
         env = s.optional(s.map(s.string(), s.string())),
       }),
     },
-    capabilities = { "can_auto_approve_if_sandboxed" },
+    capabilities = { "auto_approves_if_sandboxed" },
     description = "Execute a bash command in the current working directory. "
       .. "Returns stdout and stderr. Output is truncated to last "
       .. truncate.MAX_LINES

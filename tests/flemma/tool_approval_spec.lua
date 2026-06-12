@@ -2712,18 +2712,18 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("approve", result)
   end)
 
-  it("does not affect tools without can_auto_approve_if_sandboxed capability", function()
+  it("does not affect tools without auto_approves_if_sandboxed capability", function()
     setup_with_sandbox()
     -- "calculator" has no capabilities — should require approval
     local result = approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
 
-  it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
+  it("auto-approves custom tool that declares auto_approves_if_sandboxed", function()
     registry.register("my_sandboxed_tool", {
       name = "my_sandboxed_tool",
       description = "A custom sandboxed tool",
-      capabilities = { "can_auto_approve_if_sandboxed" },
+      capabilities = { "auto_approves_if_sandboxed" },
       input_schema = { type = "object", properties = {} },
     })
     setup_with_sandbox()

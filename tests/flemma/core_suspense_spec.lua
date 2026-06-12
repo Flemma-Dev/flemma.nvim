@@ -174,7 +174,6 @@ describe("core.send_to_provider suspense handling", function()
       name = "bash",
       description = "Test bash",
       async = true,
-      backgroundable = true,
       input_schema = {
         type = "object",
         properties = {

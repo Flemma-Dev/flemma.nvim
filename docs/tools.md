@@ -246,7 +246,7 @@ When `lsp.enabled` is set (defaults to `true` whenever `vim.lsp` is available), 
 
 ### Opting out
 
-Set `backgroundable = false` on a tool definition to prevent the `flemma.background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool is also not backgroundable.
+Declare the `"disables_background"` capability on a tool definition to prevent the `flemma.background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool declares this capability. Similarly, `"disables_save_to"` prevents `flemma.save_to` injection — harness tools declare both since their output is ephemeral coordination metadata.
 
 ---
 
@@ -889,7 +889,7 @@ Built-in resolvers are registered during `setup()`:
 | Priority | Name                            | Source                                                                                                                                                                                                        |
 | -------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 100      | `urn:flemma:approval:config`    | Unified resolver — reads the merged `tools.auto_approve` value from all config layers (DEFAULTS → SETUP → RUNTIME → FRONTMATTER), evaluates a list, function, or `$preset` reference, and returns a decision. |
-| 25       | `urn:flemma:approval:sandbox`   | Auto-approve tools with `can_auto_approve_if_sandboxed` capability when sandbox is enabled and available                                                                                                      |
+| 25       | `urn:flemma:approval:sandbox`   | Auto-approve tools with `auto_approves_if_sandboxed` capability when sandbox is enabled and available                                                                                                         |
 | 0        | `urn:flemma:approval:catch-all` | Only when `tools.require_approval = false`                                                                                                                                                                    |
 
 Third-party plugins register at the default priority of 50. Set `priority` higher to run before built-in resolvers (e.g., 200 to override config), or lower to act as a fallback.
@@ -897,7 +897,7 @@ Third-party plugins register at the default priority of 50. Set `priority` highe
 > [!NOTE]
 > Earlier releases used separate `config` and `frontmatter` resolvers. The unified resolver at priority 100 now consults the merged config store directly, so frontmatter overrides take effect through layer precedence rather than a separate resolver entry. Per-buffer `flemma.opt.tools.auto_approve` writes still beat global config — the merge happens before the resolver runs.
 
-The sandbox resolver (priority 25) auto-approves tools that declare `"can_auto_approve_if_sandboxed"` in their `capabilities` array when the sandbox is enabled with an available backend and the user hasn't opted out per-tool or globally. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter, or take ownership of the policy with `auto_approve:set(...)` in frontmatter (a `set` op signals you're handling approval entirely for that buffer). See [docs/sandbox.md](sandbox.md#requirements) for the full list of conditions.
+The sandbox resolver (priority 25) auto-approves tools that declare `"auto_approves_if_sandboxed"` in their `capabilities` array when the sandbox is enabled with an available backend and the user hasn't opted out per-tool or globally. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter, or take ownership of the policy with `auto_approve:set(...)` in frontmatter (a `set` op signals you're handling approval entirely for that buffer). See [docs/sandbox.md](sandbox.md#requirements) for the full list of conditions.
 
 ### Registering a resolver
 

@@ -20,7 +20,7 @@ M.definitions = {
       .. "Use this to check on long-running background tasks instead of retrying them.",
     strict = true,
     async = false,
-    backgroundable = false,
+    capabilities = { "disables_background", "disables_save_to" },
     ---@return flemma.tools.ToolPreview
     format_preview = function(input)
       return input.job_id
