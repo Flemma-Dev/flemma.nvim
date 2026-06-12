@@ -82,6 +82,52 @@ describe(":Flemma send command", function()
     end
   end)
 
+  it("sends only the redirect stub over the wire, never the saved file content", function()
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    -- The redirect destination holds the full output; the buffer holds the stub.
+    local dest = vim.fn.tempname() .. "-saved.txt"
+    local f = assert(io.open(dest, "w"))
+    f:write("FULL_OUTPUT_MARKER must never reach the provider")
+    f:close()
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      "Run it",
+      "",
+      "@Assistant:",
+      "**Tool Use:** `bash` (`tool_stub_01`)",
+      "",
+      "```json",
+      '{"command": "generate", "flemma.save_to": "' .. dest .. '"}',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `tool_stub_01`",
+      "",
+      "```",
+      "preview line",
+      "",
+      "[Output saved: " .. dest .. " — 49B, 1 lines]",
+      "```",
+    })
+
+    vim.cmd("Flemma send")
+
+    local captured_request_body = core._get_last_request_body()
+    assert.is_not_nil(captured_request_body, "request_body was not captured")
+    local json = require("flemma.utilities.json")
+    local serialized = json.encode(captured_request_body)
+    assert.is_truthy(serialized:find("Output saved:", 1, true), "the stub notice must go over the wire")
+    assert.is_falsy(
+      serialized:find("FULL_OUTPUT_MARKER", 1, true),
+      "the saved file content must not be read back into the request"
+    )
+    os.remove(dest)
+  end)
+
   it("formats the request body correctly for the OpenAI provider", function()
     -- Arrange: Switch to the OpenAI provider for this test
     core.switch_provider("openai", "o3", {})

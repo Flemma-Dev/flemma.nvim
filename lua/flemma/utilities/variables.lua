@@ -10,6 +10,11 @@ local M = {}
 ---@type table<string, fun(context?: table): string|nil>
 local resolvers = {}
 
+--- Registered inline variable resolvers.
+--- Checked by expand_inline before falling back to os.getenv.
+---@type table<string, fun(context?: table): string|nil>
+local inline_resolvers = {}
+
 local URN_PREFIX = "urn:"
 
 --- Register a URN variable resolver.
@@ -19,9 +24,17 @@ function M.register(urn, resolver)
   resolvers[urn] = resolver
 end
 
+---Register a variable that expand_inline resolves before os.getenv.
+---@param name string Variable name (without $)
+---@param resolver fun(context?: table): string|nil
+function M.register_inline(name, resolver)
+  inline_resolvers[name] = resolver
+end
+
 --- Clear all registered resolvers (for testing).
 function M.clear()
   resolvers = {}
+  inline_resolvers = {}
 end
 
 --- Expand ~ at the start of a string to the home directory.
@@ -81,15 +94,16 @@ function M.expand(value, context)
   return value
 end
 
---- Expand a list of variable strings, dropping nil results.
+--- Expand a list of variable strings, dropping nil results and
+--- silently skipping entries that error (e.g. unregistered URNs).
 ---@param values string[]
 ---@param context? table Optional context passed to URN resolvers
 ---@return string[]
 function M.expand_list(values, context)
   local result = {}
   for _, value in ipairs(values) do
-    local expanded = M.expand(value, context)
-    if expanded then
+    local ok, expanded = pcall(M.expand, value, context)
+    if ok and expanded then
       table.insert(result, expanded)
     end
   end
@@ -139,19 +153,37 @@ end
 ---@param text string
 ---@return string
 function M.expand_inline(text)
-  -- ${VAR:-default} — greedy match on var name, non-greedy on default
-  text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
-    local val = os.getenv(var)
-    if val and val ~= "" then
-      return val
-    end
-    return expand_tilde(default)
-  end)
+  -- Expansion is iterative so references inside substituted values resolve;
+  -- the pass cap stops mutually-referential resolvers from looping forever.
+  local MAX_PASSES = 8
+  local passes = 0
+  local prev
+  repeat
+    prev = text
+    passes = passes + 1
 
-  -- Bare $VAR — only match word-character var names to avoid false positives
-  text = text:gsub("%$([%w_]+)", function(var)
-    return os.getenv(var) or ""
-  end)
+    -- ${VAR:-default} — greedy match on var name, non-greedy on default
+    text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
+      local val
+      if inline_resolvers[var] then
+        val = inline_resolvers[var]()
+      else
+        val = os.getenv(var)
+      end
+      if val and val ~= "" then
+        return val
+      end
+      return expand_tilde(default)
+    end)
+
+    -- Bare $VAR — only match word-character var names to avoid false positives
+    text = text:gsub("%$([%w_]+)", function(var)
+      if inline_resolvers[var] then
+        return inline_resolvers[var]() or ""
+      end
+      return os.getenv(var) or ""
+    end)
+  until text == prev or passes >= MAX_PASSES
 
   -- Leading ~/
   if text:sub(1, 2) == "~/" or text == "~" then

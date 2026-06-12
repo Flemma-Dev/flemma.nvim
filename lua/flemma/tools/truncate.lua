@@ -1,16 +1,14 @@
 --- Tool-aware truncation with overflow handling.
 ---
 --- Re-exports all primitives from `flemma.utilities.truncate` and adds
---- `truncate_with_overflow` — truncate, save full output to a configurable
---- path, and return content with model-facing instructions.
+--- `truncate_with_overflow` — truncate, delegate overflow writes to the
+--- store module, and return content with model-facing instructions.
 ---@class flemma.tools.Truncate : flemma.utilities.Truncate
 local M = {}
 
 local base = require("flemma.utilities.truncate")
-local config_facade = require("flemma.config")
-local renderer = require("flemma.templating.renderer")
-local templating = require("flemma.templating")
-local variables = require("flemma.utilities.variables")
+local notify = require("flemma.notify")
+local store = require("flemma.tools.store")
 
 -- Re-export all primitives from the base module
 M.truncate_head = base.truncate_head
@@ -29,65 +27,12 @@ M.MAX_LINE_CHARS = base.MAX_LINE_CHARS
 ---@field filename? string
 ---@field max_lines? integer
 ---@field max_bytes? integer
----@field output_path_format? string Override config (for testing)
+---@field store_opts? { __filename?: string, __dirname?: string, name?: string, path_format?: string, unnamed_path_format?: string, backup?: string|false }
 
 ---@class flemma.tools.TruncateOverflowResult
 ---@field content string
 ---@field overflow_path string|nil
 ---@field truncated boolean
-
----Normalize an absolute path into a flat filename-safe string.
----Strips the leading separator, then replaces all remaining separators with `-`.
----@param path string Absolute path
----@return string
-local function normalize_path(path)
-  local normalized = vim.fs.normalize(path)
-  if normalized:sub(1, 1) == "/" then
-    normalized = normalized:sub(2)
-  end
-  local result = normalized:gsub("/", "-")
-  return result
-end
-
----Resolve the output path format string into a concrete file path.
----@param format_str string The format string from config
----@param opts flemma.tools.TruncateOverflowOpts
----@return string
-local function resolve_output_path(format_str, opts)
-  local env = templating.create_env()
-  env.source = opts.source or ""
-  env.id = opts.id or ""
-  env.path = opts.filename and normalize_path(opts.filename) or ""
-
-  -- Order matters: Lua template expansion resolves {{ ... }} first, then expand_inline
-  -- handles ${...} in the result. Reversing would let bare $VAR inside
-  -- template expressions get expanded prematurely.
-  local expanded = renderer.parts_to_text(renderer.render(format_str, env))
-  expanded = variables.expand_inline(expanded)
-
-  return expanded
-end
-
----Write content to a file, creating parent directories as needed.
----@param path string
----@param content string
----@return boolean success
-local function write_overflow_file(path, content)
-  local dir = vim.fs.dirname(path)
-  if dir and vim.fn.isdirectory(dir) == 0 then
-    local ok = pcall(vim.fn.mkdir, dir, "p")
-    if not ok then
-      return false
-    end
-  end
-  local f = io.open(path, "w")
-  if not f then
-    return false
-  end
-  f:write(content)
-  f:close()
-  return true
-end
 
 ---Build the instruction notice appended to truncated content.
 ---@param trunc_result flemma.utilities.TruncationResult
@@ -147,8 +92,8 @@ end
 
 ---Truncate tool output with overflow handling.
 ---
----When truncation occurs, saves the full output to a file at a configurable
----path and appends model-facing instructions to the truncated content.
+---When truncation occurs, delegates full-output write to the store module
+---and appends model-facing instructions to the truncated content.
 ---@param text string Raw tool output
 ---@param opts flemma.tools.TruncateOverflowOpts
 ---@return flemma.tools.TruncateOverflowResult
@@ -172,20 +117,32 @@ function M.truncate_with_overflow(text, opts)
     }
   end
 
-  -- Resolve overflow file path
-  local format_str = opts.output_path_format
-  if not format_str then
-    local config = config_facade.materialize(opts.bufnr)
-    format_str = config.tools and config.tools.truncate and config.tools.truncate.output_path_format
-      or "${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"
-  end
-
-  local output_path = resolve_output_path(format_str, opts)
-
-  -- Write full output to overflow file
   local overflow_path ---@type string|nil
-  if write_overflow_file(output_path, text) then
-    overflow_path = output_path
+  if opts.store_opts then
+    -- Config errors (unknown preset, unknown backup strategy) must degrade
+    -- to a warning: this runs mid-execution, and a raise here would leave
+    -- the tool spinner hanging forever.
+    local call_ok, store_path, store_err = pcall(store.materialize, {
+      __filename = opts.store_opts.__filename,
+      __dirname = opts.store_opts.__dirname,
+      source = opts.source or "tool",
+      name = opts.store_opts.name,
+      id = opts.id or "",
+      path_format = opts.store_opts.path_format,
+      unnamed_path_format = opts.store_opts.unnamed_path_format,
+      bufnr = opts.bufnr,
+      content = text,
+      materialize_enabled = true,
+      truncated = true,
+      backup = opts.store_opts.backup,
+    })
+    if not call_ok then
+      store_path, store_err = nil, tostring(store_path)
+    end
+    if store_err then
+      notify.warn("Could not save full tool output: " .. store_err)
+    end
+    overflow_path = store_path --[[@as string|nil]]
   end
 
   local notice = build_notice(result, opts.direction, overflow_path)

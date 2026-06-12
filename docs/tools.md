@@ -171,7 +171,7 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to a temporary file.
+- **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to the [tool result store](#tool-result-store) and the truncated content ends with a notice pointing at it.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
 
 ### Bash execution backend
@@ -198,7 +198,7 @@ Async tools can run in the background without blocking the conversation. The too
 
 ### How tools enter background
 
-**Model-initiated.** Flemma injects a `background` boolean parameter into every async tool's schema. When the model sets `background: true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../lua/flemma/messages/tool-parameter--background.chat) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
+**Model-initiated.** Flemma injects a `flemma.background` boolean parameter into every async tool's schema (a [harness parameter](#harness-parameters), invisible to the tool itself). When the model sets `"flemma.background": true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../lua/flemma/messages/tool-parameter--background.chat) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
 
 **User-initiated.** Press <kbd>Alt-B</kbd> (or `:Flemma tool:background`) while the cursor is on an executing tool to move it to background mid-flight. The tool keeps running, but the buffer unlocks and the conversation advances. If all foreground tools are now clear, autopilot triggers the next send automatically.
 
@@ -246,7 +246,88 @@ When `lsp.enabled` is set (defaults to `true` whenever `vim.lsp` is available), 
 
 ### Opting out
 
-Set `backgroundable = false` on a tool definition to prevent the `background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool is also not backgroundable.
+Set `backgroundable = false` on a tool definition to prevent the `flemma.background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool is also not backgroundable.
+
+---
+
+## Tool result store
+
+Large tool outputs need a durable home outside the buffer. The **store** is a per-conversation directory — co-located with the `.chat` file by default — where Flemma writes full tool outputs. Three things write to it:
+
+- **Truncation overflow** — when a result exceeds the truncation limits (2000 lines / 50KB), the truncated content injected into the buffer ends with a `Full output: <path>` notice pointing at the complete output in the store. Always on; nothing to enable.
+- **`flemma.save_to` redirects** — the model can ask for any tool's output to be written to a file instead of injected into the conversation (see [below](#flemmasave_to--redirecting-output-to-a-file)).
+- **Eager materialization** — with `tools.store.materialize = true`, _every_ tool and job result is written to the store, truncated or not. Defaults to `false`: on tool-heavy conversations this duplicates content that already lives in the buffer.
+
+### Store location
+
+`tools.store.path_format` controls where results are written. It accepts a preset name or a template string:
+
+| Preset            | Expands to                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `$chat` (default) | `{{ __dirname }}/.flemma/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt`                      |
+| `$state`          | `${XDG_STATE_HOME:-$HOME/.flemma}/flemma/store/{{ flemma.path.flatten(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt` |
+
+With the default `$chat` preset, a truncated `bash` result in `~/notes/example.chat` lands in `~/notes/.flemma/example.chat/tool_bash_toolu_01.txt` — the store travels with the conversation. `$state` keeps chat directories clean by routing everything under `$XDG_STATE_HOME/flemma/store/` instead (`~/.flemma/store/` when `XDG_STATE_HOME` is unset), with the chat path flattened into a single directory name (`home--user--notes--example.chat`).
+
+Custom templates render with the standard [templating environment](templates.md) plus:
+
+| Variable                               | Value                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| `{{ source }}`                         | `"tool"` for foreground results, `"job"` for background job deliveries      |
+| `{{ name }}`                           | The tool name, wire-encoded (dots become `__`, e.g. `flemma__jobs__status`) |
+| `{{ id }}`                             | The tool/job ID, escaped — characters outside `[A-Za-z0-9._-]` become `--`  |
+| `{{ __filename }}` / `{{ __dirname }}` | Chat file path / directory                                                  |
+| `{{ bufnr }}`                          | Buffer number                                                               |
+| `flemma.path.*`                        | Path helpers (`basename`, `flatten`, …)                                     |
+
+After template rendering, `$VAR` / `${VAR:-default}` environment expansion applies, doubled `flemma` namespace segments collapse (`.flemma/flemma/` → `.flemma/`), and a tool name repeated within a single path segment is de-duplicated — IDs that embed the tool name don't produce `tool_bash_bash--…` filenames.
+
+Unsaved buffers have no chat path to derive from, so they use `tools.store.unnamed_path_format` instead (default: `${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt`). Presets are not valid there.
+
+> [!NOTE]
+> The store replaces the `tools.truncate.output_path_format` option from v0.12 and earlier. Truncation overflow now follows `tools.store.path_format` — by default landing next to the chat file instead of in `$TMPDIR`.
+
+### Overwrites and backups
+
+Re-running a tool writes to the same store path. Before overwriting, the configured backup strategy runs — the default `version` strategy renames the existing file to the next free `<stem>.<n>.<ext>` (e.g. `tool_bash_toolu_01.1.txt`), so the canonical path always holds the latest run. Set `tools.store.backup = false` to overwrite in place, or pass a Lua module path exporting `backup(path)` for a custom strategy.
+
+### `flemma.save_to` – redirecting output to a file
+
+Flemma injects an optional `flemma.save_to` string parameter into **every** tool's schema. When the model supplies a path, the full output is written there and the conversation receives a stub instead: a short head preview (`tools.store.preview`, default 10 lines / 2KB) followed by `[Output saved: /path/to/file — 1.2MB, 54321 lines]`.
+
+- Relative paths resolve against the chat file's directory; absolute and `~/…` paths work too.
+- `$FLEMMA_TOOLS_STORE_PATH/<filename>` targets the conversation's store directory.
+- An existing file at the destination is backed up first through `tools.store.backup` (the default `version` strategy renames it to the next free `<stem>.<n>.<ext>`), so a redirect never silently destroys prior content — set `tools.store.backup = false` to overwrite in place.
+- With the [sandbox](sandbox.md) enabled, the destination must be writable under the sandbox policy.
+- Redirects apply only to successful results, and work for both foreground results and background job deliveries.
+- If the redirect fails (destination is a directory, sandbox denies the write, …), the full output is injected as if `flemma.save_to` had not been set, and a warning is logged.
+
+### `$FLEMMA_TOOLS_STORE_PATH`
+
+The `bash` tool exports `$FLEMMA_TOOLS_STORE_PATH` into every command's environment, pointing at the conversation's store directory. Shell commands can write artefacts directly there (`curl -o "$FLEMMA_TOOLS_STORE_PATH/response.json" …`), and the same variable works inside `flemma.save_to` values. The store directory is granted read-write access in the default sandbox policy via the `urn:flemma:store` variable (see [docs/sandbox.md](sandbox.md#flemma-urn-variables)).
+
+### Harness parameters
+
+`flemma.background` and `flemma.save_to` are **harness parameters**: Flemma injects them into each tool's schema when serializing the prompt and strips them from the input before the tool's `execute` runs. Tool implementations never see them, and the namespaced names can't collide with real tool parameters. For [strict-mode](#strict-mode-for-tool-schemas) tools they are injected as nullable (`type: [t, "null"]`) and appended to `required`, preserving strict-schema invariants across providers.
+
+### Configuration
+
+```lua
+tools = {
+  store = {
+    path_format = "$chat",          -- "$chat", "$state", or a template string
+    unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",
+    materialize = false,            -- Write every result to the store, not just overflow and redirects
+    preview = {
+      lines = 10,                   -- Preview lines shown in the buffer for flemma.save_to redirects (0 = no preview)
+      bytes = 2048,                 -- Preview size cap
+    },
+    backup = "version",             -- Backup strategy before overwriting (false to disable)
+  },
+}
+```
+
+All options can be overridden per-buffer via `flemma.opt.tools.store` in frontmatter.
 
 ---
 
@@ -615,10 +696,10 @@ local result = ctx.truncate.truncate_tail(full_output)
 -- Truncate from the start (keep first N lines/bytes) – use for file reads
 local result = ctx.truncate.truncate_head(content)
 
--- Tail-truncate with an automatic overflow file: when truncation occurs, the
--- full output is written to a temp file (named with this tool call's id) and a
--- "[full output: /path/...]" hint is appended to the returned content. This is
--- what `bash` uses for its streaming output.
+-- Tail-truncate with automatic overflow handling: when truncation occurs, the
+-- full output is saved to the tool result store (named with this tool call's
+-- id) and a "Full output: /path/..." notice is appended to the returned
+-- content. This is what `bash` uses for its streaming output.
 local result = ctx.truncate.truncate_with_overflow(full_output, { direction = "tail" })
 
 -- Format byte counts for display
@@ -731,6 +812,8 @@ tools.register("my_tool", {
 ```
 
 When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. You can still pass a raw JSON Schema table for `input_schema` if you need full control — Flemma forwards whatever you give it.
+
+The injected [harness parameters](#harness-parameters) (`flemma.background`, `flemma.save_to`) follow these invariants automatically: on strict tools they are added as nullable and appended to `required`.
 
 ---
 

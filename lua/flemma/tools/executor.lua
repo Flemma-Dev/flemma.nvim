@@ -16,6 +16,7 @@ local context_module = require("flemma.context")
 local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
+local store = require("flemma.tools.store")
 local navigation = require("flemma.navigation")
 local tool_context = require("flemma.tools.context")
 local path_util = require("flemma.utilities.path")
@@ -43,12 +44,15 @@ local JOB_ID_LENGTH = 8
 ---@field completed boolean
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
+---@field save_to string|nil Redirect destination from flemma.save_to
+---@field overflow_path string|nil Store path of the full output when truncation overflowed
 
 ---@class flemma.tools.JobDelivery
 ---@field job_id string
 ---@field tool_id string
 ---@field tool_name string
 ---@field result flemma.tools.ExecutionResult
+---@field save_to string|nil Redirect destination from flemma.save_to
 ---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
 
 ---Check whether a named tool is available for a buffer's resolved tool set.
@@ -284,6 +288,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       tool_id = tool_id,
       tool_name = entry.tool_name,
       result = result,
+      save_to = entry.save_to,
     })
     hooks.dispatch("tool:completed", {
       bufnr = bufnr,
@@ -328,8 +333,45 @@ local function do_completion(bufnr, tool_id, result, opts)
     pcall(vim.cmd --[[@as function]], "undojoin")
   end
 
-  -- Inject result into buffer
+  -- Materialize result to store (before buffer injection). Skipped when
+  -- truncation overflow already wrote the full output to the same store path
+  -- (this result holds only the truncated content), and when flemma.save_to
+  -- makes the redirect destination the single home of the content.
   local completion_config = config_facade.get(bufnr)
+  local store_config = completion_config.tools and completion_config.tools.store or {}
+  if not (entry and (entry.overflow_path or entry.save_to)) then
+    local buffer_ctx = context_module.from_buffer(bufnr)
+    local _store_path, store_err = store.materialize_for_completion({
+      bufnr = bufnr,
+      __filename = buffer_ctx:get_filename(),
+      __dirname = buffer_ctx:get_dirname(),
+      tool_name = entry and entry.tool_name,
+      tool_id = tool_id,
+      source = "tool",
+      result = result,
+      store_config = store_config,
+    })
+    if store_err then
+      log.warn("executor: failed to materialize result for " .. tool_id .. ": " .. store_err)
+    end
+  end
+
+  -- Handle redirect (flemma.save_to)
+  local redirect_save_to = entry and entry.save_to
+  if redirect_save_to and result.success then
+    local new_result, redirect_err = store.apply_redirect({
+      save_to = redirect_save_to,
+      result = result,
+      bufnr = bufnr,
+      store_config = store_config,
+    })
+    result = new_result
+    if redirect_err then
+      log.warn("executor: redirect failed for " .. tool_id .. ": " .. redirect_err)
+    end
+  end
+
+  -- Inject result into buffer
   local ok, err = injector.inject_result(
     bufnr,
     tool_id,
@@ -488,6 +530,11 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
+        local store_config
+        do
+          local cfg = config_facade.materialize(bufnr)
+          store_config = cfg.tools and cfg.tools.store or {}
+        end
         local bound = setmetatable({
           truncate_with_overflow = function(text, opts)
             opts.bufnr = bufnr
@@ -498,7 +545,24 @@ function M.build_execution_context(params)
             if not opts.id then
               opts.id = params.tool_id or ""
             end
-            return truncate_module.truncate_with_overflow(text, opts)
+            opts.store_opts = {
+              __filename = params.__filename,
+              __dirname = params.__dirname,
+              name = params.tool_name,
+              path_format = store_config.path_format,
+              unnamed_path_format = store_config.unnamed_path_format,
+              backup = store_config.backup,
+            }
+            local result = truncate_module.truncate_with_overflow(text, opts)
+            if result.overflow_path then
+              -- Record on the pending entry so do_completion knows the store
+              -- file already holds the full output for this tool_id.
+              local entry = get_buffer_pending(bufnr)[params.tool_id or ""]
+              if entry then
+                entry.overflow_path = result.overflow_path
+              end
+            end
+            return result
           end,
         }, { __index = truncate_module })
         rawset(self, "truncate", bound)
@@ -527,13 +591,20 @@ function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
-  -- Extract execution directives from the tool input so that both the normal
-  -- flow (core.lua) and manual approval (execute_at_cursor) share one path.
-  local is_background = context.input and context.input.background == true
-  if is_background then
+  -- Extract harness directives (flemma:*) from the tool input so that both the
+  -- normal flow (core.lua) and manual approval (execute_at_cursor) share one path.
+  local is_background = context.input and context.input["flemma.background"] == true
+  local save_to = context.input and context.input["flemma.save_to"] --[[@as string|nil]]
+  if is_background or save_to then
     context.input = vim.tbl_extend("keep", {}, context.input)
-    context.input.background = nil
+    context.input["flemma.background"] = nil
+    context.input["flemma.save_to"] = nil
+  end
+  if is_background then
     log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested background execution")
+  end
+  if save_to then
+    log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested save_to: " .. save_to)
   end
 
   -- Check for API request in flight (mutually exclusive)
@@ -617,6 +688,7 @@ function M.execute(bufnr, context)
     started_at = os.time(),
     completed = false,
     placeholder_modified = false,
+    save_to = save_to,
   }
   if is_background then
     -- Reuse existing job_id from the tool_result header when re-executing, so that

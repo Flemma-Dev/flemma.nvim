@@ -105,4 +105,36 @@ describe("utilities.path", function()
       assert.equals("/other/file.txt", path_util.relative("/other/file.txt", "/base/dir"))
     end)
   end)
+
+  describe("flatten", function()
+    it("strips leading separator and escapes path separators", function()
+      assert.equals("home--user--file.txt", path_util.flatten("/home/user/file.txt"))
+    end)
+
+    it("uses double dash for separators", function()
+      assert.equals("home--user--docs", path_util.flatten("/home/user/docs"))
+    end)
+
+    it("normalizes path before flattening", function()
+      assert.equals("home--user--file.txt", path_util.flatten("/home/user/../user/file.txt"))
+    end)
+
+    it("handles path without leading separator", function()
+      assert.equals("relative--path.txt", path_util.flatten("relative/path.txt"))
+    end)
+
+    it("handles single component", function()
+      assert.equals("file.txt", path_util.flatten("file.txt"))
+    end)
+
+    it("preserves literal dashes in path components", function()
+      assert.equals("my-project--src--file.txt", path_util.flatten("/my-project/src/file.txt"))
+    end)
+
+    it("distinguishes paths that differ only in dash vs separator", function()
+      local a = path_util.flatten("a-b/c.chat")
+      local b = path_util.flatten("a/b-c.chat")
+      assert.not_equals(a, b)
+    end)
+  end)
 end)

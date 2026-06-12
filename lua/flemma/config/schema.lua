@@ -142,8 +142,15 @@ return s.object({
     show_spinner = s.boolean(true),
     cursor_after_result = s.enum({ "result", "stay", "next" }, "result"),
     modules = s.list(s.loadable(), {}),
-    truncate = s.object({
-      output_path_format = s.string("${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"),
+    store = s.object({
+      path_format = s.string("$chat"),
+      unnamed_path_format = s.string("${TMPDIR:-/tmp}/flemma/unnamed-{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"),
+      materialize = s.boolean(false),
+      preview = s.object({
+        lines = s.number(10),
+        bytes = s.number(2048),
+      }),
+      backup = s.union(s.string("version"), s.literal(false)),
     }),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)
@@ -403,6 +410,7 @@ return s.object({
       rw_paths = s.list(s.string(), {
         "urn:flemma:cwd",
         "urn:flemma:buffer:path",
+        "urn:flemma:store",
         "/tmp",
         "${TMPDIR:-/tmp}",
         "${XDG_CACHE_HOME:-~/.cache}",
