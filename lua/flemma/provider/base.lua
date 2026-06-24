@@ -70,9 +70,14 @@ Capabilities contract (registered via `registry.register`)
 - `outputs_thinking` — provider streams thinking content into the buffer.
 - `output_has_thoughts` — whether `output_tokens` already includes thinking
   tokens for cost calculation (default `false`).
+- `close_on_complete` — terminate the HTTP connection after `on_response_complete`
+  fires (default `true`). Backends that leave SSE streams open after the terminal
+  event benefit automatically; providers that require the connection to stay open
+  past completion can set this to `false`.
 - `min_thinking_budget` — minimum valid thinking budget value (omit if N/A).
 
-Missing boolean capabilities default to `false` at registration time.
+Missing boolean capabilities default to `false` at registration time, except
+`close_on_complete` which defaults to `true`.
 ]]
 
 local bridge = require("flemma.bridge")

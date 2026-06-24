@@ -19,6 +19,7 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field supports_thinking_budget boolean
 ---@field outputs_thinking boolean
 ---@field output_has_thoughts boolean Whether output_tokens already includes thinking tokens for cost calculation
+---@field close_on_complete? boolean Terminate the HTTP connection after response.completed (default true)
 ---@field min_thinking_budget? integer Minimum thinking budget value for this provider
 
 ---@class flemma.provider.ProviderEntry
@@ -158,6 +159,7 @@ function M.register(source, entry)
     supports_thinking_budget = false,
     outputs_thinking = false,
     output_has_thoughts = false,
+    close_on_complete = true,
   })
 
   providers[name] = {

@@ -1257,6 +1257,7 @@ function M._run_send_pipeline(bufnr, opts)
   local progress_timer =
     activity.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 }, ui.update_ui)
   local response_started = false
+  local response_complete_received = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -1334,6 +1335,8 @@ function M._run_send_pipeline(bufnr, opts)
     end,
 
     on_response_complete = function()
+      response_complete_received = true
+
       vim.schedule(function()
         local config = config_facade.get(bufnr)
 
@@ -1403,6 +1406,25 @@ function M._run_send_pipeline(bufnr, opts)
           cache_read_input_tokens = 0,
           cache_creation_input_tokens = 0,
         }
+
+        -- Terminate the HTTP connection now that the response is semantically
+        -- complete. Some backends (e.g., Codex) leave the SSE stream open after
+        -- the terminal event; without this, curl idles until the server closes
+        -- (often 20-30s). Providers can opt out via close_on_complete = false.
+        if
+          provider_capabilities
+          and provider_capabilities.close_on_complete ~= false
+          and buffer_state.current_request
+          and not buffer_state.request_cancelled
+        then
+          local job_to_stop = buffer_state.current_request
+          vim.defer_fn(function()
+            if buffer_state.current_request == job_to_stop and not buffer_state.request_cancelled then
+              log.debug("send_to_provider(): Terminating stream after response.completed (job " .. job_to_stop .. ")")
+              pcall(vim.fn.jobstop, job_to_stop)
+            end
+          end, 200)
+        end
       end)
     end,
 
@@ -1544,6 +1566,9 @@ function M._run_send_pipeline(bufnr, opts)
     end,
 
     on_request_complete = function(code)
+      -- When we terminated curl after response.completed, treat any exit code
+      -- as success — the response content was already fully received.
+      local effective_code = response_complete_received and 0 or code
       writequeue.schedule(bufnr, function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
@@ -1568,8 +1593,8 @@ function M._run_send_pipeline(bufnr, opts)
         -- Ensure buffer is modifiable for final operations and user interaction
         state.unlock_buffer(bufnr)
 
-        if code == 0 then
-          -- cURL request completed successfully (exit code 0)
+        if effective_code == 0 then
+          -- cURL request completed successfully (exit code 0, or response.completed received)
           if buffer_state.api_error_occurred then
             log.debug(
               "send_to_provider(): on_request_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
@@ -1659,25 +1684,28 @@ function M._run_send_pipeline(bufnr, opts)
 
           hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = latest_request })
         else
-          -- cURL request failed (exit code ~= 0)
+          -- cURL request failed (exit code ~= 0 and no response.completed received)
           -- Buffer is already set to modifiable = true
           activity.cleanup_progress(bufnr, ui.update_ui)
 
           local error_msg
-          if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
-            error_msg = string.format("cURL could not resolve host (exit code %d). Check network or hostname.", code)
-          elseif code == 7 then -- CURLE_COULDNT_CONNECT
+          if effective_code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
             error_msg =
-              string.format("cURL could not connect to host (exit code %d). Check network or if the host is up.", code)
-          elseif code == 28 then -- cURL timeout error
+              string.format("cURL could not resolve host (exit code %d). Check network or hostname.", effective_code)
+          elseif effective_code == 7 then -- CURLE_COULDNT_CONNECT
+            error_msg = string.format(
+              "cURL could not connect to host (exit code %d). Check network or if the host is up.",
+              effective_code
+            )
+          elseif effective_code == 28 then -- cURL timeout error
             local timeout_value = effective_timeout -- Captured before async callback
             error_msg = string.format(
               "cURL request timed out (exit code %d). Timeout is %s seconds.",
-              code,
+              effective_code,
               tostring(timeout_value)
             )
           else -- Other cURL errors
-            error_msg = string.format("cURL request failed (exit code %d).", code)
+            error_msg = string.format("cURL request failed (exit code %d).", effective_code)
           end
 
           if log.is_enabled() then
