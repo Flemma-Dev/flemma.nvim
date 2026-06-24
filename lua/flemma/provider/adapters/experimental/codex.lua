@@ -6,10 +6,7 @@
 ---
 --- Metatable chain: codex -> openai_responses -> base
 local base = require("flemma.provider.base")
-local log = require("flemma.logging")
-local normalize = require("flemma.provider.normalize")
 local openai_responses = require("flemma.provider.openai_responses")
-local provider_registry = require("flemma.provider.registry")
 local secrets = require("flemma.secrets")
 
 ---@class flemma.provider.Codex : flemma.provider.OpenAIResponses
@@ -30,12 +27,6 @@ M.metadata = {
     output_has_thoughts = true,
   },
 }
-
----@param model_info? flemma.models.ModelInfo
----@return boolean
-local function supports_reasoning_effort(model_info)
-  return model_info ~= nil and model_info.meta ~= nil and model_info.meta.reasoning_effort == true
-end
 
 ---@param params flemma.provider.Parameters
 ---@return flemma.provider.Codex
@@ -68,23 +59,7 @@ function M._apply_system(_self, body, _input_items, system_text)
   body.instructions = system_text
 end
 
---- Add reasoning configuration for Codex models.
----@param self flemma.provider.Codex
----@param body table<string, any>
-function M._apply_reasoning(self, body)
-  local model_info = provider_registry.get_model_info("codex", self.parameters.model)
-  local supports = supports_reasoning_effort(model_info)
-  local thinking = supports and normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
-    or { enabled = false }
-
-  if supports and thinking.enabled and thinking.effort then
-    body.reasoning = { effort = thinking.effort }
-    body.include = { "reasoning.encrypted_content" }
-    log.debug("codex._apply_reasoning: reasoning.effort: " .. thinking.effort)
-  elseif supports and not thinking.enabled and thinking.explicit then
-    body.reasoning = { effort = "none" }
-  end
-end
+--- Reasoning configuration is inherited from openai_responses._apply_reasoning.
 
 --- Add Codex-specific body fields and remove unsupported parameters.
 --- The ChatGPT backend does not accept max_output_tokens or temperature

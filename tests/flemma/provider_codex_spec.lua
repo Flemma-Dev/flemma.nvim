@@ -1,11 +1,18 @@
 describe("Codex Provider", function()
   local codex
   local make_prompt = require("tests.utilities.prompt").make_prompt
+  local registry = require("flemma.provider.registry")
 
   before_each(function()
     package.loaded["flemma.provider.adapters.experimental.codex"] = nil
     package.loaded["flemma.provider.openai_responses"] = nil
     codex = require("flemma.provider.adapters.experimental.codex")
+    -- Register codex models so _apply_reasoning can look up model capabilities.
+    -- Codex is experimental (not in BUILTIN_PROVIDER_MODULES), so models aren't
+    -- loaded by default.
+    if not registry.has("codex") then
+      registry.register("flemma.provider.adapters.experimental.codex")
+    end
   end)
 
   after_each(function()
@@ -103,6 +110,27 @@ describe("Codex Provider", function()
       local provider = codex.new({ model = "gpt-5.5", max_tokens = 4096 })
       local body = provider:build_request(make_prompt({ { type = "You", content = "Hi" } }))
       assert.are.same({ "reasoning.encrypted_content" }, body.include)
+    end)
+
+    it("sends reasoning.summary defaulting to auto", function()
+      local provider =
+        codex.new({ model = "gpt-5.5", max_tokens = 4096, thinking = { level = "low", foreign = "preserve" } })
+      local body = provider:build_request(make_prompt({ { type = "You", content = "Hi" } }))
+      assert.is_not_nil(body.reasoning)
+      assert.are.equal("auto", body.reasoning.summary)
+      assert.are.equal("low", body.reasoning.effort)
+    end)
+
+    it("respects reasoning_summary parameter override", function()
+      local provider = codex.new({
+        model = "gpt-5.5",
+        max_tokens = 4096,
+        thinking = { level = "high", foreign = "preserve" },
+        reasoning_summary = "detailed",
+      })
+      local body = provider:build_request(make_prompt({ { type = "You", content = "Hi" } }))
+      assert.is_not_nil(body.reasoning)
+      assert.are.equal("detailed", body.reasoning.summary)
     end)
   end)
 

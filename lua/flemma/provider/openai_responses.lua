@@ -8,7 +8,9 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local normalize = require("flemma.provider.normalize")
 local notify = require("flemma.notify")
+local provider_registry = require("flemma.provider.registry")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 
@@ -62,11 +64,35 @@ function M._max_tokens_key(self)
   return "max_output_tokens"
 end
 
+---@param model_info? flemma.models.ModelInfo
+---@return boolean
+local function supports_reasoning_effort(model_info)
+  return model_info ~= nil and model_info.meta ~= nil and model_info.meta.reasoning_effort == true
+end
+
 --- Apply reasoning configuration to the request body.
---- Default: no-op. Concrete providers override based on model capabilities.
+--- Default implementation covers the standard Responses API reasoning shape
+--- (effort + summary + include). Concrete providers may override for
+--- provider-specific behavior (e.g., extra logging, diagnostics).
 ---@param self flemma.provider.OpenAIResponses
----@param _body table<string, any> The request body (mutated in place)
-function M._apply_reasoning(self, _body) end
+---@param body table<string, any> The request body (mutated in place)
+function M._apply_reasoning(self, body)
+  local provider_name = self.metadata.name
+  local model_info = provider_registry.get_model_info(provider_name, self.parameters.model)
+  local supports = supports_reasoning_effort(model_info)
+  local thinking = supports and normalize.resolve_thinking(self.parameters, self.metadata.capabilities, model_info)
+    or { enabled = false }
+
+  if supports and thinking.enabled and thinking.effort then
+    local reasoning_summary = self.parameters.reasoning_summary or "auto"
+    body.reasoning = { effort = thinking.effort, summary = reasoning_summary }
+    body.include = { "reasoning.encrypted_content" }
+    log.debug(provider_name .. "._apply_reasoning: effort=" .. thinking.effort .. " summary=" .. reasoning_summary)
+  elseif supports and not thinking.enabled and thinking.explicit then
+    body.reasoning = { effort = "none" }
+    log.debug(provider_name .. "._apply_reasoning: thinking disabled, sending effort=none")
+  end
+end
 
 --- Apply provider-specific body fields after core construction.
 --- Default: no-op. OpenAI overrides for prompt caching; Codex for store/text.

@@ -5,10 +5,7 @@
 ---
 --- Metatable chain: openai -> openai_responses -> base
 local base = require("flemma.provider.base")
-local log = require("flemma.logging")
-local normalize = require("flemma.provider.normalize")
 local openai_responses = require("flemma.provider.openai_responses")
-local provider_registry = require("flemma.provider.registry")
 local s = require("flemma.schema")
 
 ---@class flemma.provider.OpenAI : flemma.provider.OpenAIResponses
@@ -17,12 +14,6 @@ local M = {}
 setmetatable(M, { __index = openai_responses })
 
 local PHASE_DIAGNOSTIC_PATH = "openai.assistant_message_phases"
-
----@param model_info? flemma.models.ModelInfo
----@return boolean
-local function supports_reasoning_effort(model_info)
-  return model_info ~= nil and model_info.meta ~= nil and model_info.meta.reasoning_effort == true
-end
 
 ---@type flemma.provider.Metadata
 M.metadata = {
@@ -82,44 +73,8 @@ function M._init_build(self)
   self:_diagnostics_start(phase_labeling_enabled(self))
 end
 
---- Place system prompt as a developer-role input item (standard OpenAI behavior).
---- Uses the default from openai_responses (prepend developer-role item).
---- No override needed — inherited _apply_system works for OpenAI.
-
---- Add reasoning configuration for OpenAI models.
----@param self flemma.provider.OpenAI
----@param body table<string, any>
-function M._apply_reasoning(self, body)
-  local model_info = provider_registry.get_model_info("openai", self.parameters.model)
-  local supports = supports_reasoning_effort(model_info)
-  local thinking = supports and normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
-    or { enabled = false }
-
-  if supports and thinking.enabled and thinking.effort then
-    local reasoning_summary = self.parameters.reasoning_summary or "auto"
-    body.reasoning = {
-      effort = thinking.effort,
-      summary = reasoning_summary,
-    }
-    body.include = { "reasoning.encrypted_content" }
-    log.debug(
-      "openai.build_request: Using max_output_tokens: "
-        .. tostring(self.parameters.max_tokens)
-        .. " and reasoning.effort: "
-        .. thinking.effort
-    )
-  elseif supports and not thinking.enabled and thinking.explicit then
-    body.reasoning = { effort = "none" }
-    log.debug("openai.build_request: Thinking disabled, sending reasoning.effort: none")
-  else
-    log.debug(
-      "openai.build_request: Using max_output_tokens: "
-        .. tostring(self.parameters.max_tokens)
-        .. " and temperature: "
-        .. tostring(self.parameters.temperature)
-    )
-  end
-end
+--- System prompt and reasoning configuration are inherited from openai_responses.
+--- No override needed — inherited _apply_system and _apply_reasoning work for OpenAI.
 
 --- Add prompt caching configuration for OpenAI.
 ---@param self flemma.provider.OpenAI
