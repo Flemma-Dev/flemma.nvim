@@ -6,7 +6,10 @@
 ---
 --- Metatable chain: codex -> openai_responses -> base
 local base = require("flemma.provider.base")
+local bridge = require("flemma.bridge")
+local json = require("flemma.utilities.json")
 local openai_responses = require("flemma.provider.openai_responses")
+local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
 
 ---@class flemma.provider.Codex : flemma.provider.OpenAIResponses
@@ -118,6 +121,64 @@ function M.is_auth_error(_self, message)
     return true
   end
   return false
+end
+
+-- ============================================================================
+-- Usage estimation
+-- ============================================================================
+
+--- Estimate input tokens locally without an API call.
+---
+--- The ChatGPT backend has no count_tokens / input_tokens endpoint — the
+--- Platform API equivalent (api.openai.com/v1/responses/input_tokens) requires
+--- an API key, not a subscription OAuth token.
+---
+--- Both OpenAI's own Codex CLI (Rust, truncate.rs) and Pi (TypeScript,
+--- compaction.ts) handle this the same way: divide the serialised payload
+--- size by 4.  Codex uses byte length, Pi uses character length — for the
+--- UTF-8 / ASCII mix in a typical prompt they converge.  Neither ships a
+--- local tokenizer.  ¯\_(ツ)_/¯
+---
+--- After the first real response the prefetch layer seeds from the server's
+--- actual usage.input_tokens, so the heuristic only covers the gap before
+--- the first round-trip and between edits.
+---@param bufnr integer
+---@param on_result flemma.usage.EstimateCallback
+function M.try_estimate_usage(bufnr, on_result)
+  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(bufnr)
+  if failure then
+    on_result({ err = failure.message })
+    return
+  end
+  ---@cast prompt flemma.pipeline.Prompt
+  ---@cast context flemma.Context
+  ---@cast provider flemma.provider.Base
+
+  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
+  if not build_ok then
+    if readiness.is_suspense(body) then
+      error(body)
+    end
+    on_result({ err = "Build request failed: " .. tostring(body) })
+    return
+  end
+
+  local encode_ok, payload = pcall(json.encode, body)
+  if not encode_ok or not payload then
+    on_result({ err = "JSON encode failed" })
+    return
+  end
+
+  local tokens = math.ceil(#payload / 4)
+  local model = provider.parameters.model
+
+  on_result({
+    response = {
+      tokens = tokens,
+      cache_key = "codex:" .. model,
+      model = model,
+    },
+  })
 end
 
 secrets.register("flemma.secrets.resolvers.chatgpt")
