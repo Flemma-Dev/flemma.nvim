@@ -41,7 +41,6 @@ local PRIORITY = {
   SESSION_INPUT_TOKENS = 35,
   SESSION_OUTPUT_TOKENS = 35,
   SESSION_REQUEST_COUNT = 20,
-  PROVIDER_NAME = 10,
 }
 
 --- Format a number with comma separators for thousands
@@ -78,18 +77,12 @@ function M.build_segments(request, session)
   if request then
     local identity_items = {} ---@type flemma.ui.bar.layout.Item[]
 
+    local provider_prefix = request.provider .. "/"
     table.insert(identity_items, {
       key = "model_name",
-      text = request.model,
+      text = provider_prefix .. request.model,
       priority = PRIORITY.MODEL_NAME,
-      highlight = { group = "FlemmaUsageBar" },
-    })
-
-    table.insert(identity_items, {
-      key = "provider_name",
-      text = "(" .. request.provider .. ")",
-      priority = PRIORITY.PROVIDER_NAME,
-      highlight = { group = "FlemmaUsageBarMuted" },
+      highlight = { group = "FlemmaUsageBarMuted", length = #provider_prefix },
     })
 
     table.insert(segments, {

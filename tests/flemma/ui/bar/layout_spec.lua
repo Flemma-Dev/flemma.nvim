@@ -12,8 +12,7 @@ describe("flemma.ui.bar.layout", function()
         {
           key = "identity",
           items = {
-            { key = "model_name", text = "gpt-4o", priority = 90 },
-            { key = "provider_name", text = "(openai)", priority = 70 },
+            { key = "model_name", text = "openai/gpt-4o", priority = 90 },
           },
         },
         {
@@ -27,8 +26,7 @@ describe("flemma.ui.bar.layout", function()
 
       local widths = layout.measure_item_widths(segments)
 
-      assert.are.equal(6, widths.model_name) -- "gpt-4o"
-      assert.are.equal(8, widths.provider_name) -- "(openai)"
+      assert.are.equal(13, widths.model_name) -- "openai/gpt-4o"
       assert.are.equal(6, widths.input_tokens) -- "1,611↑"
       assert.are.equal(4, widths.output_tokens) -- "200↓"
     end)
@@ -40,8 +38,7 @@ describe("flemma.ui.bar.layout", function()
         {
           key = "identity",
           items = {
-            { key = "model_name", text = "gpt-4o", priority = 90 },
-            { key = "provider_name", text = "(openai)", priority = 70 },
+            { key = "model_name", text = "openai/gpt-4o", priority = 90 },
           },
         },
       }
@@ -49,7 +46,7 @@ describe("flemma.ui.bar.layout", function()
       local result = layout.render(segments, 120)
 
       assert.is_not_nil(result)
-      assert.has_match("gpt%-4o  %(openai%)", result.text)
+      assert.has_match("openai/gpt%-4o", result.text)
     end)
 
     it("should render multiple segments with separators", function()
@@ -57,8 +54,7 @@ describe("flemma.ui.bar.layout", function()
         {
           key = "identity",
           items = {
-            { key = "model_name", text = "gpt-4o", priority = 90 },
-            { key = "provider_name", text = "(openai)", priority = 70 },
+            { key = "model_name", text = "openai/gpt-4o", priority = 90 },
           },
         },
         {
@@ -73,7 +69,7 @@ describe("flemma.ui.bar.layout", function()
       local result = layout.render(segments, 120)
 
       -- Should contain separator between segments
-      assert.has_match("gpt%-4o  %(openai%)  \xE2\x94\x82  %$0%.01  Cache 75%%", result.text)
+      assert.has_match("openai/gpt%-4o  \xE2\x94\x82  %$0%.01  Cache 75%%", result.text)
     end)
 
     it("should drop lowest-priority items when width is scarce", function()
@@ -81,25 +77,25 @@ describe("flemma.ui.bar.layout", function()
         {
           key = "identity",
           items = {
-            { key = "model_name", text = "gpt-4o", priority = 90 },
-            { key = "provider_name", text = "(openai)", priority = 70 },
+            { key = "model_name", text = "openai/gpt-4o", priority = 90 },
           },
         },
         {
           key = "request",
           items = {
             { key = "request_cost", text = "$0.01", priority = 80 },
+            { key = "low_pri_item", text = "extra", priority = 70 },
           },
         },
       }
 
-      -- Width too small for all items: prefix (3) + model (6) + sep (3) + cost (5) + space (1) + provider (8) = 26
-      -- Drop provider (priority 70) first
-      local result = layout.render(segments, 19)
+      -- Width too small for all items: prefix(3) + model(13) + sep(3) + cost(5) + space(1) + extra(5) = 30
+      -- Drop low_pri_item (priority 70) first
+      local result = layout.render(segments, 26)
 
-      assert.has_match("gpt%-4o", result.text)
+      assert.has_match("openai/gpt%-4o", result.text)
       assert.has_match("%$0%.01", result.text)
-      assert.has_no_match("openai", result.text)
+      assert.has_no_match("extra", result.text)
     end)
 
     it("should treat equal-priority items as a group", function()
@@ -502,8 +498,7 @@ describe("flemma.ui.bar.layout", function()
         {
           key = "identity",
           items = {
-            { key = "model_name", text = "gpt-4o", priority = 90 },
-            { key = "provider_name", text = "(openai)", priority = 10 },
+            { key = "model_name", text = "openai/gpt-4o", priority = 90 },
           },
         },
         {
@@ -517,7 +512,7 @@ describe("flemma.ui.bar.layout", function()
       local result = layout.render(segments, 120)
 
       -- Wide width: relaxed spacing with double spaces and wide separator
-      assert.has_match("gpt%-4o  %(openai%)  \xE2\x94\x82  %$0%.01", result.text)
+      assert.has_match("openai/gpt%-4o  \xE2\x94\x82  %$0%.01", result.text)
     end)
 
     it("should fall back to normal spacing when width is tight", function()

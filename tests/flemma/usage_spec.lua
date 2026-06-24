@@ -154,7 +154,7 @@ describe("flemma.usage", function()
       end
 
       assert.is_not_nil(model_item)
-      assert.are.equal("gpt-4o", model_item.text)
+      assert.are.equal("openai/gpt-4o", model_item.text)
       assert.are.equal(110, model_item.priority)
     end)
 
