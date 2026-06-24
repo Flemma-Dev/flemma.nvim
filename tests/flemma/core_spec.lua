@@ -212,6 +212,52 @@ describe(":Flemma send command", function()
     assert.equals(unnamed_bufnr, unnamed_request.bufnr, "Unnamed buffer request should store bufnr")
   end)
 
+  it("records resolved provider name in session when using a preset", function()
+    -- Regression: config_facade.get(bufnr).provider returns the *default* provider
+    -- (e.g., "anthropic") even when a preset resolves to a different one. Session
+    -- recording must use the resolved provider from the actual provider instance.
+
+    -- Register a preset via the presets module (before_each already ran flemma.setup)
+    local presets = require("flemma.presets")
+    presets.setup({ ["$test-openai"] = { provider = "openai", model = "o3" } })
+
+    local default_config = require("flemma.config").materialize()
+    assert.is_not.equals("openai", default_config.provider, "Test assumes default is not OpenAI")
+
+    -- Reset session so we only see requests from this test
+    local session = state.get_session()
+    session:reset()
+
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_name(bufnr, vim.fn.tempname() .. ".chat")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.model = "$test-openai"',
+      "```",
+      "@You:",
+      "Hello via preset",
+    })
+
+    vim.cmd("Flemma send")
+    vim.wait(2000, function()
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(lines) do
+        if line == "@You:" and i > 6 then
+          return true
+        end
+      end
+      return false
+    end)
+
+    local request = session:get_latest_request()
+    assert.is_not_nil(request, "Session should record a request via preset")
+    assert.equals("openai", request.provider, "Session should record resolved provider, not config default")
+    assert.equals("o3", request.model, "Session should record resolved model from preset")
+  end)
+
   it("handles a successful streaming response from a fixture", function()
     -- Arrange: Switch to the OpenAI provider and model that matches the fixture
     core.switch_provider("openai", "o3", {})

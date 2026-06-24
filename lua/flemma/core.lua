@@ -1235,7 +1235,7 @@ function M._run_send_pipeline(bufnr, opts)
   local headers = prep_result.headers
   local request_body = prep_result.request_body
   local trailing_keys = prep_result.trailing_keys
-  local request_provider_name = config_facade.get(bufnr).provider
+  local request_provider_name = current_provider.metadata.name
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
@@ -1338,8 +1338,6 @@ function M._run_send_pipeline(bufnr, opts)
       response_complete_received = true
 
       vim.schedule(function()
-        local config = config_facade.get(bufnr)
-
         -- Get tokens from in-flight usage
         local input_tokens = buffer_state.inflight_usage.input_tokens or 0
         local output_tokens = buffer_state.inflight_usage.output_tokens or 0
@@ -1353,15 +1351,18 @@ function M._run_send_pipeline(bufnr, opts)
           filepath = path_util.realpath(bufname)
         end
 
-        -- Add request to session with pricing snapshot
-        local pricing_model_info = registry.get_model_info(config.provider, config.model)
+        -- Add request to session with pricing snapshot.
+        -- Use request_provider_name (from current_provider.metadata.name) rather
+        -- than config.provider — preset resolution can change the effective provider.
+        local request_model = current_provider.parameters.model
+        local pricing_model_info = registry.get_model_info(request_provider_name, request_model)
         local pricing_info = pricing_model_info and pricing_model_info.pricing
 
         if pricing_info then
           local session = state.get_session()
           session:add_request({
-            provider = config.provider,
-            model = config.model,
+            provider = request_provider_name,
+            model = request_model,
             input_tokens = input_tokens,
             output_tokens = output_tokens,
             thoughts_tokens = thoughts_tokens,
@@ -1383,6 +1384,7 @@ function M._run_send_pipeline(bufnr, opts)
 
         -- Diagnostics: publish expectations for the next request only after
         -- this response completes.
+        local config = config_facade.get(bufnr)
         if config.diagnostics and config.diagnostics.enabled then
           local response_extra = current_provider._response_buffer and current_provider._response_buffer.extra
           local response_diagnostics = response_extra and response_extra.diagnostics
