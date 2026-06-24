@@ -433,16 +433,21 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     notify_level = vim.log.levels.WARN
   end
 
-  -- High-cost warning
-  local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
-  local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
-  if
-    model_entry
-    and model_entry.pricing
-    and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
-  then
-    table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
-    notify_level = vim.log.levels.WARN
+  -- Billing / cost warning
+  local billing = registry.get_metadata(global_config.provider, "billing")
+  if billing == "subscription" then
+    table.insert(lines, "  ⓘ Flemma draws from your subscription usage limit")
+  else
+    local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
+    local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
+    if
+      model_entry
+      and model_entry.pricing
+      and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
+    then
+      table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
+      notify_level = vim.log.levels.WARN
+    end
   end
 
   -- Frontmatter override notice (provider, model, or both)

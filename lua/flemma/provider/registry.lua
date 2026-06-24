@@ -23,9 +23,7 @@ local registry_utils = require("flemma.utilities.registry")
 
 ---@class flemma.provider.ProviderEntry
 ---@field module string
----@field capabilities flemma.provider.Capabilities
----@field display_name string
----@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
+---@field metadata flemma.provider.Metadata
 
 ---@class flemma.provider.Metadata
 ---@field name string Provider identifier (e.g., "anthropic")
@@ -33,6 +31,7 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field capabilities flemma.provider.Capabilities
 ---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 ---@field models? string[] Module paths for model data (loaded via flemma.loader)
+---@field billing? "usage"|"subscription"
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
@@ -41,6 +40,7 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
+---@field billing? "usage"|"subscription"
 
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
@@ -126,11 +126,21 @@ function M.register(source, entry)
   ---@type string[]|nil
   local model_modules
 
+  ---@type flemma.provider.Metadata
+  local metadata
+
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
     registry_utils.validate_name(name, "provider")
     definition = entry
+    metadata = {
+      name = name,
+      display_name = definition.display_name,
+      capabilities = definition.capabilities or {},
+      config_schema = definition.config_schema,
+      billing = definition.billing,
+    }
   else
     -- Single-arg form: register("module.path") — load module and read metadata
     local mod = loader.load(source)
@@ -139,15 +149,11 @@ function M.register(source, entry)
     end
     name = mod.metadata.name
     model_modules = mod.metadata.models
-    definition = {
-      module = source,
-      capabilities = mod.metadata.capabilities,
-      display_name = mod.metadata.display_name,
-      config_schema = mod.metadata.config_schema,
-    }
+    definition = { module = source }
+    metadata = vim.deepcopy(mod.metadata)
   end
 
-  local capabilities = vim.tbl_extend("keep", definition.capabilities or {}, {
+  metadata.capabilities = vim.tbl_extend("keep", metadata.capabilities or {}, {
     supports_reasoning = false,
     supports_thinking_budget = false,
     outputs_thinking = false,
@@ -156,9 +162,7 @@ function M.register(source, entry)
 
   providers[name] = {
     module = definition.module,
-    capabilities = capabilities,
-    display_name = definition.display_name,
-    config_schema = definition.config_schema,
+    metadata = metadata,
   }
 
   -- Load model modules declared in provider metadata
@@ -178,8 +182,8 @@ function M.register(source, entry)
   end
 
   -- Materialize config_schema defaults into the DEFAULTS layer
-  if definition.config_schema then
-    config_facade.register_module_defaults("parameters", name, definition.config_schema)
+  if metadata.config_schema then
+    config_facade.register_module_defaults("parameters", name, metadata.config_schema)
   end
 end
 
@@ -282,7 +286,7 @@ end
 function M.get_capabilities(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.capabilities or nil
+  return provider and provider.metadata.capabilities or nil
 end
 
 ---Get provider display name
@@ -291,7 +295,7 @@ end
 function M.get_display_name(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.display_name or nil
+  return provider and provider.metadata.display_name or nil
 end
 
 ---Get provider config schema for DISCOVER resolution
@@ -300,7 +304,20 @@ end
 function M.get_config_schema(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.config_schema or nil
+  return provider and provider.metadata.config_schema or nil
+end
+
+---Get an arbitrary metadata field for a provider
+---@param provider_name string The provider identifier
+---@param field string The metadata field name
+---@return any
+function M.get_metadata(provider_name, field)
+  local resolved = M.resolve(provider_name)
+  local provider = providers[resolved]
+  if not provider or not provider.metadata then
+    return nil
+  end
+  return provider.metadata[field]
 end
 
 --------------------------------------------------------------------------------

@@ -21,6 +21,7 @@ setmetatable(M, { __index = openai_responses })
 M.metadata = {
   name = "codex",
   display_name = "Codex (ChatGPT)",
+  billing = "subscription",
   models = { "flemma.models.codex" },
   capabilities = {
     supports_reasoning = true,
