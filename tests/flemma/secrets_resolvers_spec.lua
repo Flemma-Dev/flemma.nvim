@@ -647,19 +647,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         end)
       end
 
-      local diags = {}
-      local ctx = {
-        get_config = function(_self)
-          return nil
-        end,
-        diagnostic = function(_self, msg)
-          table.insert(diags, msg)
-        end,
-        get_diagnostics = function(_self)
-          return diags
-        end,
-      }
-
+      local ctx = make_ctx(nil)
       local done = false
       gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function()
         done = true
@@ -668,9 +656,93 @@ describe("flemma.secrets.resolvers.gcloud", function()
       vim.wait(200, function()
         return done
       end)
+      local diags = ctx:get_diagnostics()
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("auth failed"))
       assert.truthy(diags[1]:match("exit code 2"))
+    end)
+
+    it("emits expired diagnostic when gcloud reports reauthentication needed", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({
+            code = 1,
+            stdout = "",
+            stderr = "ERROR: (gcloud.auth.print-access-token) There was a problem refreshing your current auth tokens: Reauthentication failed. cannot prompt during non-interactive execution.\n\nPlease run:\n\n  $ gcloud auth login\n",
+          })
+        end)
+      end
+
+      local ctx = make_ctx(nil)
+      local done = false
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function()
+        done = true
+      end)
+
+      vim.wait(200, function()
+        return done
+      end)
+      local diags = ctx:get_diagnostics()
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("credentials expired"))
+      assert.truthy(diags[1]:match("gcloud auth login"))
+    end)
+
+    it("emits expired diagnostic when gcloud reports refresh failure", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({
+            code = 1,
+            stdout = "",
+            stderr = "ERROR: (gcloud.auth.print-access-token) could not refresh access token: invalid_grant: Token has been expired or revoked.\n",
+          })
+        end)
+      end
+
+      local ctx = make_ctx(nil)
+      local done = false
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function()
+        done = true
+      end)
+
+      vim.wait(200, function()
+        return done
+      end)
+      local diags = ctx:get_diagnostics()
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("credentials expired"))
+      assert.truthy(diags[1]:match("gcloud auth login"))
+    end)
+
+    it("includes stderr first line in generic failure diagnostic", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({
+            code = 2,
+            stdout = "",
+            stderr = "ERROR: (gcloud.auth.print-access-token) some other problem\nsecond line ignored",
+          })
+        end)
+      end
+
+      local ctx = make_ctx(nil)
+      local done = false
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function()
+        done = true
+      end)
+
+      vim.wait(200, function()
+        return done
+      end)
+      local diags = ctx:get_diagnostics()
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("auth failed"))
+      assert.truthy(diags[1]:match("exit code 2"))
+      assert.truthy(diags[1]:match("some other problem"))
+      assert.is_falsy(diags[1]:match("second line"))
     end)
 
     it("emits diagnostic when token is empty", function()

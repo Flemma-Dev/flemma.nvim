@@ -43,7 +43,12 @@ local function run_gcloud_async(path, env, ctx, callback)
   vim.system({ path, "auth", "print-access-token" }, opts, function(result)
     vim.schedule(function()
       if result.code ~= 0 then
-        ctx:diagnostic("auth failed (exit code " .. tostring(result.code) .. ")")
+        local stderr = (result.stderr or ""):gsub("%s+$", "")
+        if stderr:find("Reauthentication") or stderr:find("refresh") then
+          ctx:diagnostic("credentials expired (run `gcloud auth login` to re-authenticate)")
+        else
+          ctx:diagnostic("auth failed (exit code " .. tostring(result.code) .. "): " .. (stderr:match("[^\n]+") or ""))
+        end
         callback(nil)
         return
       end
