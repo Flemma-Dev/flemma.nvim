@@ -62,7 +62,7 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 
 **Background jobs** allow tools to run asynchronously. The executor assigns job IDs, routes completions to a queue, and supports mid-flight backgrounding (promoting a running foreground tool to background). Job completions drain at conversation idle via `core.drain_job_completions()`. The `flemma:jobs:status` harness tool lets the LLM query job state, cross-checked against the AST for buffer truth. The `background` parameter is auto-injected into async tool schemas.
 
-**Gotcha:** Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`. The walker prefers it over sync `:resolve`. A resolver that does `vim.system(cmd):wait()` in sync `:resolve` will block the editor. Additionally, `provider:get_api_key()` returns `string|nil` only — failures flow through suspense boundaries, not return-value diagnostics.
+**Gotcha:** Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`. The walker prefers it over sync `:resolve`. A resolver that does `vim.system(cmd):wait()` in sync `:resolve` will block the editor. Additionally, `provider:resolve_credential()` returns `flemma.secrets.Result|nil` only — failures flow through suspense boundaries, not return-value diagnostics.
 
 ### Output: Buffer Writing and UI
 
@@ -137,7 +137,7 @@ All `require()` calls go at the top of the file, before any function definition.
 ### Naming
 
 - **Full, descriptive names** — never abbreviate (`definition` not `def_entry`, `provider_name` not `prov_name`)
-- Functions: verb-based (`build_request()`, `parse_response()`, `get_api_key()`)
+- Functions: verb-based (`build_request()`, `parse_response()`, `resolve_credential()`)
 - Constants: `UPPER_SNAKE_CASE` at module top
 - Types/classes: `PascalCase` with dot-namespacing following file path (`flemma.ast.DocumentNode`)
 - Private functions: `local function name()` (not exported on `M`)

@@ -183,11 +183,17 @@ function M.register(source, entry)
   end
 end
 
----Initialize built-in providers (called during setup)
+---Initialize built-in providers and load user-configured modules (called during setup)
 function M.setup()
   for _, module_path in ipairs(BUILTIN_PROVIDER_MODULES) do
     local mod = loader.load(module_path)
     if mod.metadata and not providers[mod.metadata.name] then
+      M.register(module_path)
+    end
+  end
+  local resolved_config = config_facade.get()
+  if resolved_config.providers and resolved_config.providers.modules then
+    for _, module_path in ipairs(resolved_config.providers.modules) do
       M.register(module_path)
     end
   end
@@ -399,18 +405,26 @@ function M.extract_switch_arguments(parsed)
     info.has_explicit_model = true
   end
 
+  local slash_consumed_model = false
+
   if not info.provider and info.positionals[1] then
-    info.provider = info.positionals[1]
+    local model_from_split, provider_from_split = M.split_provider_model(info.positionals[1])
+    if provider_from_split then
+      info.provider = provider_from_split
+      info.model = model_from_split
+      slash_consumed_model = true
+    else
+      info.provider = info.positionals[1]
+    end
   end
 
   if not info.model and info.positionals[2] then
     info.model = info.positionals[2]
   end
 
-  if #info.positionals > 2 then
-    for i = 3, #info.positionals do
-      info.extra_positionals[#info.extra_positionals + 1] = info.positionals[i]
-    end
+  local extra_start = slash_consumed_model and 2 or 3
+  for i = extra_start, #info.positionals do
+    info.extra_positionals[#info.extra_positionals + 1] = info.positionals[i]
   end
 
   for k, v in pairs(parsed) do
@@ -420,6 +434,29 @@ function M.extract_switch_arguments(parsed)
   end
 
   return info
+end
+
+---@param value string
+---@return string model
+---@return string|nil provider
+function M.split_provider_model(value)
+  local slash_pos = value:find("/", 1, true)
+  local space_pos = value:find(" ", 1, true)
+  local split_pos
+  if slash_pos and space_pos then
+    split_pos = math.min(slash_pos, space_pos)
+  else
+    split_pos = slash_pos or space_pos
+  end
+  if not split_pos then
+    return value, nil
+  end
+  local left = value:sub(1, split_pos - 1)
+  local right = value:sub(split_pos + 1)
+  if #left == 0 or #right == 0 then
+    return value, nil
+  end
+  return right, left
 end
 
 return M

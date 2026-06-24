@@ -417,7 +417,8 @@ end
 ---@param self flemma.provider.Anthropic
 ---@return string[]
 function M.get_request_headers(self)
-  local api_key = self:get_api_key()
+  local credential = self:resolve_credential()
+  local api_key = credential and credential.value
 
   return {
     "x-api-key: " .. api_key,
