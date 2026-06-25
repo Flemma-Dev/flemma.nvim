@@ -11,6 +11,7 @@ local readiness = require("flemma.readiness")
 local registry = require("flemma.provider.registry")
 local renderer = require("flemma.templating.renderer")
 local session = require("flemma.session")
+local str = require("flemma.utilities.string")
 local templating = require("flemma.templating")
 local tools = require("flemma.tools")
 
@@ -200,6 +201,55 @@ local function make_resolvers(config)
         end,
       },
     },
+
+    subscription = {
+      plan_name = function()
+        local request = session.get():get_latest_request()
+        if not request or not request.rate_limits then
+          return nil
+        end
+        return request.rate_limits.plan_name
+      end,
+      windows = function()
+        local request = session.get():get_latest_request()
+        if not request or not request.rate_limits then
+          return nil
+        end
+        return request.rate_limits.windows
+      end,
+      primary = {
+        used_percent = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 1 then
+            return nil
+          end
+          return request.rate_limits.windows[1].used_percent
+        end,
+        label = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 1 then
+            return nil
+          end
+          return str.format_duration(request.rate_limits.windows[1].window_seconds)
+        end,
+      },
+      secondary = {
+        used_percent = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 2 then
+            return nil
+          end
+          return request.rate_limits.windows[2].used_percent
+        end,
+        label = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 2 then
+            return nil
+          end
+          return str.format_duration(request.rate_limits.windows[2].window_seconds)
+        end,
+      },
+    },
   }
 end
 
@@ -257,6 +307,7 @@ local function build_env(config)
   env.session = vars.session
   env.last = vars.last
   env.buffer = vars.buffer
+  env.subscription = vars.subscription
   env.__expr_transform = escape_statusline_percent
 
   return env

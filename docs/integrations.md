@@ -92,6 +92,29 @@ The buffer estimate is resolver-driven: referencing `buffer.tokens.input` in the
 > [!NOTE]
 > For OpenAI, Flemma uses `POST /v1/responses/input_tokens`. OpenAI's docs and live probe responses observed during implementation did not expose cost, rate-limit, or quota metadata for that endpoint, so treat each estimate conservatively as a real API request that may count against account limits.
 
+**Subscription rate limits** (from the most recent request — subscription-based providers only):
+
+| Expression                            | Example   | Description                                                    |
+| ------------------------------------- | --------- | -------------------------------------------------------------- |
+| `subscription.plan_name`              | `Plus`    | Plan display name (`nil` for non-subscription providers)       |
+| `subscription.primary.used_percent`   | `2`       | Primary window usage (0-100), e.g., 5-hour window              |
+| `subscription.primary.label`          | `5h`      | Primary window duration as compact label                       |
+| `subscription.secondary.used_percent` | `0`       | Secondary window usage (0-100), e.g., 7-day window             |
+| `subscription.secondary.label`        | `7d`      | Secondary window duration as compact label                     |
+| `subscription.windows`                | _(table)_ | Raw ordered array of `{ used_percent, window_seconds }` tables |
+
+Subscription data arrives via HTTP response headers from providers like Codex (ChatGPT subscriptions). The resolvers return `nil` for non-subscription providers, so conditionals collapse cleanly:
+
+```lua
+format = [[
+  %#FlemmaStatusTextMuted#{{ provider.name }}/%*{{ model.name }}
+  {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
+  {%- if subscription.primary.used_percent then %} %#FlemmaStatusTextMuted#·%* %#FlemmaStatusTextMuted#{{ subscription.primary.label }}:%*{{ subscription.primary.used_percent }}%% %#FlemmaStatusTextMuted#{{ subscription.secondary.label }}:%*{{ subscription.secondary.used_percent }}%%{% end %}
+  {%- if session.cost then %} %#FlemmaStatusTextMuted#·%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
+]]
+-- Renders: codex/gpt-5.5 · 5h:2% 7d:0% · Σ3 $0.000
+```
+
 Session/request numeric values return `nil` when no requests have been made, so they work naturally with Lua conditionals.
 
 #### Syntax

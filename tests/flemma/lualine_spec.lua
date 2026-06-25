@@ -1010,6 +1010,160 @@ describe("Lualine component", function()
     end)
   end)
 
+  describe("subscription resolvers", function()
+    it("renders plan name from latest request rate limits", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{% if subscription.plan_name then %}{{ subscription.plan_name }}{% end %}",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Plus",
+          windows = {
+            { used_percent = 2, window_seconds = 18000, resets_at = 1782333276 },
+            { used_percent = 0, window_seconds = 604800, resets_at = 1782920076 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("Plus", status)
+    end)
+
+    it("renders primary window label and used percent", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{{ subscription.primary.label }}:{{ subscription.primary.used_percent }}%%",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Plus",
+          windows = {
+            { used_percent = 2, window_seconds = 18000 },
+            { used_percent = 0, window_seconds = 604800 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("5h:2%%", status)
+    end)
+
+    it("renders secondary window label and used percent", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{{ subscription.secondary.label }}:{{ subscription.secondary.used_percent }}%%",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Plus",
+          windows = {
+            { used_percent = 2, window_seconds = 18000 },
+            { used_percent = 0, window_seconds = 604800 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("7d:0%%", status)
+    end)
+
+    it("collapses subscription conditional when no rate limits", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{{ model.name }}{% if subscription.plan_name then %} {{ subscription.plan_name }}{% end %}",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("claude-sonnet-4-5", status)
+    end)
+
+    it("returns nil for secondary when only one window exists", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{% if subscription.secondary.label then %}yes{% else %}no{% end %}",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Pro",
+          windows = {
+            { used_percent = 50, window_seconds = 18000 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("no", status)
+    end)
+  end)
+
   describe("parameter changes via switch reflect in display", function()
     it("should reflect reasoning level from config facade", function()
       -- Start with base config: default thinking="high" applies

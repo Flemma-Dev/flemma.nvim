@@ -1377,6 +1377,7 @@ function M._run_send_pipeline(bufnr, opts)
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
             cache_read_price = pricing_info.cache_read,
             cache_write_price = pricing_info.cache_write,
+            rate_limits = current_provider:get_rate_limit_snapshot(),
           })
 
           latest_request = session:get_latest_request()

@@ -264,6 +264,14 @@ M.apply_syntax = function()
   h.coalesce(h.from("DiagnosticWarn"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticWarn"))
     :set("FlemmaUsageBarCacheBad")
 
+  -- Semantic quota highlights for subscription rate limit display
+  h.coalesce(h.from("DiagnosticOk"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticOk"))
+    :set("FlemmaUsageBarQuotaOk")
+  h.coalesce(h.from("DiagnosticWarn"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticWarn"))
+    :set("FlemmaUsageBarQuotaWarn")
+  h.coalesce(h.from("DiagnosticError"):contrast("fg", bar_base:pick("bg"), 4.5), h.link("DiagnosticError"))
+    :set("FlemmaUsageBarQuotaError")
+
   -- Progress bar highlight groups
   local progress_config = syntax_config.ui and syntax_config.ui.progress or { highlight = "StatusLine" }
   local progress_base = build_bar_base(progress_config.highlight)

@@ -7,10 +7,12 @@
 --- Metatable chain: codex -> openai_responses -> base
 local base = require("flemma.provider.base")
 local bridge = require("flemma.bridge")
+local http = require("flemma.utilities.http")
 local json = require("flemma.utilities.json")
 local openai_responses = require("flemma.provider.openai_responses")
 local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
+local str = require("flemma.utilities.string")
 
 ---@class flemma.provider.Codex : flemma.provider.OpenAIResponses
 local M = {}
@@ -179,6 +181,54 @@ function M.try_estimate_usage(bufnr, on_result)
       model = model,
     },
   })
+end
+
+-- ============================================================================
+-- Rate limit snapshot extraction
+-- ============================================================================
+
+local HEADER_PREFIX = "x-codex-"
+
+---@param headers table<string, string[]>
+---@param tier string "primary" or "secondary"
+---@return flemma.session.RateLimitWindow|nil
+local function parse_window(headers, tier)
+  local used_percent = http.read_header_number(headers, HEADER_PREFIX .. tier .. "-used-percent")
+  if not used_percent then
+    return nil
+  end
+  local window_minutes = http.read_header_number(headers, HEADER_PREFIX .. tier .. "-window-minutes")
+  local resets_at = http.read_header_number(headers, HEADER_PREFIX .. tier .. "-reset-at")
+  return {
+    used_percent = used_percent,
+    window_seconds = window_minutes and (window_minutes * 60) or 0,
+    resets_at = resets_at,
+  }
+end
+
+---@param self flemma.provider.Codex
+---@return flemma.session.RateLimitSnapshot|nil
+function M.get_rate_limit_snapshot(self)
+  if not self._response_headers then
+    return nil
+  end
+
+  local primary = parse_window(self._response_headers, "primary")
+  if not primary then
+    return nil
+  end
+
+  local windows = { primary }
+  local secondary = parse_window(self._response_headers, "secondary")
+  if secondary then
+    table.insert(windows, secondary)
+  end
+
+  local plan_raw = http.read_header(self._response_headers, HEADER_PREFIX .. "plan-type")
+  return {
+    plan_name = plan_raw and str.title(plan_raw) or nil,
+    windows = windows,
+  }
 end
 
 secrets.register("flemma.secrets.resolvers.chatgpt")

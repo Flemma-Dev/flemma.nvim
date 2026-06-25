@@ -496,6 +496,15 @@ function M:format_rate_limit_details()
   return nil
 end
 
+--- Extract a rate limit snapshot from the most recent response.
+--- Subscription-based providers override this to parse provider-specific
+--- headers or response fields into a generic RateLimitSnapshot.
+--- Returns nil for usage-based providers (the default).
+---@return flemma.session.RateLimitSnapshot|nil
+function M:get_rate_limit_snapshot()
+  return nil
+end
+
 -- ============================================================================
 -- Internal helpers — used by providers via self:method(), not meant to be overridden
 -- ============================================================================

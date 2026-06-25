@@ -38,9 +38,12 @@ local PRIORITY = {
   REQUEST_COST = 70,
   REQUEST_OUTPUT_TOKENS = 60,
   THINKING_TOKENS = 50,
+  QUOTA_PRIMARY = 45,
+  QUOTA_SECONDARY = 40,
   SESSION_INPUT_TOKENS = 35,
   SESSION_OUTPUT_TOKENS = 35,
   SESSION_REQUEST_COUNT = 20,
+  QUOTA_PLAN_NAME = 15,
 }
 
 --- Format a number with comma separators for thousands
@@ -61,6 +64,18 @@ function M.calculate_cache_percent(request)
     return nil
   end
   return math.floor(request.cache_read_input_tokens / total_input * 100)
+end
+
+---@param used_percent number 0-100
+---@return string
+local function quota_highlight_group(used_percent)
+  if used_percent >= 90 then
+    return "FlemmaUsageBarQuotaError"
+  elseif used_percent >= 80 then
+    return "FlemmaUsageBarQuotaWarn"
+  else
+    return "FlemmaUsageBarQuotaOk"
+  end
 end
 
 --- Build structured segments from request and session data for bar rendering
@@ -203,6 +218,38 @@ function M.build_segments(request, session)
       label_highlight = "FlemmaUsageBarMuted",
       separator_highlight = "FlemmaUsageBarMuted",
       items = session_items,
+    })
+  end
+
+  -- Subscription rate limit segment
+  if request and request.rate_limits and #request.rate_limits.windows > 0 then
+    local quota_items = {} ---@type flemma.ui.bar.layout.Item[]
+    local window_priorities = { PRIORITY.QUOTA_PRIMARY, PRIORITY.QUOTA_SECONDARY }
+
+    for i, window in ipairs(request.rate_limits.windows) do
+      local label = str.format_duration(window.window_seconds)
+      local percent_text = str.format_percent(window.used_percent)
+      table.insert(quota_items, {
+        key = "quota_window_" .. tostring(i),
+        text = label .. ": " .. percent_text,
+        priority = window_priorities[i] or PRIORITY.QUOTA_SECONDARY,
+        highlight = { group = quota_highlight_group(window.used_percent) },
+      })
+    end
+
+    if request.rate_limits.plan_name then
+      table.insert(quota_items, 1, {
+        key = "quota_plan_name",
+        text = request.rate_limits.plan_name,
+        priority = PRIORITY.QUOTA_PLAN_NAME,
+        highlight = { group = "FlemmaUsageBarMuted" },
+      })
+    end
+
+    table.insert(segments, {
+      key = "subscription",
+      items = quota_items,
+      separator_highlight = "FlemmaUsageBarMuted",
     })
   end
 
