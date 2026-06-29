@@ -1594,7 +1594,7 @@ describe("OpenAI Provider", function()
       provider:process_response_line('data: {"type":"error"}', callbacks)
 
       assert.are.equal(1, #errors)
-      assert.truthy(errors[1]:match("OpenAI stream error"))
+      assert.truthy(errors[1]:match("Stream error"))
     end)
   end)
 

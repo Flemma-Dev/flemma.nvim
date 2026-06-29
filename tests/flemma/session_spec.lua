@@ -239,6 +239,45 @@ describe("flemma.session", function()
       assert.is_near(expected, request:get_input_cost(), 0.0001)
     end)
 
+    describe("rate_limits", function()
+      it("stores rate limit snapshot when provided", function()
+        local request = session_module.Request.new({
+          provider = "codex",
+          model = "gpt-5.5",
+          input_tokens = 100,
+          output_tokens = 50,
+          input_price = 0,
+          output_price = 0,
+          rate_limits = {
+            plan_name = "Plus",
+            windows = {
+              { used_percent = 2, window_seconds = 18000, resets_at = 1782333276 },
+              { used_percent = 0, window_seconds = 604800, resets_at = 1782920076 },
+            },
+          },
+        })
+        assert.is_not_nil(request.rate_limits)
+        assert.equals("Plus", request.rate_limits.plan_name)
+        assert.equals(2, #request.rate_limits.windows)
+        assert.equals(2, request.rate_limits.windows[1].used_percent)
+        assert.equals(18000, request.rate_limits.windows[1].window_seconds)
+        assert.equals(0, request.rate_limits.windows[2].used_percent)
+        assert.equals(604800, request.rate_limits.windows[2].window_seconds)
+      end)
+
+      it("defaults rate_limits to nil when not provided", function()
+        local request = session_module.Request.new({
+          provider = "anthropic",
+          model = "claude-sonnet-4-6",
+          input_tokens = 100,
+          output_tokens = 50,
+          input_price = 3.0,
+          output_price = 15.0,
+        })
+        assert.is_nil(request.rate_limits)
+      end)
+    end)
+
     it("should store bufnr for unnamed buffers", function()
       local request = session_module.Request.new({
         provider = "anthropic",

@@ -175,6 +175,27 @@ function M.format_percent(n)
   return tostring(n) .. "%"
 end
 
+---Capitalize the first character and lowercase the rest (e.g., "plus" → "Plus").
+---@param s string
+---@return string
+function M.title(s)
+  return s:sub(1, 1):upper() .. s:sub(2):lower()
+end
+
+---Format a duration in seconds as a compact label (e.g., 18000 → "5h").
+---Uses the largest clean unit: days, hours, or minutes.
+---@param seconds integer
+---@return string
+function M.format_duration(seconds)
+  if seconds >= 86400 and seconds % 86400 == 0 then
+    return tostring(seconds / 86400) .. "d"
+  elseif seconds >= 3600 and seconds % 3600 == 0 then
+    return tostring(seconds / 3600) .. "h"
+  else
+    return tostring(math.floor(seconds / 60)) .. "m"
+  end
+end
+
 ---Compute Levenshtein edit distance between two strings.
 ---@param a string
 ---@param b string

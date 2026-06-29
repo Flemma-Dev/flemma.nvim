@@ -53,7 +53,7 @@ describe("core.send_to_provider suspense handling", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("re-raises suspense from get_api_key past the prep pcall", function()
+  it("re-raises suspense from resolve_credential past the prep pcall", function()
     local boundary = readiness.get_or_create_boundary("test:suspense", function(done)
       done()
     end)

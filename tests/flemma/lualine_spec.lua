@@ -1,3 +1,10 @@
+---@param provider string
+---@param model_text string
+---@return string
+local function muted_provider(provider, model_text)
+  return "%#FlemmaStatusTextMuted#" .. provider .. "/%*" .. model_text
+end
+
 describe("Lualine component", function()
   local flemma_component, core
 
@@ -46,7 +53,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert (default format from config.lua)
-    assert.are.equal("o3 (high)", status)
+    assert.are.equal(muted_provider("openai", "o3 (high)"), status)
   end)
 
   it("should display thinking level from default for o-series model", function()
@@ -57,7 +64,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert: Default thinking="high" is active
-    assert.are.equal("o4-mini (high)", status)
+    assert.are.equal(muted_provider("openai", "o4-mini (high)"), status)
   end)
 
   it("should display only model name when thinking is explicitly disabled", function()
@@ -68,7 +75,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("o4-mini", status)
+    assert.are.equal(muted_provider("openai", "o4-mini"), status)
   end)
 
   it("should display only the model name for non-o-series models", function()
@@ -79,7 +86,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("gpt-4o", status)
+    assert.are.equal(muted_provider("openai", "gpt-4o"), status)
   end)
 
   it("should display thinking level from default for Anthropic", function()
@@ -90,7 +97,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert: Default thinking="high" maps to budget 32768 → level "high"
-    assert.are.equal("claude-sonnet-4-5 (high)", status)
+    assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5 (high)"), status)
   end)
 
   it("should display only model name for Anthropic when thinking is disabled", function()
@@ -101,7 +108,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-sonnet-4-5", status)
+    assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5"), status)
   end)
 
   it("should display model with thinking level for Anthropic with valid thinking_budget", function()
@@ -112,7 +119,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-sonnet-4-5 (low)", status)
+    assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5 (low)"), status)
   end)
 
   it("should display thinking indicator for Anthropic with thinking_budget below 1024 (clamped)", function()
@@ -123,7 +130,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-sonnet-4-5 (low)", status)
+    assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5 (low)"), status)
   end)
 
   it("should display model with thinking level for Vertex with valid thinking_budget", function()
@@ -134,7 +141,7 @@ describe("Lualine component", function()
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("gemini-2.5-pro (low)", status)
+    assert.are.equal(muted_provider("vertex", "gemini-2.5-pro (low)"), status)
   end)
 
   it("should return an empty string if filetype is not 'chat'", function()
@@ -480,7 +487,7 @@ describe("Lualine component", function()
       local status = flemma_component:update_status()
 
       -- Assert: default format from flemma config
-      assert.are.equal("claude-sonnet-4-5", status)
+      assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5"), status)
     end)
 
     it("should prefer lualine options format over flemma config format", function()
@@ -1003,35 +1010,189 @@ describe("Lualine component", function()
     end)
   end)
 
+  describe("subscription resolvers", function()
+    it("renders plan name from latest request rate limits", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{% if subscription.plan_name then %}{{ subscription.plan_name }}{% end %}",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Plus",
+          windows = {
+            { used_percent = 2, window_seconds = 18000, resets_at = 1782333276 },
+            { used_percent = 0, window_seconds = 604800, resets_at = 1782920076 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("Plus", status)
+    end)
+
+    it("renders primary window label and used percent", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{{ subscription.primary.label }}:{{ subscription.primary.used_percent }}%%",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Plus",
+          windows = {
+            { used_percent = 2, window_seconds = 18000 },
+            { used_percent = 0, window_seconds = 604800 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("5h:2%%", status)
+    end)
+
+    it("renders secondary window label and used percent", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{{ subscription.secondary.label }}:{{ subscription.secondary.used_percent }}%%",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Plus",
+          windows = {
+            { used_percent = 2, window_seconds = 18000 },
+            { used_percent = 0, window_seconds = 604800 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("7d:0%%", status)
+    end)
+
+    it("collapses subscription conditional when no rate limits", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{{ model.name }}{% if subscription.plan_name then %} {{ subscription.plan_name }}{% end %}",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("claude-sonnet-4-5", status)
+    end)
+
+    it("returns nil for secondary when only one window exists", function()
+      core.switch_provider("codex", "gpt-5.5", {})
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        ui = {
+          statusline = {
+            format = "{% if subscription.secondary.label then %}yes{% else %}no{% end %}",
+          },
+        },
+      })
+
+      local s = session.get()
+      s:reset()
+      s:add_request({
+        provider = "codex",
+        model = "gpt-5.5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 0,
+        output_price = 0,
+        rate_limits = {
+          plan_name = "Pro",
+          windows = {
+            { used_percent = 50, window_seconds = 18000 },
+          },
+        },
+      })
+
+      local status = flemma_component:update_status()
+      assert.are.equal("no", status)
+    end)
+  end)
+
   describe("parameter changes via switch reflect in display", function()
     it("should reflect reasoning level from config facade", function()
       -- Start with base config: default thinking="high" applies
       core.switch_provider("openai", "o3", { temperature = 1 })
-      assert.are.equal("o3 (high)", flemma_component:update_status())
+      assert.are.equal(muted_provider("openai", "o3 (high)"), flemma_component:update_status())
 
       -- Switch again with different reasoning level — writes to RUNTIME layer
       core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
-      assert.are.equal("o3 (low)", flemma_component:update_status())
+      assert.are.equal(muted_provider("openai", "o3 (low)"), flemma_component:update_status())
     end)
 
     it("should reflect thinking_budget changes from config facade", function()
       -- Start with base config: default thinking="high" → budget 32768 → "high"
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      assert.are.equal("claude-sonnet-4-5 (high)", flemma_component:update_status())
+      assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5 (high)"), flemma_component:update_status())
 
       -- Switch with explicit thinking_budget — writes to RUNTIME layer
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 2048 })
-      assert.are.equal("claude-sonnet-4-5 (low)", flemma_component:update_status())
+      assert.are.equal(muted_provider("anthropic", "claude-sonnet-4-5 (low)"), flemma_component:update_status())
     end)
 
     it("should reflect changed reasoning level via switch", function()
       -- Start with base reasoning = "low"
       core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
-      assert.are.equal("o3 (low)", flemma_component:update_status())
+      assert.are.equal(muted_provider("openai", "o3 (low)"), flemma_component:update_status())
 
       -- Switch with "high" reasoning
       core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
-      assert.are.equal("o3 (high)", flemma_component:update_status())
+      assert.are.equal(muted_provider("openai", "o3 (high)"), flemma_component:update_status())
     end)
   end)
 end)

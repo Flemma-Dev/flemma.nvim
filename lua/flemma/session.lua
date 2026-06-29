@@ -27,6 +27,15 @@ function M.now()
   return sec + usec / 1000000
 end
 
+---@class flemma.session.RateLimitWindow
+---@field used_percent number Percentage (0-100) of the window consumed
+---@field window_seconds integer Rolling window duration in seconds
+---@field resets_at? integer Unix timestamp (seconds) when the window resets
+
+---@class flemma.session.RateLimitSnapshot
+---@field plan_name? string Human-readable plan name (e.g., "Plus", "Pro", "Enterprise")
+---@field windows flemma.session.RateLimitWindow[] Ordered by window duration ascending (shortest/most urgent first)
+
 ---@class flemma.session.Request
 ---@field provider string
 ---@field model string
@@ -44,6 +53,7 @@ end
 ---@field cache_creation_input_tokens number
 ---@field cache_read_price? number USD per million cache-read tokens
 ---@field cache_write_price? number USD per million cache-write tokens
+---@field rate_limits? flemma.session.RateLimitSnapshot
 local Request = {}
 Request.__index = Request
 
@@ -64,6 +74,7 @@ Request.__index = Request
 ---@field cache_creation_input_tokens? number Number of cache creation tokens
 ---@field cache_read_price? number USD per million cache-read tokens
 ---@field cache_write_price? number USD per million cache-write tokens
+---@field rate_limits? flemma.session.RateLimitSnapshot
 
 --- Create a new Request instance
 ---@param opts flemma.session.RequestOpts Options for the request
@@ -88,6 +99,7 @@ function Request.new(opts)
   self.cache_creation_input_tokens = opts.cache_creation_input_tokens or 0
   self.cache_read_price = opts.cache_read_price
   self.cache_write_price = opts.cache_write_price
+  self.rate_limits = opts.rate_limits
 
   return self
 end

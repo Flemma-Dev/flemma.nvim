@@ -21,6 +21,7 @@ local config = require("flemma.config")
 local hooks = require("flemma.hooks")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local normalize = require("flemma.provider.normalize")
 local provider_registry = require("flemma.provider.registry")
 local readiness = require("flemma.readiness")
 
@@ -135,7 +136,7 @@ local function fire_fetch(bufnr)
     return
   end
 
-  local cfg = config.get(bufnr)
+  local cfg = normalize.resolve_preset(config.materialize(bufnr))
   if not cfg.provider or cfg.provider == "" then
     log.debug("prefetch: fire_fetch skipped (no provider configured) bufnr=" .. bufnr)
     clear_cache(bufnr)

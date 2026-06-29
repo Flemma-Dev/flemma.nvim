@@ -116,6 +116,14 @@ return s.object({
   ),
 
   -- ---------------------------------------------------------------------------
+  -- Provider modules — non-built-in provider registration
+  -- ---------------------------------------------------------------------------
+
+  providers = s.object({
+    modules = s.list(s.loadable(), {}),
+  }),
+
+  -- ---------------------------------------------------------------------------
   -- Tools & templating — what the model can do and how prompts are built
   -- ---------------------------------------------------------------------------
 
@@ -314,7 +322,7 @@ return s.object({
     statusline = s.object({
       format = s.union(
         s.string([[
-          {{ model.name }}
+          %#FlemmaStatusTextMuted#{{ provider.name }}/%*{{ model.name }}
           {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
           {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#·%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
           {%- if session.cost then %} %#FlemmaStatusTextMuted#·%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}

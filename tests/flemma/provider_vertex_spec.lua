@@ -782,7 +782,7 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
-  describe("get_api_key via secrets module", function()
+  describe("resolve_credential via secrets module", function()
     local secrets_module = require("flemma.secrets")
     local secrets_cache = require("flemma.secrets.cache")
 
@@ -806,8 +806,8 @@ describe("Vertex AI Provider", function()
         location = "us-central1",
       })
 
-      local token = provider:get_api_key()
-      assert.equals("ya29.env-token", token)
+      local result = provider:resolve_credential()
+      assert.equals("ya29.env-token", result.value)
     end)
 
     it("should use cached secret on subsequent calls", function()
@@ -822,11 +822,11 @@ describe("Vertex AI Provider", function()
         location = "us-central1",
       })
 
-      local first = provider:get_api_key()
-      assert.equals("ya29.cached-token", first)
+      local first = provider:resolve_credential()
+      assert.equals("ya29.cached-token", first.value)
 
-      local second = provider:get_api_key()
-      assert.equals("ya29.cached-token", second)
+      local second = provider:resolve_credential()
+      assert.equals("ya29.cached-token", second.value)
     end)
   end)
 

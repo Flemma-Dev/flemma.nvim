@@ -7,6 +7,7 @@ local M = {}
 ---@class flemma.secrets.Result
 ---@field value string
 ---@field ttl? integer
+---@field metadata? table<string, any>
 
 ---@class flemma.secrets.CachedResult
 ---@field result flemma.secrets.Result

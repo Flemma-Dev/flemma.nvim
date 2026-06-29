@@ -13,6 +13,7 @@ package.loaded["flemma.utilities.truncate"] = nil
 package.loaded["flemma.provider.adapters.anthropic"] = nil
 package.loaded["flemma.provider.adapters.openai"] = nil
 package.loaded["flemma.provider.adapters.vertex"] = nil
+package.loaded["flemma.provider.openai_responses"] = nil
 
 local ast = require("flemma.ast")
 local client = require("flemma.client")

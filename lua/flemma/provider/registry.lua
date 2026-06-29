@@ -19,13 +19,12 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field supports_thinking_budget boolean
 ---@field outputs_thinking boolean
 ---@field output_has_thoughts boolean Whether output_tokens already includes thinking tokens for cost calculation
+---@field close_on_complete? boolean Terminate the HTTP connection after response.completed (default true)
 ---@field min_thinking_budget? integer Minimum thinking budget value for this provider
 
 ---@class flemma.provider.ProviderEntry
 ---@field module string
----@field capabilities flemma.provider.Capabilities
----@field display_name string
----@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
+---@field metadata flemma.provider.Metadata
 
 ---@class flemma.provider.Metadata
 ---@field name string Provider identifier (e.g., "anthropic")
@@ -33,6 +32,7 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field capabilities flemma.provider.Capabilities
 ---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 ---@field models? string[] Module paths for model data (loaded via flemma.loader)
+---@field billing? "usage"|"subscription"
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
@@ -41,6 +41,7 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
+---@field billing? "usage"|"subscription"
 
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
@@ -126,11 +127,21 @@ function M.register(source, entry)
   ---@type string[]|nil
   local model_modules
 
+  ---@type flemma.provider.Metadata
+  local metadata
+
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
     registry_utils.validate_name(name, "provider")
     definition = entry
+    metadata = {
+      name = name,
+      display_name = definition.display_name,
+      capabilities = definition.capabilities or {},
+      config_schema = definition.config_schema,
+      billing = definition.billing,
+    }
   else
     -- Single-arg form: register("module.path") — load module and read metadata
     local mod = loader.load(source)
@@ -139,26 +150,21 @@ function M.register(source, entry)
     end
     name = mod.metadata.name
     model_modules = mod.metadata.models
-    definition = {
-      module = source,
-      capabilities = mod.metadata.capabilities,
-      display_name = mod.metadata.display_name,
-      config_schema = mod.metadata.config_schema,
-    }
+    definition = { module = source }
+    metadata = vim.deepcopy(mod.metadata)
   end
 
-  local capabilities = vim.tbl_extend("keep", definition.capabilities or {}, {
+  metadata.capabilities = vim.tbl_extend("keep", metadata.capabilities or {}, {
     supports_reasoning = false,
     supports_thinking_budget = false,
     outputs_thinking = false,
     output_has_thoughts = false,
+    close_on_complete = true,
   })
 
   providers[name] = {
     module = definition.module,
-    capabilities = capabilities,
-    display_name = definition.display_name,
-    config_schema = definition.config_schema,
+    metadata = metadata,
   }
 
   -- Load model modules declared in provider metadata
@@ -178,16 +184,22 @@ function M.register(source, entry)
   end
 
   -- Materialize config_schema defaults into the DEFAULTS layer
-  if definition.config_schema then
-    config_facade.register_module_defaults("parameters", name, definition.config_schema)
+  if metadata.config_schema then
+    config_facade.register_module_defaults("parameters", name, metadata.config_schema)
   end
 end
 
----Initialize built-in providers (called during setup)
+---Initialize built-in providers and load user-configured modules (called during setup)
 function M.setup()
   for _, module_path in ipairs(BUILTIN_PROVIDER_MODULES) do
     local mod = loader.load(module_path)
     if mod.metadata and not providers[mod.metadata.name] then
+      M.register(module_path)
+    end
+  end
+  local resolved_config = config_facade.get()
+  if resolved_config.providers and resolved_config.providers.modules then
+    for _, module_path in ipairs(resolved_config.providers.modules) do
       M.register(module_path)
     end
   end
@@ -276,7 +288,7 @@ end
 function M.get_capabilities(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.capabilities or nil
+  return provider and provider.metadata.capabilities or nil
 end
 
 ---Get provider display name
@@ -285,7 +297,7 @@ end
 function M.get_display_name(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.display_name or nil
+  return provider and provider.metadata.display_name or nil
 end
 
 ---Get provider config schema for DISCOVER resolution
@@ -294,7 +306,20 @@ end
 function M.get_config_schema(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.config_schema or nil
+  return provider and provider.metadata.config_schema or nil
+end
+
+---Get an arbitrary metadata field for a provider
+---@param provider_name string The provider identifier
+---@param field string The metadata field name
+---@return any
+function M.get_metadata(provider_name, field)
+  local resolved = M.resolve(provider_name)
+  local provider = providers[resolved]
+  if not provider or not provider.metadata then
+    return nil
+  end
+  return provider.metadata[field]
 end
 
 --------------------------------------------------------------------------------
@@ -399,18 +424,26 @@ function M.extract_switch_arguments(parsed)
     info.has_explicit_model = true
   end
 
+  local slash_consumed_model = false
+
   if not info.provider and info.positionals[1] then
-    info.provider = info.positionals[1]
+    local model_from_split, provider_from_split = M.split_provider_model(info.positionals[1])
+    if provider_from_split then
+      info.provider = provider_from_split
+      info.model = model_from_split
+      slash_consumed_model = true
+    else
+      info.provider = info.positionals[1]
+    end
   end
 
   if not info.model and info.positionals[2] then
     info.model = info.positionals[2]
   end
 
-  if #info.positionals > 2 then
-    for i = 3, #info.positionals do
-      info.extra_positionals[#info.extra_positionals + 1] = info.positionals[i]
-    end
+  local extra_start = slash_consumed_model and 2 or 3
+  for i = extra_start, #info.positionals do
+    info.extra_positionals[#info.extra_positionals + 1] = info.positionals[i]
   end
 
   for k, v in pairs(parsed) do
@@ -420,6 +453,29 @@ function M.extract_switch_arguments(parsed)
   end
 
   return info
+end
+
+---@param value string
+---@return string model
+---@return string|nil provider
+function M.split_provider_model(value)
+  local slash_pos = value:find("/", 1, true)
+  local space_pos = value:find(" ", 1, true)
+  local split_pos
+  if slash_pos and space_pos then
+    split_pos = math.min(slash_pos, space_pos)
+  else
+    split_pos = slash_pos or space_pos
+  end
+  if not split_pos then
+    return value, nil
+  end
+  local left = value:sub(1, split_pos - 1)
+  local right = value:sub(split_pos + 1)
+  if #left == 0 or #right == 0 then
+    return value, nil
+  end
+  return right, left
 end
 
 return M

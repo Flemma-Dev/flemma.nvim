@@ -125,6 +125,10 @@ develop:
 				[\"\$$gpt\"] = \"openai gpt-5.4-mini\",									\
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
 				[\"\$$kimi\"] = \"moonshot kimi-k2.6\",									\
+				[\"\$$codex\"] = \"codex gpt-5.5\",										\
+			},																			\
+			providers = {																\
+				modules = { \"flemma.provider.adapters.experimental.codex\" },			\
 			},																			\
 			diagnostics = { enabled = true },											\
 			logging = { enabled = true, level = \"TRACE\" },							\

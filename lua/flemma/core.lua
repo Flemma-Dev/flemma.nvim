@@ -433,16 +433,21 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     notify_level = vim.log.levels.WARN
   end
 
-  -- High-cost warning
-  local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
-  local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
-  if
-    model_entry
-    and model_entry.pricing
-    and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
-  then
-    table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
-    notify_level = vim.log.levels.WARN
+  -- Billing / cost warning
+  local billing = registry.get_metadata(global_config.provider, "billing")
+  if billing == "subscription" then
+    table.insert(lines, "  ⓘ Flemma draws from your subscription usage limit")
+  else
+    local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
+    local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
+    if
+      model_entry
+      and model_entry.pricing
+      and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
+    then
+      table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
+      notify_level = vim.log.levels.WARN
+    end
   end
 
   -- Frontmatter override notice (provider, model, or both)
@@ -1230,7 +1235,7 @@ function M._run_send_pipeline(bufnr, opts)
   local headers = prep_result.headers
   local request_body = prep_result.request_body
   local trailing_keys = prep_result.trailing_keys
-  local request_provider_name = config_facade.get(bufnr).provider
+  local request_provider_name = current_provider.metadata.name
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
@@ -1252,6 +1257,7 @@ function M._run_send_pipeline(bufnr, opts)
   local progress_timer =
     activity.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 }, ui.update_ui)
   local response_started = false
+  local response_complete_received = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -1329,9 +1335,9 @@ function M._run_send_pipeline(bufnr, opts)
     end,
 
     on_response_complete = function()
-      vim.schedule(function()
-        local config = config_facade.get(bufnr)
+      response_complete_received = true
 
+      vim.schedule(function()
         -- Get tokens from in-flight usage
         local input_tokens = buffer_state.inflight_usage.input_tokens or 0
         local output_tokens = buffer_state.inflight_usage.output_tokens or 0
@@ -1345,15 +1351,18 @@ function M._run_send_pipeline(bufnr, opts)
           filepath = path_util.realpath(bufname)
         end
 
-        -- Add request to session with pricing snapshot
-        local pricing_model_info = registry.get_model_info(config.provider, config.model)
+        -- Add request to session with pricing snapshot.
+        -- Use request_provider_name (from current_provider.metadata.name) rather
+        -- than config.provider — preset resolution can change the effective provider.
+        local request_model = current_provider.parameters.model
+        local pricing_model_info = registry.get_model_info(request_provider_name, request_model)
         local pricing_info = pricing_model_info and pricing_model_info.pricing
 
         if pricing_info then
           local session = state.get_session()
           session:add_request({
-            provider = config.provider,
-            model = config.model,
+            provider = request_provider_name,
+            model = request_model,
             input_tokens = input_tokens,
             output_tokens = output_tokens,
             thoughts_tokens = thoughts_tokens,
@@ -1368,6 +1377,7 @@ function M._run_send_pipeline(bufnr, opts)
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
             cache_read_price = pricing_info.cache_read,
             cache_write_price = pricing_info.cache_write,
+            rate_limits = current_provider:get_rate_limit_snapshot(),
           })
 
           latest_request = session:get_latest_request()
@@ -1375,6 +1385,7 @@ function M._run_send_pipeline(bufnr, opts)
 
         -- Diagnostics: publish expectations for the next request only after
         -- this response completes.
+        local config = config_facade.get(bufnr)
         if config.diagnostics and config.diagnostics.enabled then
           local response_extra = current_provider._response_buffer and current_provider._response_buffer.extra
           local response_diagnostics = response_extra and response_extra.diagnostics
@@ -1398,6 +1409,25 @@ function M._run_send_pipeline(bufnr, opts)
           cache_read_input_tokens = 0,
           cache_creation_input_tokens = 0,
         }
+
+        -- Terminate the HTTP connection now that the response is semantically
+        -- complete. Some backends (e.g., Codex) leave the SSE stream open after
+        -- the terminal event; without this, curl idles until the server closes
+        -- (often 20-30s). Providers can opt out via close_on_complete = false.
+        if
+          provider_capabilities
+          and provider_capabilities.close_on_complete ~= false
+          and buffer_state.current_request
+          and not buffer_state.request_cancelled
+        then
+          local job_to_stop = buffer_state.current_request
+          vim.defer_fn(function()
+            if buffer_state.current_request == job_to_stop and not buffer_state.request_cancelled then
+              log.debug("send_to_provider(): Terminating stream after response.completed (job " .. job_to_stop .. ")")
+              pcall(vim.fn.jobstop, job_to_stop)
+            end
+          end, 200)
+        end
       end)
     end,
 
@@ -1539,6 +1569,9 @@ function M._run_send_pipeline(bufnr, opts)
     end,
 
     on_request_complete = function(code)
+      -- When we terminated curl after response.completed, treat any exit code
+      -- as success — the response content was already fully received.
+      local effective_code = response_complete_received and 0 or code
       writequeue.schedule(bufnr, function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
@@ -1563,8 +1596,8 @@ function M._run_send_pipeline(bufnr, opts)
         -- Ensure buffer is modifiable for final operations and user interaction
         state.unlock_buffer(bufnr)
 
-        if code == 0 then
-          -- cURL request completed successfully (exit code 0)
+        if effective_code == 0 then
+          -- cURL request completed successfully (exit code 0, or response.completed received)
           if buffer_state.api_error_occurred then
             log.debug(
               "send_to_provider(): on_request_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
@@ -1654,25 +1687,28 @@ function M._run_send_pipeline(bufnr, opts)
 
           hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = latest_request })
         else
-          -- cURL request failed (exit code ~= 0)
+          -- cURL request failed (exit code ~= 0 and no response.completed received)
           -- Buffer is already set to modifiable = true
           activity.cleanup_progress(bufnr, ui.update_ui)
 
           local error_msg
-          if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
-            error_msg = string.format("cURL could not resolve host (exit code %d). Check network or hostname.", code)
-          elseif code == 7 then -- CURLE_COULDNT_CONNECT
+          if effective_code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
             error_msg =
-              string.format("cURL could not connect to host (exit code %d). Check network or if the host is up.", code)
-          elseif code == 28 then -- cURL timeout error
+              string.format("cURL could not resolve host (exit code %d). Check network or hostname.", effective_code)
+          elseif effective_code == 7 then -- CURLE_COULDNT_CONNECT
+            error_msg = string.format(
+              "cURL could not connect to host (exit code %d). Check network or if the host is up.",
+              effective_code
+            )
+          elseif effective_code == 28 then -- cURL timeout error
             local timeout_value = effective_timeout -- Captured before async callback
             error_msg = string.format(
               "cURL request timed out (exit code %d). Timeout is %s seconds.",
-              code,
+              effective_code,
               tostring(timeout_value)
             )
           else -- Other cURL errors
-            error_msg = string.format("cURL request failed (exit code %d).", code)
+            error_msg = string.format("cURL request failed (exit code %d).", effective_code)
           end
 
           if log.is_enabled() then

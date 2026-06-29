@@ -21,6 +21,7 @@
 ---@field parameters flemma.config.Parameters
 ---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string, tools: string[] }>
 ---@field provider string
+---@field providers flemma.config.Providers
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
 ---@field secrets flemma.config.Secrets
@@ -115,6 +116,9 @@
 ---@field openai? flemma.config.ParametersOpenai
 ---@field vertex? flemma.config.ParametersVertex
 ---@field [string] table|nil
+
+---@class flemma.config.Providers
+---@field modules string[]
 
 ---@class flemma.config.Ruler
 ---@field char string
