@@ -56,6 +56,23 @@ return {
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
     },
 
+    -- Claude Sonnet 5 — adaptive thinking; standard $3/$15 per MTok (intro $2/$10 through 2026-08-31)
+    ["claude-sonnet-5"] = {
+      pricing = {
+        input = 3.0,
+        output = 15.0,
+        cache_read = 0.30,
+        cache_write = 3.75,
+      },
+      max_input_tokens = 1000000,
+      max_output_tokens = 128000,
+      thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+      min_thinking_budget = 1024,
+      min_cache_tokens = 2048,
+      meta = { adaptive_thinking = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
+    },
+
     -- Claude Sonnet 4.6
     ["claude-sonnet-4-6"] = {
       pricing = {
