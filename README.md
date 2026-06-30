@@ -61,7 +61,6 @@ Flemma never accepts API keys in your Lua config -- credentials stay in environm
 | Moonshot  | `MOONSHOT_API_KEY`                                       |
 | Vertex AI | `VERTEX_AI_ACCESS_TOKEN` (or service-account flow below) |
 
-> [!NOTE]
 > An experimental **Codex** provider (ChatGPT subscription) exists and doesn't use an API key -- it authenticates via `codex login`. See [providers.md](docs/providers.md#codex--chatgpt-subscription-experimental).
 
 **Linux keyring** (Secret Service) -- store once, reuse across all Neovim sessions:
