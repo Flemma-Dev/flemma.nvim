@@ -130,7 +130,7 @@ local function boot_registries(schema)
   local providers = require("flemma.provider.registry").get_all()
   local parameters_node = navigation.unwrap_optional(navigation.navigate_schema(schema, "parameters"))
   for name, entry in pairs(providers) do
-    if entry.config_schema then
+    if entry.metadata and entry.metadata.config_schema then
       parameters_node:get_child_schema(name)
     end
   end
