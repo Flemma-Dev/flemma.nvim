@@ -1,11 +1,91 @@
 # Changelog
 
+## 0.13.0
+
+### Minor Changes
+
+- 731ee95: Add inline approval widget on the closing fence line of pending tool results. Shows a pause icon, optional tool label, and keybind hints when the cursor is within range. Approved-but-not-executed tools show a check icon; executing and terminal-status tools show an hourglass with the label. All labels render on the fence line — never as virtual lines inside the fenced block.
+- 0a40d7a: Auto-scroll viewport during streaming responses. The cursor follows new content to the bottom (tail mode), disengages when the user moves away (breakaway), and re-engages when the user navigates back to the last line (re-attach). All non-forced cursor moves respect breakaway state so the user can freely explore the buffer during autopilot.
+- eab0d0b: Tool capabilities now gate harness parameter injection — `disables_background` prevents `flemma.background` and `disables_save_to` prevents `flemma.save_to` from appearing in a tool's schema. Harness tools declare both, fixing duplicate store files when the LLM copied `flemma.save_to` onto status checks. Existing capabilities renamed to verb_target convention: `emits_template`, `auto_approves_if_sandboxed`.
+- 38e64f0: Added experimental Codex provider for ChatGPT subscription authentication. Users with a ChatGPT subscription can now use their existing `codex login` token to drive Flemma, without needing a separate OpenAI Platform API key.
+
+  Enable via `providers.modules = { "flemma.provider.adapters.experimental.codex" }` in your Flemma setup config.
+
+  Also includes:
+
+  - `providers.modules` config key for registering non-built-in provider adapters
+  - `provider/model` slash syntax (`codex/gpt-5.5`) for `:Flemma switch`, presets, and frontmatter
+  - `openai_responses.lua` intermediate base for Responses API wire format reuse
+  - `resolve_credential()` on provider base for metadata-rich credential resolution
+
+- 2afb5cd: Added local token estimation for Codex provider and fixed preset resolution in usage prefetch
+- 57fca24: Add `editing.compact_headers` config option (default `true`) to omit the blank line between Tool Use, Tool Result, and Job Result headers and their fenced code blocks
+- 9ded5a0: Replace string-based highlight DSL with composable `flemma.hl` builder API. All highlight construction — config defaults and internal derivations — now uses lazy ops (`h.link`, `h.from`, `h.themed`, `h.coalesce`, `h.diff`, `h.attrs`, `h.hex`) with chainable methods (`:blend`, `:pick`, `:omit`, `:contrast`, `:tint`, `:mute`, `:style`, `:merge`) and terminal `:get()`/`:set()`. The old string syntax (`"Normal+bg:#101010"`, `"Folded!bg"`, `{ dark = "...", light = "..." }`) is removed entirely. `highlights.role_style` replaced by `highlights.role_name` (an HlOp). `highlights.defaults` removed.
+- 3c01208: Highlight config fields now accept plain strings: a group name coerces to `h.link()`, a `#RRGGBB` hex value coerces to `h.hex()`. This removes the need to `require("flemma.hl")` for simple overrides.
+- 8a161a4: Add `h.none()` to the `flemma.hl` highlight builder — a no-op op whose `:get()` resolves to nothing and `:set()` does nothing. Use it as a config value to leave a highlight group unmanaged by Flemma (e.g. `highlights = { thinking_tag = h.none() }`), so the colorscheme or your own definition stands.
+- 8157711: HlOps `tint`, `mute`, and `blend` now accept an optional ratio parameter and an HlOp color source, enabling expressions like `h.from("Normal"):tint("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10)`
+- 8bf2cee: Added inline rejection popup that replaces `vim.ui.input` for tool rejection feedback. The floating window overlays the tool result fence block with `╌` borders, supports multi-line editing via Vim motions, and is fully configurable (`ui.rejection.enabled`, `ui.rejection.winblend`, `highlights.rejection_input`, `highlights.rejection_border`). Set `ui.rejection.enabled = false` to revert to the original command-line prompt.
+- cc80506: Updated model definitions and pricing:
+
+  - **Anthropic** — added Claude Sonnet 5 (`claude-sonnet-5`): adaptive thinking, $3/$15 per MTok standard (introductory $2/$10 through August 31, 2026), 1M context, 128K max output (mirrors Sonnet 4.6's request surface). Added alongside Claude Sonnet 4.6, which remains the default Anthropic model.
+
+- 9dbd329: Updated model definitions and pricing:
+
+  - **Anthropic** — added Claude Opus 4.8 (`claude-opus-4-8`): adaptive-thinking-only, $5/$25 per MTok, 1M context, 128K max output (mirrors Opus 4.7's request surface). Removed Claude Opus 4 (`claude-opus-4-0` / `claude-opus-4-20250514`) and Claude Sonnet 4 (`claude-sonnet-4-0` / `claude-sonnet-4-20250514`), which retired on June 15, 2026 and now return errors. Noted Claude Opus 4.1's deprecation (retiring August 5, 2026).
+  - **Moonshot** — added Kimi K2.7 Code (`kimi-k2.7-code`, $0.95/$4.00) and its faster `kimi-k2.7-code-highspeed` tier ($1.90/$8.00), both with toggleable thinking. Added explicit cache-read pricing to the legacy Moonshot V1 models (uniform, no cache discount).
+
+- 55922cb: Removed `:Flemma import` command and Claude Workbench import support
+- c15f633: Secrets resolvers now own their config schema (`metadata.config_schema`), composed into the `secrets` config namespace via DISCOVER — the same pattern provider adapters and sandbox backends use. Defaults materialize when a resolver registers, and custom resolvers can declare their own `secrets.<name>` options. `secrets.chatgpt.auth_file` is now a configurable `setup()` key (effective when the experimental Codex adapter is loaded, which self-registers the ChatGPT resolver).
+- 832b93b: Surface subscription rate limits (5-hour, weekly) from Codex/ChatGPT response headers in the usage bar and as lualine statusline resolvers
+- f86af3b: Add `:tint(attr, hex)` and `:mute(attr, hex)` theme-aware blend methods to the `flemma.hl` builder. `:tint()` offsets away from the theme background (making colours more distinct), `:mute()` offsets toward it (making colours more subdued). Both automatically flip blend direction based on `vim.o.background`, replacing verbose `h.themed()` + flipped `+`/`-` patterns with single-line calls.
+- 34691fd: Added treesitter-powered syntax highlighting for tool preview virt_lines. Bash commands now render with per-token syntax coloring. Any tool can opt in by returning `highlight = { lang = "language_name" }` from its `format_preview` method. Falls back silently to flat highlighting when the treesitter grammar is unavailable.
+- ac56bc9: Added tool result store for durable materialization of tool output.
+
+  Tool results can be materialized to deterministic file paths alongside the .chat file (opt-in via `tools.store.materialize`, layout via `tools.store.path_format`). Truncation overflow now always lands at the durable store location, replacing ephemeral `$TMPDIR` files. Breaking: `tools.truncate.output_path_format` is removed — truncation overflow now routes through the store.
+
+  New config: `tools.store.{path_format, unnamed_path_format, materialize, preview, backup}`.
+
+- f90efda: Added `flemma.save_to` and renamed the background parameter to `flemma.background`.
+
+  Every tool schema now carries an optional `flemma.save_to` parameter: the model can redirect full tool output to a file and the conversation receives a short preview plus the saved path instead. The `bash` tool exports `$FLEMMA_TOOLS_STORE_PATH` pointing at the conversation's store directory, which is sandbox-writable by default via the new `urn:flemma:store` policy variable. The background-execution parameter is now namespaced as `flemma.background`; both harness parameters are stripped from tool input before execution and respect strict-mode schema invariants.
+
+  `tools.store.materialize` now defaults to `false` — only truncation overflow and explicit `flemma.save_to` redirects write to the store unless opted in.
+
+### Patch Changes
+
+- 4f10bd6: Fixed approval preview: leading symbol always shown, generic multiline previews put tool name on its own line, continuation indent respects buffer shiftwidth
+- 7063a39: Improved tool throttle notification to show queued count and running slots instead of cryptic "Executing 0/1" format
+- 0642363: Terminate SSE stream after response.completed to avoid idle connection tail
+- 9b13f26: Fix line highlight groups (`FlemmaLine*`) being lost after a colorscheme change. Groups are now re-established on every `apply_syntax()` call instead of once at setup time.
+- bfb6e6c: Highlight groups now refresh automatically when switching colorschemes mid-session. A `ColorScheme` autocmd re-runs `apply_syntax()`, and since builder operations resolve lazily with no cache, all groups pick up the new colorscheme's colours immediately.
+- ee99627: Fixed background parameter not being injected into tool schemas for Chat Completions providers (Moonshot/Kimi)
+- cd8159c: Fixed CursorLine not highlighting text in chat buffers when line_highlights is disabled
+- 69639c3: Fixed parser bug where malformed JSON in a tool_use block caused all subsequent tool_use blocks in the same message to be skipped.
+- 7142363: Fixed tool preview backgrounds leaving black bands after window resize (e.g. opening/closing a sidebar)
+- b2802ae: Fixed "Unknown tool" errors appearing on first send when async tool sources (e.g., MCPorter) are still loading and frontmatter references tools from lazy modules
+- 628fd22: Fixed "N more lines" indicator in tool previews not inheriting the role line background highlight
+- b1bd6b3: Show status text and colored icons in fold previews for rejected, denied, and aborted tool results
+- 7e61cb3: Tool use blocks now fold whenever a matching tool result exists, regardless of the result's status
+- dd2aae5: Surface actionable diagnostic when gcloud credentials expire instead of a bare exit code
+- b64ede9: Eliminate all raw `nvim_get_hl`/`nvim_set_hl` calls from `highlight.lua`, fully delegating to `hl.lua` builder ops. Add `h.default(attr)` constructor for Normal-with-fallback resolution. Expose `highlights.tool_label` and `highlights.progress_accent` as configurable schema entries.
+- e633490: Background job results are now delivered on every send — autopilot cycles included — instead of waiting for the conversation to reach full idle. Previously a completed job's result could arrive several turns late while the model polled `flemma.jobs.status`, with each poll itself postponing delivery. The status tool also no longer reports finished jobs as a bare "queued": completed-but-undelivered jobs report `completed (delivery pending)` with `elapsed_seconds` frozen at the job's actual runtime.
+- 9401492: Fix missing usage bar and session recording when using preset-based providers
+- 095bb11: HTTP request body files no longer litter `/tmp`. The client wrote every request body via `os.tmpname()`, which on LuaJIT `mkstemp()`s a `/tmp/lua_XXXXXX` file that nothing ever removed (one leaked, empty file per request), and the `flemma_lua_*` body beside it — world-readable — survived whenever Neovim was killed before the request's `on_exit` fired. Bodies now live in Neovim's private per-instance temp directory (`vim.fn.tempname()`, mode 0700), which Neovim removes wholesale on exit.
+- 83049ce: Unnamed-buffer store paths are now process-unique. The default `tools.store.unnamed_path_format` is `${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt` (previously `…/flemma/unnamed-{{ bufnr }}/…`). Buffer numbers restart in every Neovim instance, so concurrent instances sharing `$TMPDIR` could commingle results in — and delete — each other's unnamed store directories, intermittently dropping the sandbox `urn:flemma:store` grant. `{{ flemma.pid }}` is also available to custom store path formats, and the per-process subtree keeps `$TMPDIR/flemma` to a single `unnamed/` directory.
+- 93e5c97: Reject completed tools early: show error before opening the rejection UI instead of after the user submits feedback
+- 1f0352a: Fixed the sandboxed `bash` tool hanging on Neovim 0.12+ when a command invokes an interactive pager. The 0.12+ terminal (PTY) backend gives commands a tty on stdout, so `git` (and `less`/`man`) launch the user's pager; the window-less terminal buffer's PTY is only a few rows tall, so any multi-line output (such as `git log`) pages and blocks until the tool times out. The terminal backend now sets `GIT_PAGER=cat` and `PAGER=cat`, matching the non-PTY backend's behavior (piped stdout never triggers a pager). This also resolves the earlier "Error: missing file" symptom, which was the same pager failing fast under bubblewrap's `--new-session`.
+- 73f24ae: Fixed sandboxed commands failing outright when a configured `rw_paths` entry does not exist on disk (e.g. the lazily-created tool result store directory): nonexistent paths now drop out of the resolved policy instead of producing a bwrap mount error, degrading to "not writable" until the directory exists.
+- 95a886f: Fix statusline muted text rendering with colorschemes that use `reverse` on StatusLine (e.g., wildcharm). Derived groups now strip `reverse`/`bold`/`cterm` via `:pick()` and use `nocombine` to prevent attribute bleedthrough in `%#Group#` statusline escapes. Remove `ExpectOp` — replaced by `:pick(..., { strict = true })`.
+- 245df16: The tool label (`FlemmaToolLabel`) — the approved tool-result footer and the label shown in folded message previews — now renders in the muted preview color with an italic accent instead of inheriting the bright `Normal` foreground. It is built by merging the `tool_label` accent onto `tool_preview` (the `progress_accent` pattern), so the approved footer no longer jars against the muted command-preview lines above it. Set a `fg` in `highlights.tool_label` to recolor the label.
+- b1639c3: Repeated `setup()` calls no longer stack duplicate usage-bar hook subscribers — each `usage.setup()` now disposes its previous `request:finished`/`buffer:destroyed` subscriptions before re-registering.
+
 ## 0.12.0
 
 ### Minor Changes
 
 - fa02a31: Added glob pattern support in `auto_approve` lists — entries containing `*` match tool names (e.g., `"flemma:*"`). The `$standard` preset now includes `flemma:*` to auto-approve harness tools.
 - 5af8a62: Added background job support for async tools. Tools can run in the background without blocking the conversation — the model requests it via `background: true`, or the user moves an executing tool mid-flight with `<M-b>` (`:Flemma tool:background`). Completed results are delivered as `**Job Result:**` blocks when the conversation reaches idle. Orphaned jobs are detected and resolved on file reload.
+
   - `flemma:jobs:status` harness tool lets the model query job status
   - Jobs observability bar shows active count, spinner, and autopilot resume countdown (`ui.jobs.position`)
   - `tools.autopilot.resume_delay` (default 2000ms) debounces auto-continue after job completion; Ctrl+C cancels
@@ -58,15 +138,18 @@
 - 6b36e48: Extract reusable Bar UI utility and reorganise ui config namespace.
 
   **Breaking changes (default behaviour is unchanged for users who did not customise these keys):**
+
   - Config namespace moves under `ui`. Rename `notifications.*` → `ui.usage.*` and `progress.*` → `ui.progress.*`.
   - Removed config keys: `notifications.limit`, `notifications.border`, `notifications.zindex`, `notifications.position`, `progress.zindex`. Stacking, the underline border, and the z-index overrides are gone by design.
   - Highlight groups `FlemmaNotificationsBar`, `FlemmaNotificationsSecondary`, `FlemmaNotificationsMuted`, `FlemmaNotificationsCacheGood`, `FlemmaNotificationsCacheBad` rename to `FlemmaUsageBar{,Secondary,Muted,CacheGood,CacheBad}`. `FlemmaNotificationsBottom` is removed with the border feature. Fallback chains and computed colours preserved exactly.
   - User command `:Flemma notification:recall` renames to `:Flemma usage:recall`.
 
   **New capabilities:**
+
   - Usage bar and progress bar each gain a `position` option; choose from `top`, `bottom`, `top left`, `top right`, `bottom left`, `bottom right`. Defaults unchanged (`top` for usage, `bottom left` for progress).
 
   **Internal structure (informational):**
+
   - `lua/flemma/bar.lua` moves to `lua/flemma/ui/bar/layout.lua` and gains an `apply_rendered_highlights` helper.
   - New module `lua/flemma/ui/bar/init.lua` provides a handle-based `Bar.new(opts)` with `set_icon` / `set_segments` / `set_highlight` / `update` / `dismiss` / `is_dismissed` methods, six positions, mutual exclusion, and lifecycle autocmds.
   - `lua/flemma/notifications.lua` is deleted; its driver logic lives in `lua/flemma/usage.lua`.
@@ -111,6 +194,7 @@
 - 0dcddd0: Added `FlemmaStatusTextMuted` highlight group — a theme-neutral dim variant of `StatusLine` derived via Flemma's hl expression composer (`StatusLine±fg:#666666`). Use `%#FlemmaStatusTextMuted#…%*` in `statusline.format` to dim fragments while keeping the statusline background continuous.
 
   When rendered through the bundled lualine component, both escapes are auto-rewritten at render time so they anchor to the active section hl rather than plain `StatusLine`:
+
   - `%*` → section's default hl (restores `lualine_c_normal` etc. instead of falling back to `StatusLine`)
   - `%#FlemmaStatusTextMuted#` → a memoised render-time group combining the section's bg with the muted fg, so embedded muted text keeps bg continuity across mode tints
 
@@ -119,7 +203,7 @@
   The shipped `statusline.format` default now surfaces session request count + cost and the buffer token estimate alongside the model name, with muted separators between segments. See `lua/flemma/config/schema.lua` for the literal list; users with a custom `statusline.format` are unaffected.
 
 - 8bf8557: Added `thinking.foreign` config option to control whether foreign thinking blocks are included in requests. The `thinking` parameter now accepts an object form `{ level = "high", foreign = "preserve" }` alongside the existing scalar shorthand (coerced automatically).
-- df68d3f: Unified tool result status into a parenthesized header suffix. The pending / approved / denied / rejected / aborted lifecycle states and the previously-separate `(error)` marker now all live in the `**Tool Result:**` header via a modeline-parseable suffix — e.g. ``**Tool Result:** `toolu_01` (pending)``.
+- df68d3f: Unified tool result status into a parenthesized header suffix. The pending / approved / denied / rejected / aborted lifecycle states and the previously-separate `(error)` marker now all live in the `**Tool Result:**` header via a modeline-parseable suffix — e.g. `` **Tool Result:** `toolu_01` (pending) ``.
 
   The old `flemma:tool status=<status>` fenced-block format has been retired. The fence below a tool_result is now always a plain code block. On the AST, `is_error` is gone; `status = "error"` replaces it, and any non-status tokens in the header suffix (e.g. `(status=pending sandbox=false)`) round-trip through a new `meta` field for future metadata support.
 
@@ -130,6 +214,7 @@
   Classified as `minor` rather than `major` because the format change is bounded: completed conversations (the `(error)` case and all plain tool results) round-trip unchanged, and the only affected buffers are ones paused mid-approval — a transient state, not persisted work.
 
 - f1c86cb: Added distinct syntax highlight groups for every concise status suffix on `**Tool Result:**` headers, mirroring the long-standing `(error)` treatment:
+
   - `(pending)` → `FlemmaToolResultPending` → `DiagnosticInfo`
   - `(approved)` → `FlemmaToolResultApproved` → `DiagnosticOk`
   - `(rejected)` → `FlemmaToolResultRejected` → `DiagnosticWarn`
@@ -165,6 +250,7 @@
 - 1547404: Refactor: consolidated try_estimate_usage orchestration into a shared base.send_count_tokens helper. Adapters now declare only endpoint, body transformer, and response parser.
 - 22f5297: Fixed inconsistent `FlemmaToolUseTitle` / `FlemmaToolResultTitle` highlighting where only the first `**Tool Use:**` / `**Tool Result:**` header in a role block received the dedicated highlight while subsequent ones were rendered as plain text. Vim's default syntax sync (`maxlines=60`) could leave the outer `FlemmaSystem` / `FlemmaUser` / `FlemmaAssistant` region unmatched after a fenced code block between headers, so the contained `FlemmaToolUse` / `FlemmaToolResult` regions had nowhere to anchor. Added `syntax sync match … grouphere` directives on the three role markers so every header now picks up its title highlight regardless of position. The issue became visually obvious once `editing.conceal = "2nv"` hid the `**` markers, but was latent in all prior versions.
 - b03d3ca: Refreshed the default visuals:
+
   - Tool fold icons now distinguish request from response: `⬡` (hollow hexagon) for tool_use and `⬢` (filled hexagon) for tool_result, replacing the shared `◆` glyph. Both share the `FlemmaToolIcon` highlight group.
   - `@System` and `@You` messages now carry subtle background tints by default (`#101112` / `#202122`), making role transitions legible even when rulers are hidden. `@Assistant` stays on `Normal` so the eye rests on the LLM output.
   - Thinking blocks softened to dark gray on near-black (`bg:#000000 fg:#333333`), replacing the prior teal-tinted palette.
@@ -317,6 +403,7 @@
 - 80fc278: Added persistent progress indicator showing character count, elapsed time, and phase-specific animation throughout the full request lifecycle including tool use buffering. The indicator appears as a floating window at the bottom of the chat window when the progress line is off-screen, with spinner icon placed in the gutter to match notification bar layout. Configurable via `progress.highlight` and `progress.zindex`.
 - 308767b: Preprocessor rewriter modules can now declare their own Vim syntax rules and highlight groups via `get_vim_syntax(config)`, removing the need to modify the main syntax file when adding new rewriters.
 - fcbce89: Sandbox variable expansion overhaul and DNS fix:
+
   - Path variables in `rw_paths` now use `urn:flemma:cwd` and `urn:flemma:buffer:path` instead of `$CWD` and `$FLEMMA_BUFFER_PATH` (breaking change for custom configs)
   - Added `$ENV` and `${ENV:-default}` expansion with bash-style fallback syntax
   - Default `rw_paths` now includes `${TMPDIR:-/tmp}`, `${XDG_CACHE_HOME:-~/.cache}`, and `${XDG_DATA_HOME:-~/.local/share}` for package manager compatibility
@@ -680,17 +767,20 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
+
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
+
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
+
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
