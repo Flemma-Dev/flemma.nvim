@@ -202,7 +202,7 @@ get_element_icon = require("flemma.integrations.bufferline").get_element_icon({ 
 
 ### How it works
 
-The module listens to four Flemma hooks via User autocmds:
+The module subscribes to four Flemma lifecycle hooks via the `hooks.on` API (the same events also fire as the correspondingly-named `User` autocmds):
 
 | Event                   | Effect                 |
 | ----------------------- | ---------------------- |

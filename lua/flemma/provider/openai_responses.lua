@@ -95,7 +95,7 @@ function M._apply_reasoning(self, body)
 end
 
 --- Apply provider-specific body fields after core construction.
---- Default: no-op. OpenAI overrides for prompt caching; Codex for store/text.
+--- Default: no-op. OpenAI overrides for prompt caching; Codex for text/verbosity and dropping server-controlled fields.
 ---@param self flemma.provider.OpenAIResponses
 ---@param _body table<string, any> The request body (mutated in place)
 ---@param _context? flemma.Context The shared context object

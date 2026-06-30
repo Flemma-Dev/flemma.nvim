@@ -126,13 +126,15 @@ Paths in `rw_paths` support three expansion forms:
 
 #### Flemma URN variables
 
-| URN                      | Expansion                                   | Source                                                                      |
-| ------------------------ | ------------------------------------------- | --------------------------------------------------------------------------- |
-| `urn:flemma:cwd`         | Vim's global working directory              | `vim.fn.getcwd()` (set by `:cd`)                                            |
-| `urn:flemma:buffer:path` | Directory containing the current .chat file | `vim.fn.fnamemodify(bufname, ":p:h")`                                       |
-| `urn:flemma:store`       | Tool result store directory for the buffer  | `tools.store.path_format` (see [docs/tools.md](tools.md#tool-result-store)) |
+| URN                      | Expansion                                                   | Source                                                                      |
+| ------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `urn:flemma:cwd`         | Vim's global working directory                              | `vim.fn.getcwd()` (set by `:cd`)                                            |
+| `urn:flemma:buffer:path` | Directory containing the current .chat file                 | `vim.fn.fnamemodify(bufname, ":p:h")`                                       |
+| `urn:flemma:store`       | Tool result store directory for the buffer (created lazily) | `tools.store.path_format` (see [docs/tools.md](tools.md#tool-result-store)) |
 
 After expansion, all paths are normalized to absolute paths with symlinks resolved. Paths subsumed by a parent path are deduplicated (e.g., `/tmp` and `/tmp/foo` collapses to just `/tmp`).
+
+Paths that do not exist on disk at resolution time are then dropped from `rw_paths`. bwrap hard-fails on a `--bind` source it cannot find, so a not-yet-created grant — such as the lazily-created `urn:flemma:store` directory — degrades to read-only rather than breaking every sandboxed command. The `bash` terminal backend pre-creates the store directory before sandbox wrapping so writes there still succeed.
 
 ---
 
@@ -314,7 +316,7 @@ sandbox.register("my_backend", {
 
 The `wrap()` function receives a fully resolved policy:
 
-- `policy.rw_paths` is guaranteed to contain only absolute, deduplicated, real filesystem paths. No variables, no relative paths.
+- `policy.rw_paths` is guaranteed to contain only absolute, deduplicated paths that exist on disk (non-existent paths are dropped during resolution, so a backend never receives a path that would fail to mount). No variables, no relative paths.
 - `policy.network` is a boolean (`true` = allow, `false` = block).
 - `policy.allow_privileged` is a boolean (`true` = allow sudo, `false` = drop privileges).
 - The function must return a flat `string[]` suitable for `vim.fn.jobstart()`, or `nil` + error string.

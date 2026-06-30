@@ -335,7 +335,7 @@ Trimming works on `{{ }}` expressions too. `{{- value -}}` strips surrounding wh
 
 Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes support two modes:
 
-**Text mode** (default) -- the included file is parsed for `{{ }}` expressions, `{% %}` code blocks, and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables -- the parent's frontmatter variables are not inherited.
+**Text mode** (default) -- the included file is parsed for `{{ }}` expressions and `{% %}` code blocks (including nested `include()` calls), which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables -- the parent's frontmatter variables are not inherited. Note that `@./` file references are **not** desugared inside an included file (they are resolved only by the preprocessor, and only on top-level messages) -- to attach a file from within an include, use binary mode: `{{ include('./path', { [symbols.BINARY] = true }) }}`.
 
 ```markdown
 @System:

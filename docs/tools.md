@@ -61,8 +61,9 @@ You can **edit the status directly** in the header. This is the primary way to i
   ````
 
 - **Execute one tool:** press <kbd>Alt-Enter</kbd> on any tool block to execute or resolve it immediately (works for `approved`, `pending`, `rejected`, and `denied`).
-- **Approve via command:** `:Flemma tool:approve` toggles the tool under the cursor to `(approved)` without executing it – the next <kbd>Ctrl-]</kbd> runs it.
-- **Reject via command:** `:Flemma tool:reject` toggles the tool under the cursor to `(rejected)`. Append an optional message (`:Flemma tool:reject do not run rm -rf`) and it's written into the fence as the rejection reason the model will see.
+- **Approve via command or keymap:** `:Flemma tool:approve` (or <kbd>Alt-A</kbd>) toggles the tool under the cursor to `(approved)` without executing it – the next <kbd>Ctrl-]</kbd> runs it.
+- **Approve all pending:** `:Flemma tool:approve-all` (or <kbd>Alt-Shift-A</kbd>) approves every pending tool in the buffer at once.
+- **Reject via command or keymap:** `:Flemma tool:reject` (or <kbd>Alt-R</kbd>, which opens the [inline rejection popup](ui.md#rejection-popup)) toggles the tool under the cursor to `(rejected)`. Append an optional message (`:Flemma tool:reject do not run rm -rf`) and it's written into the fence as the rejection reason the model will see.
 
 ### Content-overwrite protection
 
@@ -224,12 +225,12 @@ When autopilot is enabled and background jobs complete at idle, Flemma schedules
 
 A built-in harness tool that lets the model query the status of a background job by its `job_id`. Returns one of:
 
-| Status                                  | Meaning                                      |
-| --------------------------------------- | -------------------------------------------- |
-| `running`                               | The tool is still executing                  |
-| `queued`                                | Execution finished; result awaiting delivery |
-| `completed`                             | Result already delivered into the buffer     |
-| `completed (removed from conversation)` | Job existed but its result block was deleted |
+| Status                                  | Meaning                                                                                            |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `running`                               | The tool is still executing                                                                        |
+| `completed (delivery pending)`          | Execution finished; the result is queued and will be injected automatically — don't re-run or poll |
+| `completed`                             | Result already delivered into the buffer                                                           |
+| `completed (removed from conversation)` | Job existed but its result block was deleted                                                       |
 
 The tool cross-checks in-memory state against the buffer AST, so even if the process state is cleared (e.g., after a restart), it falls back to scanning for `**Job Result:**` blocks.
 
@@ -293,7 +294,7 @@ Re-running a tool writes to the same store path. Before overwriting, the configu
 
 ### `flemma.save_to` – redirecting output to a file
 
-Flemma injects an optional `flemma.save_to` string parameter into **every** tool's schema. When the model supplies a path, the full output is written there and the conversation receives a stub instead: a short head preview (`tools.store.preview`, default 10 lines / 2KB) followed by `[Output saved: /path/to/file — 1.2MB, 54321 lines]`.
+Flemma injects an optional `flemma.save_to` string parameter into **every** tool's schema. When the model supplies a path, the full output is written there and the conversation receives a stub instead: a short head preview (`tools.store.preview`, default 10 lines / 2KB) followed by `[Output saved: /path/to/file — 1.2MB, 54321 lines]`. [The parameter description](../lua/flemma/messages/tool-parameter--save-to.chat) tells the model to reach for it when output is large or needs to live at a specific path.
 
 - Relative paths resolve against the chat file's directory; absolute and `~/…` paths work too.
 - `$FLEMMA_TOOLS_STORE_PATH/<filename>` targets the conversation's store directory.

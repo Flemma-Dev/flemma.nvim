@@ -205,7 +205,7 @@ M.apply_syntax = function()
 
   -- Tool label: the human-readable tool intent shown in folds and as the
   -- approved tool_result footer. tool_label carries only accent attrs (italic by
-  -- default), exactly like progress_accent above — so it must be merged onto the
+  -- default), exactly like progress_accent below — so it must be merged onto the
   -- preview base rather than `:set` standalone. A standalone italic-only group
   -- has no fg and inherits the bright Normal fg, which jars against the muted
   -- (Comment) preview lines it sits beside. "force" lets a user-supplied

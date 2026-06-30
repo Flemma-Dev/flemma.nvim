@@ -591,7 +591,7 @@ function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
-  -- Extract harness directives (flemma:*) from the tool input so that both the
+  -- Extract harness directives (flemma.*) from the tool input so that both the
   -- normal flow (core.lua) and manual approval (execute_at_cursor) share one path.
   local is_background = context.input and context.input["flemma.background"] == true
   local save_to = context.input and context.input["flemma.save_to"] --[[@as string|nil]]

@@ -143,7 +143,10 @@ Flemma resolves API keys and tokens through a priority-based resolver chain. The
 | 100      | Environment    | All          | `{SERVICE}_{KIND}` env var (e.g., `ANTHROPIC_API_KEY`), then aliases |
 | 50       | Secret Service | Linux        | `secret-tool lookup service {service} key {kind}` (GNOME Keyring)    |
 | 50       | Keychain       | macOS        | `security find-generic-password -s {service} -a {kind} -w`           |
+| 50       | ChatGPT        | All          | `~/.codex/auth.json` OAuth token (only `chatgpt_subscription` kind)  |
 | 25       | Gcloud         | All (w/ CLI) | `gcloud auth print-access-token` (only for `access_token` kind)      |
+
+The ChatGPT resolver is **not** part of the default chain — it is registered only when the experimental Codex provider is loaded (`providers.modules = { "flemma.provider.adapters.experimental.codex" }`). See [docs/providers.md](providers.md#codex--chatgpt-subscription-experimental).
 
 ### How it works
 
@@ -160,11 +163,11 @@ The environment resolver constructs the variable name from the credential's serv
 | --------- | --------------- | ------------------------ |
 | anthropic | api_key         | `ANTHROPIC_API_KEY`      |
 | openai    | api_key         | `OPENAI_API_KEY`         |
-| vertex    | access_token    | `VERTEX_AI_ACCESS_TOKEN` |
+| vertex    | access_token    | `VERTEX_ACCESS_TOKEN`    |
 | vertex    | service_account | `VERTEX_SERVICE_ACCOUNT` |
 | moonshot  | api_key         | `MOONSHOT_API_KEY`       |
 
-Credentials can also define `aliases` – alternative variable names checked in order after the convention.
+Credentials can also define `aliases` – alternative variable names checked in order after the convention. For example, `vertex`/`access_token` also accepts the legacy `VERTEX_AI_ACCESS_TOKEN` alias.
 
 ### TTL caching
 

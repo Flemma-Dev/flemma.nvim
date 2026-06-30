@@ -64,16 +64,28 @@ local req = session:get_latest_request_for_filepath(vim.fn.expand("%:p"))
 
 Each request stores raw data -- tokens, per-million prices, cache pricing, and timestamps -- so costs are always derived from the underlying components.
 
-| Field                                                    | Description                                                                                            |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `provider`, `model`                                      | Provider and model that handled the request                                                            |
-| `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts (see `output_has_thoughts` for how thinking tokens relate to output)                  |
-| `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                                      |
-| `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                                     |
-| `cache_read_price`, `cache_write_price`                  | USD per million cache tokens (`nil` when the provider does not support caching)                        |
-| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens (true for OpenAI/Anthropic, false for Vertex) |
-| `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`)                |
-| `filepath`, `bufnr`                                      | Source buffer identifier (`filepath` is the resolved absolute path; either may be `nil`)               |
+| Field                                                    | Description                                                                                                                                                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`, `model`                                      | Provider and model that handled the request                                                                                                                                                         |
+| `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts (see `output_has_thoughts` for how thinking tokens relate to output)                                                                                                               |
+| `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                                                                                                                                   |
+| `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                                                                                                                                  |
+| `cache_read_price`, `cache_write_price`                  | USD per million cache tokens (`nil` when the provider does not support caching)                                                                                                                     |
+| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens (true for OpenAI/Anthropic, false for Vertex)                                                                                              |
+| `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`)                                                                                                             |
+| `filepath`, `bufnr`                                      | Source buffer identifier (`filepath` is the resolved absolute path; either may be `nil`)                                                                                                            |
+| `rate_limits`                                            | Subscription rate-limit snapshot (`flemma.session.RateLimitSnapshot`) when the provider reports one (e.g. the experimental Codex / ChatGPT-subscription provider); `nil` for usage-billed providers |
+
+### Subscription rate limits
+
+Providers that bill against a subscription quota rather than per-token attach a rate-limit snapshot to each request through the `rate_limits` field. Currently only the experimental Codex / ChatGPT-subscription provider populates it (parsed from the response headers); every other provider leaves it `nil`.
+
+| Type                               | Shape                                                                                                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flemma.session.RateLimitSnapshot` | `plan_name?` (human-readable plan, e.g. `"Plus"`/`"Pro"`), `windows` (a list of `RateLimitWindow`, ordered shortest-window-first / most-urgent-first) |
+| `flemma.session.RateLimitWindow`   | `used_percent` (0–100 consumed), `window_seconds` (rolling window length), `resets_at?` (Unix seconds when the window resets)                         |
+
+These feed the usage bar and the lualine resolvers (see [docs/integrations.md](integrations.md)); the 5-hour and weekly Codex windows are the typical entries.
 
 ## Request methods
 

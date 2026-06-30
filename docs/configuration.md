@@ -17,6 +17,7 @@ require("flemma").setup({
     cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
       thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
+      effort = nil,                          -- Explicit reasoning effort on adaptive-thinking models: "low" | "medium" | "high" | "xhigh" | "max"
     },
     vertex = {
       project_id = nil,                      -- Google Cloud project ID (required for Vertex)
@@ -25,6 +26,7 @@ require("flemma").setup({
     },
     openai = {
       reasoning = nil,                       -- Override thinking with explicit effort level
+      reasoning_summary = "auto",            -- Reasoning summary verbosity for the Responses API
       experimental = {
         phase = true,                        -- Label assistant message phases for Responses API fidelity
       },
@@ -34,6 +36,9 @@ require("flemma").setup({
     },
   },
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
+  providers = {
+    modules = {},                            -- Lua module paths for non-built-in provider adapters (e.g. "flemma.provider.adapters.experimental.codex"); see docs/providers.md
+  },
   tools = {
     require_approval = true,                 -- When false, auto-approves all tools
     auto_approve = { "$standard" },          -- List, glob patterns, presets ($name), or a function — see docs/tools.md#configuring-approval
@@ -166,7 +171,7 @@ require("flemma").setup({
       high_cost_threshold = 30,                -- Cents — requests above this get a high-cost highlight
     },
     statusline = {
-      format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
+      format = "{{ provider.name }}/{{ model.name }} ...", -- Abbreviated placeholder; the shipped default also shows thinking level, input-token %, and session cost. Lua template string or function — see docs/integrations.md for the full default, variables, and syntax
     },
     approval = {
       enabled = true,                          -- Show inline approval prompts on pending tool results

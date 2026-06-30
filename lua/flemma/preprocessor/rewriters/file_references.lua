@@ -1,5 +1,5 @@
 --- File-references rewriter
---- Converts @./path, @../path, and @~/path references into include() expressions
+--- Converts @./path, @../path, @~/path, and @//absolute/path references into include() expressions
 --- that the processor evaluates into file parts.
 ---@class flemma.preprocessor.rewriters.FileReferences
 local M = {}

@@ -61,6 +61,9 @@ Flemma never accepts API keys in your Lua config -- credentials stay in environm
 | Moonshot  | `MOONSHOT_API_KEY`                                       |
 | Vertex AI | `VERTEX_AI_ACCESS_TOKEN` (or service-account flow below) |
 
+> [!NOTE]
+> An experimental **Codex** provider (ChatGPT subscription) exists and doesn't use an API key -- it authenticates via `codex login`. See [providers.md](docs/providers.md#codex--chatgpt-subscription-experimental).
+
 **Linux keyring** (Secret Service) -- store once, reuse across all Neovim sessions:
 
 ```bash
@@ -112,10 +115,10 @@ Flemma is more than a chatbot. Here are some of the things people use it for:
 
 ## Providers
 
-Four built-in providers. Switch at any time -- even mid-conversation:
+Four built-in providers -- plus an experimental fifth (Codex, for ChatGPT subscribers; see below). Switch at any time -- even mid-conversation:
 
 ```vim
-:Flemma switch openai gpt-5 temperature=0.3
+:Flemma switch openai gpt-5.4 temperature=0.3
 :Flemma switch $fast  " named presets
 ```
 
@@ -129,6 +132,9 @@ Four built-in providers. Switch at any time -- even mid-conversation:
 All four support extended thinking/reasoning through a single `thinking` parameter that Flemma maps to each provider's native format. Set `thinking = "high"` once and it works everywhere -- see the [full mapping table](docs/configuration.md#thinking-parameter-mapping) in configuration.md. Prompt caching is handled automatically -- read more in [prompt-caching.md](docs/prompt-caching.md).
 
 Credentials are resolved automatically from environment variables or your platform keyring -- see **Setting up credentials** under Quick Start above.
+
+> [!NOTE]
+> **Experimental -- Codex (ChatGPT subscription).** ChatGPT subscribers can drive Flemma with their existing `codex login` token instead of an API key. See [providers.md](docs/providers.md#codex--chatgpt-subscription-experimental) for the full setup, models, and caveats.
 
 Define presets for quick switching:
 
@@ -171,7 +177,7 @@ You can watch the whole thing happen in the buffer. Every tool call, every resul
 
 ### Safety
 
-- **Approval.** By default, file tools (`read`, `edit`, `write`, `grep`, `find`, `ls`) are auto-approved. `bash` is auto-approved when the sandbox is available, or requires your review otherwise. You see a preview of what the tool will do before approving: `bash: running tests -- $ make test`. Customize approval with presets (`$standard`, `$readonly`) or write your own logic.
+- **Approval.** By default, file tools (`read`, `edit`, `write`, `grep`, `find`, `ls`) are auto-approved. `bash` is auto-approved when the sandbox is available, or requires your review otherwise. You see a preview of what the tool will do before approving: `bash: $ make test — running tests`. Customize approval with presets (`$standard`, `$readonly`) or write your own logic.
 - **Sandbox.** On Linux, shell commands run inside a Bubblewrap container with a read-only root filesystem. Only your project directory and `/tmp` are writable. Enabled by default. The sandbox is damage control, not a security boundary -- it limits the blast radius of common accidents, not deliberate attacks.
 - **Turn limit.** Autopilot stops after 100 consecutive turns to prevent runaway cost.
 - **You're in control.** Let it run fully autonomous, supervise and approve tools one at a time, or stop at any point, edit the conversation, and resume.
@@ -219,20 +225,20 @@ What it doesn't try to do:
 
 All commands live under `:Flemma` with tab completion. Misspelled commands get did-you-mean suggestions.
 
-| `:Flemma` Command                                                     | Purpose                                          |
-| --------------------------------------------------------------------- | ------------------------------------------------ |
-| `send`                                                                | Send the buffer to the provider                  |
-| `cancel`                                                              | Abort the active request or tool                 |
-| `switch ...`                                                          | Change provider, model, or parameters            |
-| `status [verbose]`                                                    | Show runtime status and resolved configuration   |
-| `usage:estimate`                                                      | Estimate input tokens and cost for the next send |
-| `usage:recall`                                                        | Re-show the most recent usage bar                |
-| `autopilot:enable\|disable\|status`                                   | Toggle or inspect autonomous mode                |
-| `sandbox:enable\|disable\|status`                                     | Toggle or inspect sandboxing                     |
-| `tool:execute\|background\|approve\|reject\|cancel\|cancel-all\|list` | Manage tool executions                           |
-| `message:next\|previous`                                              | Jump between messages                            |
-| `logging:enable\|disable\|open`                                       | Structured logging                               |
-| `diagnostics:enable\|disable\|diff`                                   | Request diagnostics (useful for debugging cache) |
+| `:Flemma` Command                                                                  | Purpose                                          |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `send`                                                                             | Send the buffer to the provider                  |
+| `cancel`                                                                           | Abort the active request or tool                 |
+| `switch ...`                                                                       | Change provider, model, or parameters            |
+| `status [verbose]`                                                                 | Show runtime status and resolved configuration   |
+| `usage:estimate`                                                                   | Estimate input tokens and cost for the next send |
+| `usage:recall`                                                                     | Re-show the most recent usage bar                |
+| `autopilot:enable\|disable\|status`                                                | Toggle or inspect autonomous mode                |
+| `sandbox:enable\|disable\|status`                                                  | Toggle or inspect sandboxing                     |
+| `tool:execute\|background\|approve\|approve-all\|reject\|cancel\|cancel-all\|list` | Manage tool executions                           |
+| `message:next\|previous`                                                           | Jump between messages                            |
+| `logging:enable\|disable\|open`                                                    | Structured logging                               |
+| `diagnostics:enable\|disable\|diff`                                                | Request diagnostics (useful for debugging cache) |
 
 ### Keymaps (buffer-local to `.chat` files, all configurable)
 
@@ -263,7 +269,7 @@ require("flemma").setup({
   thinking = "high",                    -- unified across all providers
   presets = {
     ["$fast"] = "vertex gemini-2.5-flash thinking=minimal",
-    ["$opus"] = "anthropic claude-opus-4-6 thinking=max",
+    ["$opus"] = "anthropic claude-opus-4-8 thinking=max",
   },
   sandbox = { backend = "required" },   -- warn if no sandbox backend is available
   editing = { auto_write = true },      -- save .chat files after each response
@@ -324,7 +330,7 @@ From there, `make develop` launches Neovim with Flemma loaded from your working 
 <details>
 <summary><strong>Can I use different models for different conversations?</strong></summary>
 
-Yes. Each `.chat` file can set its own provider, model, and parameters. You can also switch mid-conversation with `:Flemma switch openai gpt-5`. Read more in [configuration.md](docs/configuration.md).
+Yes. Each `.chat` file can set its own provider, model, and parameters. You can also switch mid-conversation with `:Flemma switch openai gpt-5.4`. Read more in [configuration.md](docs/configuration.md).
 
 </details>
 

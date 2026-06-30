@@ -43,7 +43,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.approval_label`       | Tool name label on approval prompts (`FlemmaApprovalLabel`)               |
 | `highlights.approval_key`         | Keybinding hints on approval prompts (`FlemmaApprovalKey`)                |
 | `highlights.approval_action`      | Action text on approval prompts (`FlemmaApprovalAction`)                  |
-| `highlights.rejection_input`      | Rejection popup input area (`FlemmaRejectionInput`)                       |
+| `highlights.rejection_input`      | Rejection popup input area (`FlemmaRejection`)                            |
 | `highlights.rejection_border`     | Rejection popup border (`FlemmaRejectionBorder`)                          |
 | `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)        |
 | `highlights.progress_accent`      | Bold accent for tool name in the progress bar (`FlemmaProgressBarAccent`) |
@@ -205,10 +205,10 @@ local h = require("flemma.hl")
 
 line_highlights = {
   enabled = true,
-  frontmatter = h.from("Normal"):tint("bg", "#201020"),
-  system = h.from("Normal"):tint("bg", "#201000"),
-  user = h.link("Normal"),
-  assistant = h.from("Normal"):tint("bg", "#102020"),
+  frontmatter = h.from("Normal"):tint("bg", "#18111a"),
+  system = h.from("Normal"):tint("bg", "#101112"),
+  user = h.from("Normal"):tint("bg", "#202122"),
+  assistant = h.link("Normal"),
 }
 ```
 
@@ -252,7 +252,7 @@ When `padding.right > 0`, the top arc (`╭`) connects to the ruler for a seamle
 
 ## Approval prompt
 
-When a tool call requires manual approval, Flemma renders an inline widget at the end of the tool result's closing fence line showing a pause indicator, the tool label, a queue counter, and keybind hints. Approved-but-not-yet-executing tools show a check icon instead.
+When a tool call requires manual approval, Flemma renders an inline widget at the end of the tool result's closing fence line. The cursor-focused tool shows a pause indicator (`⏸`), the tool label, and keybind hints; other pending tools instead show `Awaiting approval… (N/M)` when more than one tool is queued. Approved-but-not-yet-executing tools show a check icon (`✓`), and executing or already-settled tools show an hourglass (`⧖`) with just the tool label.
 
 ```lua
 ui = {
@@ -268,7 +268,7 @@ When `syntax_highlighting` is enabled (the default), tool preview content inside
 
 ## Rejection popup
 
-When you reject a tool call, Flemma opens an inline floating input overlaid on the tool result fence. Type your rejection reason and press <kbd>Enter</kbd> to confirm, or <kbd>Esc</kbd> to cancel. The rejection reason is sent to the model as the tool error message.
+When you reject a tool call, Flemma opens an inline floating input overlaid on the tool result fence. The input opens in insert mode pre-filled with `User feedback: ` and supports multi-line editing with Vim motions; type your reason and press <kbd>Enter</kbd> to confirm, or <kbd>Ctrl-C</kbd> (or <kbd>Esc</kbd>/<kbd>q</kbd> in normal mode) to cancel. The rejection reason is sent to the model as the tool error message.
 
 ```lua
 ui = {
@@ -286,7 +286,7 @@ Two highlight groups control the popup appearance:
 
 | Group                   | Default                          | Applies to           |
 | ----------------------- | -------------------------------- | -------------------- |
-| `FlemmaRejectionInput`  | `MsgArea`                        | The popup input area |
+| `FlemmaRejection`       | `MsgArea`                        | The popup input area |
 | `FlemmaRejectionBorder` | `FloatBorder` fg on `MsgArea` bg | The popup border     |
 
 Customise via `highlights.rejection_input` and `highlights.rejection_border` in your config. Set `ui.rejection.enabled = false` to fall back to `vim.ui.input` for rejection messages.
@@ -301,7 +301,7 @@ When the model enters a thinking/reasoning phase, the spinner animation is repla
 
 ### Auto-scroll during streaming
 
-While a response is streaming, Flemma automatically scrolls the viewport to keep new content visible — the buffer follows the growing response to the bottom. If you scroll away (e.g., to review an earlier message), auto-scroll disengages and the viewport stays where you put it. Auto-scroll re-engages when the next request starts.
+While a response is streaming, Flemma automatically scrolls the viewport to keep new content visible — the buffer follows the growing response to the bottom. If you scroll away (e.g., to review an earlier message), auto-scroll disengages and the viewport stays where you put it. Auto-scroll re-engages when the next request starts, and also re-engages mid-stream if you move the cursor back to the last line.
 
 ### Booting indicator
 
