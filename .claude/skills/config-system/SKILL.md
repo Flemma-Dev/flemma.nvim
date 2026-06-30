@@ -11,12 +11,12 @@ Copy-on-Write layers with a declarative schema. One system, one API, one mental 
 
 4 layers store **operations** (not values). Reads replay ops across layers.
 
-| Priority | Layer        | Scope      | Written by                      |
-|----------|--------------|------------|---------------------------------|
-| L10      | DEFAULTS     | global     | Schema materialization at boot  |
-| L20      | SETUP        | global     | `require("flemma").setup(opts)` |
-| L30      | RUNTIME      | global     | `:Flemma switch`, runtime cmds  |
-| L40      | FRONTMATTER  | per-buffer | `flemma.opt.*` in frontmatter   |
+| Priority | Layer       | Scope      | Written by                      |
+| -------- | ----------- | ---------- | ------------------------------- |
+| L10      | DEFAULTS    | global     | Schema materialization at boot  |
+| L20      | SETUP       | global     | `require("flemma").setup(opts)` |
+| L30      | RUNTIME     | global     | `:Flemma switch`, runtime cmds  |
+| L40      | FRONTMATTER | per-buffer | `flemma.opt.*` in frontmatter   |
 
 **Scalars:** Top-down (L40 first), first `set` wins.
 **Lists:** Bottom-up (L10 first), accumulate `set`/`append`/`remove`/`prepend`.
@@ -66,12 +66,12 @@ config.LAYERS                         -- { DEFAULTS=10, SETUP=20, RUNTIME=30, FR
 
 ### get() vs materialize()
 
-| Need | Use |
-|------|-----|
-| Static key reads (`cfg.tools.timeout`) | `get(bufnr)` |
-| `pairs()` / iteration / dynamic keys | `materialize(bufnr)` |
-| `vim.deepcopy()` / `vim.inspect()` | `materialize(bufnr)` |
-| Callbacks receiving config | `materialize(bufnr)` |
+| Need                                   | Use                  |
+| -------------------------------------- | -------------------- |
+| Static key reads (`cfg.tools.timeout`) | `get(bufnr)`         |
+| `pairs()` / iteration / dynamic keys   | `materialize(bufnr)` |
+| `vim.deepcopy()` / `vim.inspect()`     | `materialize(bufnr)` |
+| Callbacks receiving config             | `materialize(bufnr)` |
 
 ## Key Invariants
 
@@ -86,10 +86,10 @@ config.LAYERS                         -- { DEFAULTS=10, SETUP=20, RUNTIME=30, FR
 
 Read these when you need depth on a specific area:
 
-| File | When to read |
-|------|-------------|
-| `schema-dsl.md` | Adding config fields, extending schema, understanding validation/coerce |
-| `store-and-proxy.md` | Resolution mechanics, proxy behavior, lens composition, write patterns |
-| `patterns-and-pitfalls.md` | Writing/testing config-dependent code, avoiding known gotchas |
+| File                       | When to read                                                            |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `schema-dsl.md`            | Adding config fields, extending schema, understanding validation/coerce |
+| `store-and-proxy.md`       | Resolution mechanics, proxy behavior, lens composition, write patterns  |
+| `patterns-and-pitfalls.md` | Writing/testing config-dependent code, avoiding known gotchas           |
 
 All reference files are in this skill's directory (`.claude/skills/config-system/`).

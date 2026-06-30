@@ -8,6 +8,7 @@ disable-model-invocation: true
 Update the per-provider model data files under `lua/flemma/models/` with up-to-date information about the models and pricing of Google Gemini (via Vertex AI), Anthropic Claude, OpenAI, and Moonshot AI.
 
 **Target files:**
+
 - `lua/flemma/models/anthropic.lua`
 - `lua/flemma/models/openai.lua`
 - `lua/flemma/models/vertex.lua`
@@ -150,17 +151,17 @@ These values come from provider documentation and API error messages, NOT from m
 
 ### Thinking budgets
 
-| Provider | Model family | minimal | low | medium | high | min | max |
-|----------|-------------|---------|-----|--------|------|-----|-----|
-| Anthropic | All thinking models | 1024 | 2048 | 8192 | 16384 | 1024 | (max_tokens - 1) |
-| Vertex | gemini-2.5-pro | 128 | 2048 | 8192 | 32768 | 1 | 32768 |
-| Vertex | gemini-2.5-flash | 128 | 2048 | 8192 | 24576 | 1 | 24576 |
-| Vertex | gemini-2.5-flash-lite | 512 | 2048 | 8192 | 24576 | 512 | 24576 |
-| Vertex | gemini-3-flash-preview | 128 | 2048 | 8192 | 24576 | 1 | 24576 |
-| Vertex | gemini-3-pro-preview | 128 | 2048 | 8192 | 32768 | 1 | 32768 |
-| Vertex | gemini-3.1-pro-preview | 128 | 2048 | 8192 | 32768 | 1 | 32768 |
-| Vertex | gemini-2.0-flash* | — | — | — | — | — | — (no thinking) |
-| OpenAI | o-series / gpt-5* | — | — | — | — | — | — (effort-based, not budget) |
+| Provider  | Model family           | minimal | low  | medium | high  | min  | max                          |
+| --------- | ---------------------- | ------- | ---- | ------ | ----- | ---- | ---------------------------- |
+| Anthropic | All thinking models    | 1024    | 2048 | 8192   | 16384 | 1024 | (max_tokens - 1)             |
+| Vertex    | gemini-2.5-pro         | 128     | 2048 | 8192   | 32768 | 1    | 32768                        |
+| Vertex    | gemini-2.5-flash       | 128     | 2048 | 8192   | 24576 | 1    | 24576                        |
+| Vertex    | gemini-2.5-flash-lite  | 512     | 2048 | 8192   | 24576 | 512  | 24576                        |
+| Vertex    | gemini-3-flash-preview | 128     | 2048 | 8192   | 24576 | 1    | 24576                        |
+| Vertex    | gemini-3-pro-preview   | 128     | 2048 | 8192   | 32768 | 1    | 32768                        |
+| Vertex    | gemini-3.1-pro-preview | 128     | 2048 | 8192   | 32768 | 1    | 32768                        |
+| Vertex    | gemini-2.0-flash\*     | —       | —    | —      | —     | —    | — (no thinking)              |
+| OpenAI    | o-series / gpt-5\*     | —       | —    | —      | —     | —    | — (effort-based, not budget) |
 
 ### Thinking effort maps
 
@@ -192,16 +193,17 @@ Cross-reference the Pi findings with provider docs:
 
 ### Cache minimums (Anthropic only)
 
-| Model | min_cache_tokens |
-|-------|-----------------|
-| claude-3-haiku-20240307 | 1024 |
-| claude-haiku-4-5* | 4096 |
-| claude-sonnet-* | 2048 |
-| claude-opus-* | 2048 |
+| Model                   | min_cache_tokens |
+| ----------------------- | ---------------- |
+| claude-3-haiku-20240307 | 1024             |
+| claude-haiku-4-5\*      | 4096             |
+| claude-sonnet-\*        | 2048             |
+| claude-opus-\*          | 2048             |
 
 ### OpenAI reasoning effort
 
 Models with `meta = { reasoning_effort = true }`:
+
 - All gpt-5.x models (except gpt-5-pro variants)
 - o1, o3, o3-mini, o4-mini, o4-mini-deep-research, o3-deep-research
 
@@ -233,7 +235,7 @@ Update each file under `lua/flemma/models/` with the merged data. Follow the exi
 - If a model is retired or past its deprecation date, drop it.
 - If a model is deprecated but not yet retired, keep it with a retirement date comment.
 - If a model is absent from models.dev but still listed on the provider's own docs, keep it — models.dev does not track every legacy line (e.g. `moonshot-v1-*`). Only when a model is absent from **all** sources should you ask the user before removing it.
-- **A models.dev listing is not proof a model is live.** Confirm retirement against the provider's deprecation page, not models.dev (which lags). Conversely, confirm a models.dev *absence* against the provider docs before removing.
+- **A models.dev listing is not proof a model is live.** Confirm retirement against the provider's deprecation page, not models.dev (which lags). Conversely, confirm a models.dev _absence_ against the provider docs before removing.
 - If any model names imply non-text capabilities (vision, image, video, audio, tts, embedding, moderation), exclude them.
 
 ## Special Handling for New Sonnet Versions

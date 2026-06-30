@@ -33,6 +33,7 @@ store.resolve_with_source("tools", bufnr, { is_list = true })  -- value, "D+F"
 **Scalar resolution:** Walk L40 → L30 → L20 → L10. First layer with `set` wins.
 
 **List resolution:** Walk L10 → L20 → L30 → L40, building accumulator:
+
 - `set` → reset accumulator
 - `append` → add to end (dedup: if present, move to end)
 - `prepend` → add to start (dedup: if present, move to start)

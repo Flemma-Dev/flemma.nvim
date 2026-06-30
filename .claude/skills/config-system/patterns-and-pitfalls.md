@@ -145,13 +145,13 @@ Config proxies define `__pairs` that errors to prevent accidental iteration on p
 
 ### `get()` vs `materialize()` Decision Tree
 
-| Need | Use |
-|------|-----|
-| Static key reads (`cfg.provider`, `cfg.tools.timeout`) | `config.get(bufnr)` |
-| `pairs()` iteration | `config.materialize(bufnr)` |
-| Dynamic key access (`t[variable]`) | `config.materialize(bufnr)` |
-| `vim.deepcopy()` / `vim.inspect()` | `config.materialize(bufnr)` |
-| User-provided callbacks receiving config | `config.materialize(bufnr)` |
+| Need                                                   | Use                         |
+| ------------------------------------------------------ | --------------------------- |
+| Static key reads (`cfg.provider`, `cfg.tools.timeout`) | `config.get(bufnr)`         |
+| `pairs()` iteration                                    | `config.materialize(bufnr)` |
+| Dynamic key access (`t[variable]`)                     | `config.materialize(bufnr)` |
+| `vim.deepcopy()` / `vim.inspect()`                     | `config.materialize(bufnr)` |
+| User-provided callbacks receiving config               | `config.materialize(bufnr)` |
 
 ## Provider Parameter Resolution
 
