@@ -322,5 +322,19 @@ describe("Bash Tool", function()
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("done"))
     end)
+
+    it("disables interactive pagers so paging commands cannot hang", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
+      -- Under the PTY backend stdout is a tty, so git/less/man would launch an
+      -- interactive pager against the window-less ~5-row terminal PTY and block
+      -- forever. The backend forces GIT_PAGER/PAGER=cat to prevent that.
+      local result = run_bash({ label = "test", command = "echo gp=$GIT_PAGER pg=$PAGER" }, ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:match("gp=cat"))
+      assert.is_truthy(result.output:match("pg=cat"))
+    end)
   end)
 end)

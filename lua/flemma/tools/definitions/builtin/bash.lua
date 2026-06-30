@@ -24,6 +24,16 @@ local HAS_TERMINAL_PTY_FIX = vim.fn.has("nvim-0.12") == 1
 local SCROLLBACK = -1
 local next_terminal_id = 0
 
+--- The terminal backend runs commands under a termopen PTY, so stdout is a tty
+--- and git/less/man launch their interactive pager. The window-less terminal
+--- buffer's PTY is only ~5 rows (Neovim's aucmd_win), so any multi-line output
+--- (e.g. `git log`) pages and blocks forever — nothing can press a key. These
+--- force non-interactive pagers, matching the jobstart backend (piped stdout
+--- never triggers a pager). Merged over the inherited env, so they override an
+--- existing PAGER / git core.pager.
+---@type table<string, string>
+local NON_INTERACTIVE_PAGER_ENV = { GIT_PAGER = "cat", PAGER = "cat" }
+
 ---Sanitize a string for use in buffer names: keep alphanumerics, dots, hyphens,
 ---underscores, colons; replace everything else with hyphens, collapse runs.
 ---@param label string
@@ -190,12 +200,14 @@ local function execute_terminal(input, ctx, callback)
     cwd = ctx.cwd,
   }
 
+  -- Disable interactive pagers (see NON_INTERACTIVE_PAGER_ENV).
+  job_opts.env = vim.tbl_extend("force", vim.fn.environ(), NON_INTERACTIVE_PAGER_ENV)
   if tool_config and tool_config.env then
-    job_opts.env = tool_config.env
+    job_opts.env = vim.tbl_extend("force", job_opts.env, tool_config.env)
   end
   local store_ok, store_path = pcall(store.get_buffer_store_path, ctx.bufnr)
   if store_ok and store_path then
-    job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
+    job_opts.env = vim.tbl_extend("force", job_opts.env, {
       FLEMMA_TOOLS_STORE_PATH = store_path,
     })
   end
