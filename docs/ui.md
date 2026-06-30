@@ -268,7 +268,7 @@ When `syntax_highlighting` is enabled (the default), tool preview content inside
 
 ## Rejection popup
 
-When you reject a tool call, Flemma opens an inline floating input overlaid on the tool result fence. The input opens in insert mode pre-filled with `User feedback: ` and supports multi-line editing with Vim motions; type your reason and press <kbd>Enter</kbd> to confirm, or <kbd>Ctrl-C</kbd> (or <kbd>Esc</kbd>/<kbd>q</kbd> in normal mode) to cancel. The rejection reason is sent to the model as the tool error message.
+When you reject a tool call, Flemma opens an inline floating input overlaid on the tool result fence. The input opens in insert mode pre-filled with `User feedback: ` and supports multi-line editing with Vim motions; type your reason and press <kbd>Enter</kbd> to confirm, or <kbd>Ctrl-C</kbd> (or <kbd>Esc</kbd>/<kbd>q</kbd> in normal mode) to cancel. The reason you type becomes the `User feedback: {{ reason }}` line written into the tool result fence, and that text is delivered to the model verbatim as the `tool_result` error string it reads.
 
 ```lua
 ui = {
@@ -293,11 +293,11 @@ Customise via `highlights.rejection_input` and `highlights.rejection_border` in 
 
 ## Spinner behaviour
 
-While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner. The animation uses phase-specific frame sequences so the visual rhythm reflects what is happening.
+While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Waiting…" as end-of-line virtual text with an animated braille spinner, followed by the elapsed time – e.g., `⠋ Waiting… · 3s`. The animation uses phase-specific frame sequences so the visual rhythm reflects what is happening.
 
 The spinner transitions between phases automatically and is removed once streaming starts.
 
-When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
+Once content begins arriving, the label is replaced with a live character count alongside the elapsed time – e.g., `3.2K characters · 12s` – so you can gauge progress at a glance.
 
 ### Auto-scroll during streaming
 
@@ -309,22 +309,25 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 ### Tool execution indicators
 
-During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
+During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✔ Complete` or `⚠ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
-Eight highlight groups control indicator colours — four for the inline `⬢` icon and four for the EOL status text:
+Eleven highlight groups control indicator colours — seven for the inline `⬢` icon and four for the EOL status text:
 
-| Group                     | Default link            | When it's used                           |
-| ------------------------- | ----------------------- | ---------------------------------------- |
-| `FlemmaToolIconPending`   | `FlemmaToolResultTitle` | Inline `⬢` on pending tools              |
-| `FlemmaToolIconExecuting` | `FlemmaToolResultTitle` | _(not shown — no prefix when executing)_ |
-| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle` | Inline `⬢` + fold icon on success        |
-| `FlemmaToolIconError`     | `DiagnosticError`       | Inline `⬢` + fold icon on error          |
-| `FlemmaToolPending`       | `DiagnosticHint`        | EOL `⏸ Pending` text                    |
-| `FlemmaToolExecuting`     | `DiagnosticInfo`        | EOL spinner + `Executing…` text          |
-| `FlemmaToolSuccess`       | `DiagnosticOk`          | EOL `✔ Complete` text                   |
-| `FlemmaToolError`         | `DiagnosticError`       | EOL `⚠ Failed` text                     |
+| Group                     | Default link               | When it's used                           |
+| ------------------------- | -------------------------- | ---------------------------------------- |
+| `FlemmaToolIconPending`   | `DiagnosticInfo`           | Inline `⬢` on pending tools              |
+| `FlemmaToolIconExecuting` | `FlemmaToolResultTitle`    | _(not shown — no prefix when executing)_ |
+| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle`    | Inline `⬢` + fold icon on success        |
+| `FlemmaToolIconError`     | `DiagnosticError`          | Inline `⬢` + fold icon on error          |
+| `FlemmaToolIconRejected`  | `FlemmaToolResultRejected` | Inline `⬢` on rejected tools             |
+| `FlemmaToolIconDenied`    | `FlemmaToolResultDenied`   | Inline `⬢` on denied tools               |
+| `FlemmaToolIconAborted`   | `FlemmaToolResultAborted`  | Inline `⬢` on aborted tools              |
+| `FlemmaToolPending`       | `DiagnosticHint`           | EOL `⏸ Pending` text                    |
+| `FlemmaToolExecuting`     | `DiagnosticInfo`           | EOL spinner + `Executing…` text          |
+| `FlemmaToolSuccess`       | `DiagnosticOk`             | EOL `✔ Complete` text                   |
+| `FlemmaToolError`         | `DiagnosticError`          | EOL `⚠ Failed` text                     |
 
-By default, icon colours match the `Tool Result:` header while status text uses semantic Diagnostic colours. Override any group to customise:
+By default, the executing and success icons match the `Tool Result:` header, while the pending, error, rejected, denied, and aborted icons carry their own semantic colours; status text uses semantic Diagnostic colours throughout. Override any group to customise:
 
 ```lua
 -- Make icons match status colours instead of the header
@@ -436,7 +439,7 @@ Flemma uses a priority hierarchy to layer visual elements correctly when they ov
 | 250      | Tool indicators | Execution spinners and status                 |
 | 300      | Spinner         | Highest priority; suppresses spell checking   |
 
-This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurable, but understanding it explains why certain elements visually override others. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
+These priorities are not user-configurable, but understanding them explains why certain elements visually override others. The base layers (50, 100, 125, 200) are defined in `lua/flemma/ui/init.lua`; the tool indicator priority (250) lives in `lua/flemma/ui/indicators.lua` and the spinner priority (300) in `lua/flemma/ui/activity.lua`. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
 
 ## Progress bar
 
@@ -477,6 +480,7 @@ When `lsp.enabled` is set (the default whenever `vim.lsp` is available), hoverin
 
 Press `gd` (or use your LSP go-to-definition keymap) on:
 
+- A `**Tool Use:**` or `**Tool Result:**` placeholder → jumps to its sibling (the matching result or use block).
 - A `tool_result` carrying a `job=` modeline → jumps to the matching `**Job Result:**` block.
 - A `**Job Result:**` header → jumps back to the originating `tool_result` placeholder.
 - An `include("...")` expression → opens the included file.

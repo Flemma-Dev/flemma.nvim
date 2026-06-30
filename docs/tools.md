@@ -29,6 +29,8 @@ The cursor moves to the first `pending` placeholder so you can review it.
 - **`rejected`** → an error result is injected, using any content you wrote inside the block as the error message.
 - **`pending`** → blocks the cycle. The cursor moves here and Flemma waits for you to act.
 
+The model-facing result the rejection produces is explicit. With no content, a `rejected` tool injects the literal error string `This tool has been rejected by the user.`; a `denied` tool injects the policy denial message. When you supply a reason — through the [rejection popup](ui.md#rejection-popup) or `:Flemma tool:reject <reason>` — the reason is wrapped as `User feedback: <reason>` and written into the fence, and that exact text becomes the `tool_result` error string the model reads.
+
 **Phase 3 – Send.** When no lifecycle-status placeholders remain (every tool has a real result), the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
 
 With [autopilot](configuration.md#autopilot) enabled (the default), Phases 1–3 chain automatically for approved tools. You only interact when a tool lands on `pending`.
@@ -301,7 +303,7 @@ Flemma injects an optional `flemma.save_to` string parameter into **every** tool
 - An existing file at the destination is backed up first through `tools.store.backup` (the default `version` strategy renames it to the next free `<stem>.<n>.<ext>`), so a redirect never silently destroys prior content — set `tools.store.backup = false` to overwrite in place.
 - With the [sandbox](sandbox.md) enabled, the destination must be writable under the sandbox policy.
 - Redirects apply only to successful results, and work for both foreground results and background job deliveries.
-- If the redirect fails (destination is a directory, sandbox denies the write, …), the full output is injected as if `flemma.save_to` had not been set, and a warning is logged.
+- If the redirect fails (destination is a directory, sandbox denies the write, …), the full output is injected as if `flemma.save_to` had not been set, with an explanatory notice appended so the model knows the path it asked for was not written: `[Output not saved: <reason>. Showing the full output instead.]`.
 
 ### `$FLEMMA_TOOLS_STORE_PATH`
 
@@ -815,6 +817,42 @@ tools.register("my_tool", {
 When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. You can still pass a raw JSON Schema table for `input_schema` if you need full control — Flemma forwards whatever you give it.
 
 The injected [harness parameters](#harness-parameters) (`flemma.background`, `flemma.save_to`) follow these invariants automatically: on strict tools they are added as nullable and appended to `required`.
+
+---
+
+## Capability tags
+
+A tool definition can carry a `capabilities` field — a list of string tags that declare how Flemma should treat the tool. The registry, the approval chain, the harness-parameter injector, and the template processor consult these tags rather than special-casing tool names, so a custom tool opts into the same behaviour as a built-in by declaring the matching tag.
+
+```lua
+tools.register("my_tool", {
+  name = "my_tool",
+  description = "...",
+  capabilities = { "disables_save_to" },
+  -- ...
+})
+```
+
+The vocabulary is closed — each tag gates one specific behaviour:
+
+| Capability                   | What it gates                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `disables_background`        | Suppresses injection of the `flemma.background` [harness parameter](#harness-parameters) into the tool's schema. Only meaningful for async tools (sync tools never receive it). The `flemma.jobs.status` harness tool declares it.                                                                                                                                           |
+| `disables_save_to`           | Suppresses injection of the `flemma.save_to` [harness parameter](#harness-parameters) into the tool's schema. The `flemma.jobs.status` harness tool declares it — harness output is ephemeral coordination metadata that should never be redirected to a file.                                                                                                               |
+| `auto_approves_if_sandboxed` | Lets the sandbox [approval resolver](#approval-resolvers) (priority 25) auto-approve calls to this tool when the sandbox is enabled with an available backend and the user hasn't opted out. Only the built-in `bash` tool declares it.                                                                                                                                      |
+| `emits_template`             | Marks the tool's result content as template-bearing: its parsed inner segments are kept and run through the [template engine](templates.md) when the conversation is compiled, so `{{ … }}` expressions and `@./file` references inside the result are evaluated. Tools without this tag have their result content sent verbatim. Only the built-in `read` tool declares it. |
+
+Tags follow a `verb_target` naming convention (`disables_background`, `auto_approves_if_sandboxed`) — a verb describing the behaviour applied to the named target. Custom tools should reuse the tags above; an unrecognized tag is simply never queried and has no effect.
+
+Query a tool's tags programmatically with `registry.has_capability(name, capability)`:
+
+```lua
+local registry = require("flemma.tools.registry")
+registry.has_capability("read", "emits_template")        --> true
+registry.has_capability("bash", "auto_approves_if_sandboxed") --> true
+```
+
+It returns `false` when the tool is unregistered or declares no `capabilities` list.
 
 ---
 

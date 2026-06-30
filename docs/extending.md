@@ -1,6 +1,6 @@
 # Extending Flemma
 
-Flemma uses registry patterns throughout – tools, approval resolvers, sandbox backends, credential resolvers, and personalities are all pluggable. This guide covers the extension points that don't have a dedicated document, and links to those that do.
+Flemma uses registry patterns throughout – tools, providers, approval resolvers, sandbox backends, credential resolvers, and personalities are all pluggable. This guide covers the extension points that don't have a dedicated document, and links to those that do.
 
 ---
 
@@ -181,7 +181,7 @@ Where `base_ttl` comes from the resolver result or credential config, and `ttl_s
 
 ### Configuring resolvers
 
-Built-in resolvers can be configured through the `secrets` config namespace. Currently only the gcloud resolver has configurable options:
+Built-in resolvers can be configured through the `secrets` config namespace. Two resolvers have configurable options today — gcloud and ChatGPT:
 
 ```lua
 require("flemma").setup({
@@ -189,11 +189,14 @@ require("flemma").setup({
     gcloud = {
       path = "/usr/local/bin/gcloud",  -- override the gcloud binary path (default: "gcloud")
     },
+    chatgpt = {
+      auth_file = "~/.codex/auth.json", -- override the Codex auth file path
+    },
   },
 })
 ```
 
-This is useful on NixOS, Guix, or systems where the gcloud CLI is not on `$PATH`.
+The `gcloud.path` override is useful on NixOS, Guix, or systems where the gcloud CLI is not on `$PATH`. The `chatgpt.auth_file` override points the ChatGPT subscription resolver at a non-default Codex auth file; when unset it falls back to `$CODEX_HOME/auth.json`, then `~/.codex/auth.json`. Each resolver reads its own subtree (`secrets.gcloud`, `secrets.chatgpt`) via `ctx:get_config()`.
 
 ### Registering a custom resolver
 
@@ -257,6 +260,62 @@ secrets.invalidate_all()                    -- clear the entire cache
 
 ---
 
+## Custom providers
+
+Provider adapters are registered the same way as the built-ins. Point `providers.modules` at one or more Lua module paths and Flemma loads each module, reads its `M.metadata`, and registers it alongside the built-in adapters:
+
+```lua
+require("flemma").setup({
+  providers = {
+    modules = { "my_plugin.provider.adapters.custom" },
+  },
+})
+```
+
+A provider module inherits from `flemma.provider.base` and exports an `M.metadata` table. The full contract — the abstract/required/virtual method groups, the constructor metatable chain, the callbacks contract — is documented inline at the top of `lua/flemma/provider/base.lua`, and [docs/providers.md – Registering non-built-in adapters](providers.md#registering-non-built-in-adapters-providersmodules) walks through wiring an adapter end to end.
+
+### Provider capabilities and metadata
+
+A few `metadata` fields shape how the request pipeline treats a provider. They are easy to overlook because the built-ins set them implicitly:
+
+| Field                              | Where                            | Default      | What it does                                                                                                                                                                                                                                   |
+| ---------------------------------- | -------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capabilities.output_has_thoughts` | `metadata.capabilities`          | `false`      | Whether the provider's reported `output_tokens` already includes thinking tokens. Affects cost calculation — set `true` when the API folds reasoning tokens into the output count.                                                             |
+| `capabilities.close_on_complete`   | `metadata.capabilities`          | `true`       | Whether to terminate the HTTP connection once `on_response_complete` fires. The default suits backends that leave the SSE stream open after the terminal event; set `false` for providers that must keep the connection alive past completion. |
+| `billing`                          | `metadata`                       | _(unset)_    | `"usage"` or `"subscription"` — the cost model for the provider, surfaced in session accounting.                                                                                                                                               |
+| `endpoint`                         | instance field (`self.endpoint`) | _(required)_ | The base API URL, returned by `get_endpoint()`. Set it on the instance in `new()`; override `get_endpoint()` for dynamic URL construction (e.g. Vertex embeds project/location).                                                               |
+
+Missing boolean capabilities default to `false` at registration time, except `close_on_complete`, which defaults to `true`. The other capability flags (`supports_reasoning`, `supports_thinking_budget`, `outputs_thinking`, `min_thinking_budget`) govern reasoning/thinking normalization and are documented inline in `base.lua`.
+
+---
+
+## Tool capability tags
+
+Custom tools can declare **capability tags** — a `capabilities` array of string flags on the tool definition. Resolvers, approval policies, and the harness-parameter injector query these tags to decide how to treat the tool, so a tool opts into (or out of) cross-cutting behavior declaratively rather than through bespoke wiring:
+
+```lua
+tools.register("my_tool", {
+  name = "my_tool",
+  description = "...",
+  capabilities = { "disables_save_to" },
+  input_schema = s.object({ label = s.string() }),
+  execute = function(input, ctx) --[[ ... ]] end,
+})
+```
+
+The tags follow a `verb_target` convention. The current vocabulary:
+
+| Tag                          | Effect                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `disables_background`        | Suppresses injection of the `flemma.background` harness parameter into the tool's schema (async tools only — sync tools never receive it). |
+| `disables_save_to`           | Suppresses injection of the `flemma.save_to` harness parameter. Use for tools whose output is ephemeral coordination metadata.             |
+| `auto_approves_if_sandboxed` | Lets the sandbox approval resolver auto-approve calls when the sandbox is enabled with an available backend.                               |
+| `emits_template`             | Marks the tool's output as containing template expressions (e.g. `read` emits file content that may include `{{ }}` syntax).               |
+
+Query a tag with `require("flemma.tools.registry").has_capability(name, tag)`. For the fuller treatment — how the harness-parameter injector consults `disables_background`/`disables_save_to` (see [Harness parameters](tools.md#harness-parameters)) and how the priority-25 resolver consults `auto_approves_if_sandboxed` (see [Approval resolvers](tools.md#approval-resolvers)) — see [docs/tools.md](tools.md). Sandbox auto-approval conditions are detailed in [docs/sandbox.md](sandbox.md#requirements).
+
+---
+
 ## Architectural contracts for extension authors
 
 A few cross-cutting mechanisms aren't extension points themselves but every non-trivial extension brushes against at least one.
@@ -298,14 +357,16 @@ Preprocessors run after parsing and before the request leaves Flemma — they re
 
 These extension points have full documentation in their respective pages:
 
-| Extension point     | What it does                                                                  | Documentation                                                                                         |
-| ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Custom tools        | Register tools the model can call                                             | [docs/tools.md – Registering custom tools](tools.md#registering-custom-tools)                         |
-| Async tool sources  | Resolve tool definitions from external processes/APIs                         | [docs/tools.md – Async tool definitions](tools.md#async-tool-definitions)                             |
-| Approval resolvers  | Priority-based chain for tool approval decisions                              | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                                     |
-| Sandbox backends    | Platform-specific sandbox enforcement                                         | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                                       |
-| Personalities       | Dynamic system prompt generators                                              | [docs/personalities.md](personalities.md)                                                             |
-| Template populators | Custom globals for `{{ }}` and `{% %}` expressions                            | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)               |
-| Frontmatter parsers | Custom frontmatter languages (e.g., YAML)                                     | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers)             |
-| List op-prefixes    | Compose append/prepend/remove/preset spread on list config in any frontmatter | [docs/templates.md – Op-prefix syntax for list values](templates.md#op-prefix-syntax-for-list-values) |
-| Preview formatters  | Custom tool preview rendering in pending placeholders                         | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)                       |
+| Extension point      | What it does                                                                  | Documentation                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Custom tools         | Register tools the model can call                                             | [docs/tools.md – Registering custom tools](tools.md#registering-custom-tools)                                            |
+| Tool capability tags | Declarative flags resolvers and harness injection query (`capabilities`)      | [docs/tools.md – Harness parameters](tools.md#harness-parameters)                                                        |
+| Async tool sources   | Resolve tool definitions from external processes/APIs                         | [docs/tools.md – Async tool definitions](tools.md#async-tool-definitions)                                                |
+| Approval resolvers   | Priority-based chain for tool approval decisions                              | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                                                        |
+| Custom providers     | Register non-built-in API adapters (`providers.modules`)                      | [docs/providers.md – Registering non-built-in adapters](providers.md#registering-non-built-in-adapters-providersmodules) |
+| Sandbox backends     | Platform-specific sandbox enforcement                                         | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                                                          |
+| Personalities        | Dynamic system prompt generators                                              | [docs/personalities.md](personalities.md)                                                                                |
+| Template populators  | Custom globals for `{{ }}` and `{% %}` expressions                            | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)                                  |
+| Frontmatter parsers  | Custom frontmatter languages (e.g., YAML)                                     | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers)                                |
+| List op-prefixes     | Compose append/prepend/remove/preset spread on list config in any frontmatter | [docs/templates.md – Op-prefix syntax for list values](templates.md#op-prefix-syntax-for-list-values)                    |
+| Preview formatters   | Custom tool preview rendering in pending placeholders                         | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)                                          |

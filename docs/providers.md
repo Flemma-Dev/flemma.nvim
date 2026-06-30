@@ -94,6 +94,18 @@ and choose **"Sign in with ChatGPT"**. Flemma then reads the resulting auth file
 2. `$CODEX_HOME/auth.json`,
 3. `~/.codex/auth.json` (the Codex CLI default).
 
+Most users need no configuration — the default fallbacks find a standard `codex login`. The explicit path is optional, for when the auth file lives somewhere non-standard:
+
+```lua
+require("flemma").setup({
+  secrets = {
+    chatgpt = {
+      auth_file = nil, -- nil = fall back to $CODEX_HOME/auth.json, then ~/.codex/auth.json
+    },
+  },
+})
+```
+
 The file must be in ChatGPT-subscription mode (`auth_mode = "chatgpt"`); if it is in API-key mode, Flemma tells you to re-run `codex login` and pick the ChatGPT option.
 
 > [!NOTE]
@@ -121,7 +133,12 @@ Use the [`provider/model` slash syntax](#providermodel-slash-syntax):
 
 The Codex backend reports rolling rate-limit windows (typically a 5-hour and a weekly window) in its response headers. Flemma surfaces these in the usage bar and through the lualine `subscription.*` resolvers — see [integrations.md](integrations.md#lualine) and the [`rate_limits`](session-api.md#subscription-rate-limits) field in the session API.
 
+This subscription display is keyed off the provider's `billing = "subscription"` metadata: instead of a per-token cost warning, switching to the Codex provider shows a subscription notice (_"Flemma draws from your subscription usage limit"_), and the usage bar / lualine present the rate-limit windows rather than a per-request dollar cost.
+
 ### Caveats
+
+> [!IMPORTANT]
+> This integration is for **personal development use** with **your own** ChatGPT subscription. It uses OpenAI's **unofficial** Codex OAuth path (the same one the Codex CLI uses) and **may break without notice** if OpenAI changes it. It is **not officially supported** by OpenAI, and using it is **at your own discretion regarding OpenAI's [Terms of Use](https://openai.com/policies/row-terms-of-use/)**. For production, multi-user, automated, or commercial use, use an OpenAI Platform API key instead. **Do not pool accounts or share credentials.**
 
 - **Opt-in, not built-in** — requires the `providers.modules` registration above; it does not appear unless you add it.
 - **Experimental wire format** — the request is sent with an `OpenAI-Beta: responses=experimental` header; the backend's behaviour may change.

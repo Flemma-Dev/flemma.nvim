@@ -134,7 +134,7 @@ Paths in `rw_paths` support three expansion forms:
 
 After expansion, all paths are normalized to absolute paths with symlinks resolved. Paths subsumed by a parent path are deduplicated (e.g., `/tmp` and `/tmp/foo` collapses to just `/tmp`).
 
-Paths that do not exist on disk at resolution time are then dropped from `rw_paths`. bwrap hard-fails on a `--bind` source it cannot find, so a not-yet-created grant — such as the lazily-created `urn:flemma:store` directory — degrades to read-only rather than breaking every sandboxed command. The `bash` terminal backend pre-creates the store directory before sandbox wrapping so writes there still succeed.
+Paths that do not exist on disk at resolution time are then dropped from `rw_paths`. bwrap hard-fails on a `--bind` source it cannot find, so a not-yet-created grant — such as the lazily-created `urn:flemma:store` directory — degrades to read-only rather than breaking every sandboxed command. Both `bash` backends (the 0.11 `jobstart` path and the 0.12+ terminal path) pre-create the store directory before sandbox wrapping so writes there still succeed, but only when the command references `$FLEMMA_TOOLS_STORE_PATH`.
 
 ---
 
@@ -175,7 +175,7 @@ The boolean shorthand (`flemma.opt.sandbox = true`) expands to `{ enabled = true
 
 When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"auto_approves_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
 
-The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below the unified config resolver (100) and the community default (50). Explicit user preferences — global or per-buffer via frontmatter — always win, because the config resolver reads the merged value from all layers before the sandbox resolver gets a chance to run.
+The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below the unified config resolver (100) and below any third-party resolvers registered at the default priority of 50. Explicit user preferences — global or per-buffer via frontmatter — always win, because the config resolver reads the merged value from all layers before the sandbox resolver gets a chance to run.
 
 ### Opting out
 
@@ -408,7 +408,7 @@ On NixOS and GNU Guix, system packages are exposed via symlinks under `/run/curr
 
 **Signal propagation is best-effort.** When a sandboxed command times out, Flemma kills the `bwrap` parent. Child processes are terminated via `--die-with-parent` and PID namespace teardown. In practice this is reliable, but a process that has deliberately escaped its session may survive briefly before kernel cleanup catches it.
 
-**Lua-level enforcement covers writes, not reads.** The `write` and `edit` tools check `sandbox.is_path_writable()` before modifying files and refuse operations outside `rw_paths`. The `read` tool is **not** sandboxed and cannot be – the sandbox policy has no read-deny list. The entire rootfs is readable by design (mirroring bwrap's `--ro-bind / /`). This is intentional: restricting reads would break tool functionality broadly, and the real risk from unrestricted reads is data exfiltration, which is better addressed by `network = false` (see above). Note that Lua-level write enforcement works independently of the backend – even on platforms without `bwrap`, the `write` and `edit` tools will enforce the policy when `enabled = true`.
+**Lua-level enforcement covers writes, not reads.** The `write` and `edit` tools check `sandbox.is_path_writable()` before modifying files and refuse operations outside `rw_paths`. A `flemma.save_to` redirect is a second write-enforcement point: with the sandbox on, a destination outside `rw_paths` is rejected with `save_to destination <path> is not writable under sandbox policy`. The `read` tool is **not** sandboxed and cannot be – the sandbox policy has no read-deny list. The entire rootfs is readable by design (mirroring bwrap's `--ro-bind / /`). This is intentional: restricting reads would break tool functionality broadly, and the real risk from unrestricted reads is data exfiltration, which is better addressed by `network = false` (see above). Note that Lua-level write enforcement works independently of the backend – even on platforms without `bwrap`, the `write` and `edit` tools will enforce the policy when `enabled = true`.
 
 ---
 

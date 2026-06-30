@@ -25,7 +25,7 @@ local ts = require("flemma.session").now()
 Two ways to observe session state: poll the singleton on demand, or subscribe to the `request:finished` hook (see [docs/extending.md](extending.md#hooks-lifecycle-events)). The hook fires after a request is recorded and carries the just-added `flemma.session.Request` as `data.request`, so you can update UI without polling.
 
 > [!NOTE]
-> A request is only added to the session when the resolved model has registry pricing. Requests against custom or unknown models — where `flemma.models.registry.get_model_info(...).pricing` returns `nil` — silently skip session recording. If you're iterating on a new model and see no `request:finished` payload and an unchanged session, that's why.
+> A request is only added to the session when the resolved model has registry pricing. Requests against custom or unknown models — where `require("flemma.provider.registry").get_model_info(...).pricing` returns `nil` — silently skip session recording. If you're iterating on a new model and see no `request:finished` payload and an unchanged session, that's why.
 
 ```lua
 local session = require("flemma.session").get()
@@ -71,7 +71,7 @@ Each request stores raw data -- tokens, per-million prices, cache pricing, and t
 | `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                                                                                                                                   |
 | `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                                                                                                                                  |
 | `cache_read_price`, `cache_write_price`                  | USD per million cache tokens (`nil` when the provider does not support caching)                                                                                                                     |
-| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens (true for OpenAI/Anthropic, false for Vertex)                                                                                              |
+| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens (true for Anthropic, OpenAI, and Codex; false for Vertex and Moonshot/Kimi, and the default for providers that do not set it)              |
 | `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`)                                                                                                             |
 | `filepath`, `bufnr`                                      | Source buffer identifier (`filepath` is the resolved absolute path; either may be `nil`)                                                                                                            |
 | `rate_limits`                                            | Subscription rate-limit snapshot (`flemma.session.RateLimitSnapshot`) when the provider reports one (e.g. the experimental Codex / ChatGPT-subscription provider); `nil` for usage-billed providers |

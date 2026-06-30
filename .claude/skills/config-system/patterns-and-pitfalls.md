@@ -76,7 +76,7 @@ end)
 -- Apply setup values
 config_facade.apply(config_facade.LAYERS.SETUP, {
   provider = "anthropic",
-  model = "claude-sonnet-4-20250514",
+  model = "claude-sonnet-4-6",
   tools = { timeout = 5000 },
 })
 

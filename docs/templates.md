@@ -73,8 +73,8 @@ flemma.opt.vertex.thinking_budget = 4096
 
 ````lua
 ```lua
--- Replace the tool list entirely
-flemma.opt.tools:set({ "bash", "read" })
+-- Replace the tool list entirely (direct assignment)
+flemma.opt.tools = { "bash", "read" }
 
 -- Add or remove individual tools
 flemma.opt.tools:append("grep")
@@ -379,6 +379,17 @@ Hello {{name}}, you are acting as a {{role}}.
 
 Included files have full template support at any nesting depth -- `{% %}` code blocks, `{{ }}` expressions, and nested `include()` calls all work. The child environment is isolated: it receives only the variables you pass (plus `__filename` and `__dirname`), not the parent's frontmatter variables.
 
+### Personality URNs
+
+`include()` also accepts a `urn:flemma:personality:<name>` reference, which renders that personality's system prompt in place instead of reading a file:
+
+```markdown
+@System:
+{{ include("urn:flemma:personality:coding-assistant") }}
+```
+
+The personality is looked up in the registry and built with the current ambient state (buffer, working directory). An unknown name raises a diagnostic with a "did you mean?" suggestion.
+
 ### Safety guards
 
 - Relative paths resolve against the directory of the file that called `include()`.
@@ -490,10 +501,12 @@ Check the logs at @//var/log/app.log.
 
 ### Provider support matrix
 
-| Provider  | Text files                   | Images                                     | PDFs                   | Behaviour when unsupported                             |
-| --------- | ---------------------------- | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
-| Anthropic | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts | The literal `@./path` is kept and a warning is shown.  |
-| OpenAI    | Embedded as text parts       | Sent as `image_url` entries with data URLs | Sent as `file` objects | Unsupported types become plain text with a diagnostic. |
-| Vertex AI | Embedded as text parts       | Sent as `inlineData`                       | Sent as `inlineData`   | Falls back to text with a warning.                     |
+| Provider  | Text files                   | Images                                     | PDFs                                             | Behaviour when unsupported                             |
+| --------- | ---------------------------- | ------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------ |
+| Anthropic | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts                           | The literal `@./path` is kept and a warning is shown.  |
+| OpenAI    | Embedded as text parts       | Sent as `image_url` entries with data URLs | Sent as `file` objects                           | Unsupported types become plain text with a diagnostic. |
+| Vertex AI | Embedded as text parts       | Sent as `inlineData`                       | Sent as `inlineData`                             | Falls back to text with a warning.                     |
+| Moonshot  | Embedded as text parts       | Sent as `image_url` entries with data URLs | Not supported (Chat Completions has no PDF part) | Unsupported types become plain text with a diagnostic. |
+| Codex     | Sent as `input_text` parts   | Sent as `input_image` parts with data URLs | Sent as `input_file` parts                       | Unsupported types become plain text with a diagnostic. |
 
 If a file cannot be read or the provider refuses its MIME type, Flemma warns you (including line number) and continues with the raw reference so you can adjust your prompt.

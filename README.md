@@ -254,7 +254,7 @@ All commands live under `:Flemma` with tab completion. Misspelled commands get d
 | Normal             | `]m` / `[m`            | Next / previous message                               |
 | Normal             | <kbd>Space</kbd>       | Toggle message fold                                   |
 | Normal             | `zy` / `zY`            | Fold intermediate messages in current / all turns     |
-| Normal             | `yoe`                  | Toggle Markdown conceal (`[oe` / `]oe` to set on/off) |
+| Normal             | `yoe`                  | Toggle Markdown conceal (`]oe` / `[oe` to set on/off) |
 | Operator           | `im` / `am`            | Inner / around message text objects                   |
 
 ---

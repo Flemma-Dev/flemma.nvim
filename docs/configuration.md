@@ -94,9 +94,9 @@ require("flemma").setup({
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
   highlights = {                             -- HlOp builders OR strings (group name → link, "#RRGGBB" → hex)
-    system = h.link("Special"),
-    user = h.link("Normal"),
-    assistant = h.link("Normal"),
+    system = h.from("Special"):omit("bg"),
+    user = h.from("Normal"):omit("bg"),
+    assistant = h.from("Normal"):omit("bg"),
     lua_expression = h.link("PreProc"),
     lua_code_block = h.link("PreProc"),               -- {% code %} block content
     lua_delimiter = h.link("FlemmaLuaExpression"),    -- {{ }} and {% %} delimiters
@@ -224,6 +224,9 @@ require("flemma").setup({
     gcloud = {
       path = "gcloud",                       -- Path to gcloud binary (override for NixOS, Guix, etc.)
     },
+    chatgpt = {
+      auth_file = nil,                       -- Path to the Codex/ChatGPT auth.json (falls back to $CODEX_HOME/auth.json, then ~/.codex/auth.json)
+    },
   },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing
@@ -296,16 +299,16 @@ The `thinking` parameter maps to each provider's native format:
 | number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       | enabled\*\*       |
 | `false` or `0`         | disabled           | disabled             | disabled           | disabled\*\*      |
 
-_\*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent -- see the per-provider files under `lua/flemma/models/` for the full per-model catalogue._
+_\*Anthropic models with adaptive thinking (Opus 4.6 and newer, plus Sonnet 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent -- see the per-provider files under `lua/flemma/models/` for the full per-model catalogue._
 
-_\*\*Moonshot thinking is binary (on/off) with no budget control. kimi-k2-thinking models always think regardless of the `thinking` setting. `moonshot-v1-*` models do not support thinking._
+_\*\*Moonshot thinking is binary (on/off) with no budget control. `moonshot-v1-*` models do not support thinking._
 
 ### Thinking parameter priority
 
 Provider-specific parameters take priority over the unified `thinking` value when both are set:
 
 1. `parameters.anthropic.thinking_budget` overrides `thinking` for Anthropic (clamped to min 1,024 tokens).
-2. `parameters.openai.reasoning` overrides `thinking` for OpenAI (accepts `"low"`, `"medium"`, `"high"`).
+2. `parameters.openai.reasoning` overrides `thinking` for OpenAI (accepts `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"`).
 3. `parameters.vertex.thinking_budget` overrides `thinking` for Vertex AI (min 1 token).
 4. Moonshot has no provider-specific override — the unified `thinking` parameter controls the binary toggle directly.
 
