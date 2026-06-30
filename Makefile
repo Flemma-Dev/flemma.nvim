@@ -160,7 +160,7 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 	 export XDG_DATA_HOME=`pwd`/.vapor ;\
 	 export XDG_CACHE_HOME=`pwd`/.vapor/cache ;\
 	 export XDG_STATE_HOME=`pwd`/.vapor/state ;\
-	 nvim --headless +"TSInstallSync markdown markdown_inline lua json" +qa && \
+	 nvim --headless +"lua require('nvim-treesitter').install({ 'markdown', 'markdown_inline', 'lua', 'json' }):wait(300000)" +qa && \
 	 vhs contrib/vhs/flemma_cast.tape
 	@contrib/scripts/screencast-poster.sh assets/flemma_cast.mp4
 

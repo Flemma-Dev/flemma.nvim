@@ -55,7 +55,7 @@ Type "Check the recent Git history for what changed."
 Ctrl+[
 Sleep 2000ms
 Ctrl+]
-Wait+Screen /bash: \$ /
+Wait+Screen /⏸/
 Sleep 5000ms
 Alt+a
 Wait+Screen /╰/

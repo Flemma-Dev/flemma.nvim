@@ -37,6 +37,7 @@ pkgs-stable.mkShell {
     mcporter
     nodejs-stable.pkgs.pnpm
     socat
+    tree-sitter
     vhs
     # Neovim plug-ins
     plenary-nvim
