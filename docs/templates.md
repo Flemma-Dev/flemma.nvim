@@ -1,6 +1,6 @@
 # Template System and Automation
 
-Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
+Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor. Template expressions and `include()` are part of the harness's [environment-shaping surface](harness.md#environment-shaping-surface) — they let the harness inject context into what the model sees before the request leaves the editor.
 
 > For an overview of the `.chat` buffer format (role markers, frontmatter placement, thinking blocks), see [Why Conversations as Files?](../README.md#why-conversations-as-files) in the README.
 
@@ -73,8 +73,8 @@ flemma.opt.vertex.thinking_budget = 4096
 
 ````lua
 ```lua
--- Replace the tool list entirely
-flemma.opt.tools:set({ "bash", "read" })
+-- Replace the tool list entirely (direct assignment)
+flemma.opt.tools = { "bash", "read" }
 
 -- Add or remove individual tools
 flemma.opt.tools:append("grep")
@@ -335,7 +335,7 @@ Trimming works on `{{ }}` expressions too. `{{- value -}}` strips surrounding wh
 
 Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes support two modes:
 
-**Text mode** (default) -- the included file is parsed for `{{ }}` expressions, `{% %}` code blocks, and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables -- the parent's frontmatter variables are not inherited.
+**Text mode** (default) -- the included file is parsed for `{{ }}` expressions and `{% %}` code blocks (including nested `include()` calls), which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables -- the parent's frontmatter variables are not inherited. Note that `@./` file references are **not** desugared inside an included file (they are resolved only by the preprocessor, and only on top-level messages) -- to attach a file from within an include, use binary mode: `{{ include('./path', { [symbols.BINARY] = true }) }}`.
 
 ```markdown
 @System:
@@ -378,6 +378,17 @@ Hello {{name}}, you are acting as a {{role}}.
 ```
 
 Included files have full template support at any nesting depth -- `{% %}` code blocks, `{{ }}` expressions, and nested `include()` calls all work. The child environment is isolated: it receives only the variables you pass (plus `__filename` and `__dirname`), not the parent's frontmatter variables.
+
+### Personality URNs
+
+`include()` also accepts a `urn:flemma:personality:<name>` reference, which renders that personality's system prompt in place instead of reading a file:
+
+```markdown
+@System:
+{{ include("urn:flemma:personality:coding-assistant") }}
+```
+
+The personality is looked up in the registry and built with the current ambient state (buffer, working directory). An unknown name raises a diagnostic with a "did you mean?" suggestion.
 
 ### Safety guards
 
@@ -490,10 +501,12 @@ Check the logs at @//var/log/app.log.
 
 ### Provider support matrix
 
-| Provider  | Text files                   | Images                                     | PDFs                   | Behaviour when unsupported                             |
-| --------- | ---------------------------- | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
-| Anthropic | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts | The literal `@./path` is kept and a warning is shown.  |
-| OpenAI    | Embedded as text parts       | Sent as `image_url` entries with data URLs | Sent as `file` objects | Unsupported types become plain text with a diagnostic. |
-| Vertex AI | Embedded as text parts       | Sent as `inlineData`                       | Sent as `inlineData`   | Falls back to text with a warning.                     |
+| Provider  | Text files                   | Images                                     | PDFs                                             | Behaviour when unsupported                             |
+| --------- | ---------------------------- | ------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------ |
+| Anthropic | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts                           | The literal `@./path` is kept and a warning is shown.  |
+| OpenAI    | Embedded as text parts       | Sent as `image_url` entries with data URLs | Sent as `file` objects                           | Unsupported types become plain text with a diagnostic. |
+| Vertex AI | Embedded as text parts       | Sent as `inlineData`                       | Sent as `inlineData`                             | Falls back to text with a warning.                     |
+| Moonshot  | Embedded as text parts       | Sent as `image_url` entries with data URLs | Not supported (Chat Completions has no PDF part) | Unsupported types become plain text with a diagnostic. |
+| Codex     | Sent as `input_text` parts   | Sent as `input_image` parts with data URLs | Sent as `input_file` parts                       | Unsupported types become plain text with a diagnostic. |
 
 If a file cannot be read or the provider refuses its MIME type, Flemma warns you (including line number) and continues with the raw reference so you can adjust your prompt.

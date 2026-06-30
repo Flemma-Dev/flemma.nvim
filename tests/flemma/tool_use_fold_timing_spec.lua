@@ -103,7 +103,7 @@ describe("Tool Use auto-close timing", function()
 
       vim.cmd("redraw")
       folding.fold_completed_blocks(bufnr)
-      assert.are.equal(-1, vim.fn.foldclosed(6), "tool_use should be open while result is pending")
+      assert.are.equal(6, vim.fn.foldclosed(6), "tool_use should fold when a matching result exists, even if pending")
 
       vim.api.nvim_buf_set_lines(bufnr, 13, 17, false, {
         "**Tool Result:** `toolu_02`",
@@ -116,7 +116,7 @@ describe("Tool Use auto-close timing", function()
       folding.invalidate_folds(bufnr)
       folding.fold_completed_blocks(bufnr)
 
-      assert.are.equal(6, vim.fn.foldclosed(6), "tool_use should be auto-closed after result injection")
+      assert.are.equal(6, vim.fn.foldclosed(6), "tool_use should remain folded after result completes")
       assert.are.equal(14, vim.fn.foldclosed(14), "tool_result should be auto-closed after injection")
     end)
 

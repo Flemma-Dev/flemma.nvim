@@ -11,6 +11,7 @@ local M = {}
 local log = require("flemma.logging")
 local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
+local store = require("flemma.tools.store")
 local truncate = require("flemma.tools.truncate")
 
 --- Neovim 0.12+ fixes a libuv bug (libuv#4992) where PTY master data is lost
@@ -22,6 +23,16 @@ local HAS_TERMINAL_PTY_FIX = vim.fn.has("nvim-0.12") == 1
 -- -1 on a terminal buffer = Neovim's compiled maximum (SB_MAX: 100K on 0.11, 1M on 0.12+).
 local SCROLLBACK = -1
 local next_terminal_id = 0
+
+--- The terminal backend runs commands under a termopen PTY, so stdout is a tty
+--- and git/less/man launch their interactive pager. The window-less terminal
+--- buffer's PTY is only ~5 rows (Neovim's aucmd_win), so any multi-line output
+--- (e.g. `git log`) pages and blocks forever — nothing can press a key. These
+--- force non-interactive pagers, matching the jobstart backend (piped stdout
+--- never triggers a pager). Merged over the inherited env, so they override an
+--- existing PAGER / git core.pager.
+---@type table<string, string>
+local NON_INTERACTIVE_PAGER_ENV = { GIT_PAGER = "cat", PAGER = "cat" }
 
 ---Sanitize a string for use in buffer names: keep alphanumerics, dots, hyphens,
 ---underscores, colons; replace everything else with hyphens, collapse runs.
@@ -124,6 +135,15 @@ local function execute_terminal(input, ctx, callback)
   -- input (isatty(0) = false) and don't block waiting for user input.
   local inner_cmd = { shell, "-c", "exec </dev/null\n" .. cmd }
 
+  -- Create the store directory before sandbox wrapping: rw_paths resolve at
+  -- wrap time, and a not-yet-created store directory drops out of the policy.
+  if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
+    local ensure_ok, ensure_err = pcall(store.ensure_buffer_store_path, ctx.bufnr)
+    if not ensure_ok then
+      log.warn("bash: could not create store directory: " .. tostring(ensure_err))
+    end
+  end
+
   -- Sandbox wrapping (if enabled)
   local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
   if not wrapped_cmd then
@@ -180,8 +200,16 @@ local function execute_terminal(input, ctx, callback)
     cwd = ctx.cwd,
   }
 
+  -- Disable interactive pagers (see NON_INTERACTIVE_PAGER_ENV).
+  job_opts.env = vim.tbl_extend("force", vim.fn.environ(), NON_INTERACTIVE_PAGER_ENV)
   if tool_config and tool_config.env then
-    job_opts.env = tool_config.env
+    job_opts.env = vim.tbl_extend("force", job_opts.env, tool_config.env)
+  end
+  local store_ok, store_path = pcall(store.get_buffer_store_path, ctx.bufnr)
+  if store_ok and store_path then
+    job_opts.env = vim.tbl_extend("force", job_opts.env, {
+      FLEMMA_TOOLS_STORE_PATH = store_path,
+    })
   end
 
   -- Run the command inside the terminal buffer.
@@ -350,6 +378,18 @@ local function execute_jobstart(input, ctx, callback)
   if tool_config and tool_config.env then
     job_opts.env = tool_config.env
   end
+  local store_ok, store_path = pcall(store.get_buffer_store_path, ctx.bufnr)
+  if store_ok and store_path then
+    job_opts.env = vim.tbl_extend("force", job_opts.env or vim.fn.environ(), {
+      FLEMMA_TOOLS_STORE_PATH = store_path,
+    })
+    if cmd:find("FLEMMA_TOOLS_STORE_PATH", 1, true) then
+      local ensure_ok, ensure_err = pcall(store.ensure_buffer_store_path, ctx.bufnr)
+      if not ensure_ok then
+        log.warn("bash: could not create store directory: " .. tostring(ensure_err))
+      end
+    end
+  end
 
   local shell = (tool_config and tool_config.shell) or "bash"
   -- Redirect stderr to stdout for the entire shell so output is interleaved
@@ -432,14 +472,16 @@ M.definitions = {
         env = s.optional(s.map(s.string(), s.string())),
       }),
     },
-    capabilities = { "can_auto_approve_if_sandboxed" },
+    capabilities = { "auto_approves_if_sandboxed" },
     description = "Execute a bash command in the current working directory. "
       .. "Returns stdout and stderr. Output is truncated to last "
       .. truncate.MAX_LINES
       .. " lines or "
       .. math.floor(truncate.MAX_BYTES / 1024)
       .. "KB (whichever is hit first). "
-      .. "If truncated, full output is saved to a temp file. "
+      .. "If truncated, full output is saved to a file. "
+      .. "$FLEMMA_TOOLS_STORE_PATH is set in the environment and points to a directory "
+      .. "where saved tool results for this conversation are stored. "
       .. "Optionally provide a timeout in seconds.",
     strict = true,
     input_schema = s.object({
@@ -462,6 +504,7 @@ M.definitions = {
       return {
         label = input.label,
         detail = "$ " .. input.command,
+        highlight = { lang = "bash" },
       }
     end,
     execute = HAS_TERMINAL_PTY_FIX and execute_terminal or execute_jobstart,

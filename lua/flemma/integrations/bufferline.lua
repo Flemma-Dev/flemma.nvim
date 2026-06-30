@@ -14,6 +14,8 @@
 ---@class flemma.integrations.Bufferline
 local M = {}
 
+local h = require("flemma.hl")
+
 local hooks = require("flemma.hooks")
 
 local DEFAULT_ICON = "󰔟"
@@ -45,9 +47,7 @@ local function decrement(bufnr)
   vim.schedule(vim.cmd.redrawtabline)
 end
 
--- Register early fallback highlight so FlemmaBusy exists before any .chat buffer opens.
--- apply_syntax() will re-register it from config, but this ensures the group is always defined.
-vim.api.nvim_set_hl(0, HIGHLIGHT, { link = "DiagnosticWarn", default = true })
+h.link("DiagnosticWarn"):set(HIGHLIGHT)
 
 hooks.on("request:sending", function(data)
   increment(data.bufnr)

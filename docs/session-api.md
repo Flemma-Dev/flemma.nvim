@@ -1,6 +1,6 @@
 # Session API
 
-Flemma tracks token usage and costs for every API request in a global session object. The session lives in memory for the lifetime of the Neovim instance and is accessible through the `flemma.session` module.
+Flemma tracks token usage and costs for every API request in a global session object. The session lives in memory for the lifetime of the Neovim instance and is accessible through the `flemma.session` module. Session cost tracking and subscription rate-limit windows are the harness's [economics and budget observability](harness.md).
 
 ## Module functions
 
@@ -25,7 +25,7 @@ local ts = require("flemma.session").now()
 Two ways to observe session state: poll the singleton on demand, or subscribe to the `request:finished` hook (see [docs/extending.md](extending.md#hooks-lifecycle-events)). The hook fires after a request is recorded and carries the just-added `flemma.session.Request` as `data.request`, so you can update UI without polling.
 
 > [!NOTE]
-> A request is only added to the session when the resolved model has registry pricing. Requests against custom or unknown models — where `flemma.models.registry.get_model_info(...).pricing` returns `nil` — silently skip session recording. If you're iterating on a new model and see no `request:finished` payload and an unchanged session, that's why.
+> A request is only added to the session when the resolved model has registry pricing. Requests against custom or unknown models — where `require("flemma.provider.registry").get_model_info(...).pricing` returns `nil` — silently skip session recording. If you're iterating on a new model and see no `request:finished` payload and an unchanged session, that's why.
 
 ```lua
 local session = require("flemma.session").get()
@@ -64,16 +64,28 @@ local req = session:get_latest_request_for_filepath(vim.fn.expand("%:p"))
 
 Each request stores raw data -- tokens, per-million prices, cache pricing, and timestamps -- so costs are always derived from the underlying components.
 
-| Field                                                    | Description                                                                                            |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `provider`, `model`                                      | Provider and model that handled the request                                                            |
-| `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts (see `output_has_thoughts` for how thinking tokens relate to output)                  |
-| `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                                      |
-| `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                                     |
-| `cache_read_price`, `cache_write_price`                  | USD per million cache tokens (`nil` when the provider does not support caching)                        |
-| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens (true for OpenAI/Anthropic, false for Vertex) |
-| `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`)                |
-| `filepath`, `bufnr`                                      | Source buffer identifier (`filepath` is the resolved absolute path; either may be `nil`)               |
+| Field                                                    | Description                                                                                                                                                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`, `model`                                      | Provider and model that handled the request                                                                                                                                                         |
+| `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts (see `output_has_thoughts` for how thinking tokens relate to output)                                                                                                               |
+| `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                                                                                                                                   |
+| `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                                                                                                                                  |
+| `cache_read_price`, `cache_write_price`                  | USD per million cache tokens (`nil` when the provider does not support caching)                                                                                                                     |
+| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens (true for Anthropic, OpenAI, and Codex; false for Vertex and Moonshot/Kimi, and the default for providers that do not set it)              |
+| `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`)                                                                                                             |
+| `filepath`, `bufnr`                                      | Source buffer identifier (`filepath` is the resolved absolute path; either may be `nil`)                                                                                                            |
+| `rate_limits`                                            | Subscription rate-limit snapshot (`flemma.session.RateLimitSnapshot`) when the provider reports one (e.g. the experimental Codex / ChatGPT-subscription provider); `nil` for usage-billed providers |
+
+### Subscription rate limits
+
+Providers that bill against a subscription quota rather than per-token attach a rate-limit snapshot to each request through the `rate_limits` field. Currently only the experimental Codex / ChatGPT-subscription provider populates it (parsed from the response headers); every other provider leaves it `nil`.
+
+| Type                               | Shape                                                                                                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flemma.session.RateLimitSnapshot` | `plan_name?` (human-readable plan, e.g. `"Plus"`/`"Pro"`), `windows` (a list of `RateLimitWindow`, ordered shortest-window-first / most-urgent-first) |
+| `flemma.session.RateLimitWindow`   | `used_percent` (0–100 consumed), `window_seconds` (rolling window length), `resets_at?` (Unix seconds when the window resets)                         |
+
+These feed the usage bar and the lualine resolvers (see [docs/integrations.md](integrations.md)); the 5-hour and weekly Codex windows are the typical entries.
 
 ## Request methods
 

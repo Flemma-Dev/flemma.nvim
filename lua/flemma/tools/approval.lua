@@ -254,7 +254,7 @@ function M.setup()
   })
 
   -- Sandbox-aware auto-approval: when sandboxing is enabled and a backend is
-  -- available, auto-approve tools that declare "can_auto_approve_if_sandboxed"
+  -- available, auto-approve tools that declare "auto_approves_if_sandboxed"
   -- in their capabilities array. Only bash uses this path — read-only tools
   -- (find, grep, ls) are approved via the $standard preset instead.
   -- Priority 25: below config (100) and the community default (50)
@@ -273,7 +273,7 @@ function M.setup()
       end
 
       -- Only handle tools that declare the sandbox auto-approve capability
-      if not tools_registry.has_capability(tool_name, "can_auto_approve_if_sandboxed") then
+      if not tools_registry.has_capability(tool_name, "auto_approves_if_sandboxed") then
         return nil
       end
 

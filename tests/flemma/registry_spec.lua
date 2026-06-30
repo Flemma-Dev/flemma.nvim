@@ -55,10 +55,10 @@ describe("flemma.tools.registry has_capability", function()
       name = "test_tool",
       description = "test",
       input_schema = {},
-      capabilities = { "can_auto_approve_if_sandboxed", "template_tool_result" },
+      capabilities = { "auto_approves_if_sandboxed", "emits_template" },
     })
-    assert.is_true(registry.has_capability("test_tool", "template_tool_result"))
-    assert.is_true(registry.has_capability("test_tool", "can_auto_approve_if_sandboxed"))
+    assert.is_true(registry.has_capability("test_tool", "emits_template"))
+    assert.is_true(registry.has_capability("test_tool", "auto_approves_if_sandboxed"))
   end)
 
   it("returns false when tool lacks the capability", function()
@@ -66,9 +66,9 @@ describe("flemma.tools.registry has_capability", function()
       name = "test_tool",
       description = "test",
       input_schema = {},
-      capabilities = { "can_auto_approve_if_sandboxed" },
+      capabilities = { "auto_approves_if_sandboxed" },
     })
-    assert.is_false(registry.has_capability("test_tool", "template_tool_result"))
+    assert.is_false(registry.has_capability("test_tool", "emits_template"))
   end)
 
   it("returns false when tool has no capabilities field", function()
@@ -77,10 +77,10 @@ describe("flemma.tools.registry has_capability", function()
       description = "test",
       input_schema = {},
     })
-    assert.is_false(registry.has_capability("test_tool", "template_tool_result"))
+    assert.is_false(registry.has_capability("test_tool", "emits_template"))
   end)
 
   it("returns false when tool does not exist", function()
-    assert.is_false(registry.has_capability("nonexistent", "template_tool_result"))
+    assert.is_false(registry.has_capability("nonexistent", "emits_template"))
   end)
 end)

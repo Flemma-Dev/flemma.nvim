@@ -13,6 +13,7 @@ package.loaded["flemma.utilities.truncate"] = nil
 package.loaded["flemma.provider.adapters.anthropic"] = nil
 package.loaded["flemma.provider.adapters.openai"] = nil
 package.loaded["flemma.provider.adapters.vertex"] = nil
+package.loaded["flemma.provider.openai_responses"] = nil
 
 local ast = require("flemma.ast")
 local client = require("flemma.client")
@@ -124,7 +125,7 @@ describe("Built-in Tool Strict Mode Schemas", function()
     for name, definition in pairs(all) do
       count = count + 1
       assert.equals(true, definition.strict, "Tool '" .. name .. "' should have strict=true")
-      local json_schema = tools.to_json_schema(definition)
+      local json_schema = tools.to_json_schema_for_prompt(definition)
       assert.equals(
         false,
         json_schema.additionalProperties,
@@ -140,14 +141,14 @@ describe("Built-in Tool Strict Mode Schemas", function()
     -- Check bash tool: timeout should be nullable and required
     local bash = all.bash
     assert.is_not_nil(bash, "bash tool should exist")
-    local bash_schema = tools.to_json_schema(bash)
+    local bash_schema = tools.to_json_schema_for_prompt(bash)
     assert.same({ "number", "null" }, bash_schema.properties.timeout.type)
     assert.truthy(vim.tbl_contains(bash_schema.required, "timeout"), "bash.timeout should be in required")
 
     -- Check read tool: offset and limit should be nullable and required
     local read = all.read
     assert.is_not_nil(read, "read tool should exist")
-    local read_schema = tools.to_json_schema(read)
+    local read_schema = tools.to_json_schema_for_prompt(read)
     assert.same({ "number", "null" }, read_schema.properties.offset.type)
     assert.same({ "number", "null" }, read_schema.properties.limit.type)
     assert.truthy(vim.tbl_contains(read_schema.required, "offset"), "read.offset should be in required")

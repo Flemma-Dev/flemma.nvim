@@ -14,7 +14,7 @@ local state = require("flemma.state")
 ---@field reason string Logging label from the original request
 
 ---@class flemma.cursor.MoveOpts
----@field line integer Target line (1-based)
+---@field line? integer Target line (1-based, required when bottom is not set)
 ---@field col? integer Target column (0-based, default 0)
 ---@field bottom? boolean Target end-of-buffer (resolved at move time, overrides line)
 ---@field force? boolean Bypass idle timer and heuristics, execute immediately
@@ -24,11 +24,11 @@ local NAMESPACE = vim.api.nvim_create_namespace("flemma_cursor_target")
 local EXTMARK_ID = 1
 
 ---Format a target description for log messages.
----@param line integer
+---@param line? integer
 ---@param bottom boolean
 ---@return string
 local function describe_target(line, bottom)
-  local parts = "line " .. line
+  local parts = "line " .. (line or "?")
   if bottom then
     parts = parts .. " (bottom)"
   end
@@ -180,12 +180,20 @@ function M.request_move(bufnr, opts)
     if bottom then
       line = vim.api.nvim_buf_line_count(bufnr)
     end
+    ---@cast line integer
     log.debug("cursor: force move (" .. reason .. ") → " .. describe_target(line, bottom) .. ", buf " .. bufnr)
     execute_move(bufnr, line, col, reason)
     return
   end
 
-  -- Deferred path: place extmark, start/reset idle timer
+  -- Deferred path: place extmark, start/reset idle timer.
+  -- Skip when the user has explicitly broken away (auto_scroll == false).
+  -- nil means tail was never engaged — deferred moves proceed normally.
+  if state.get_buffer_state(bufnr).auto_scroll == false then
+    log.trace("cursor: deferred move skipped (" .. reason .. "), broken away, buf " .. bufnr)
+    return
+  end
+
   local buffer_state = state.get_buffer_state(bufnr)
 
   if buffer_state.cursor_pending then
@@ -235,17 +243,79 @@ function M.cancel_pending(bufnr)
   clear_pending(bufnr)
 end
 
+---Engage tail mode: the viewport will follow new content to the bottom.
+---Set on user-initiated sends; cleared on breakaway or cancellation.
+---@param bufnr integer
+function M.tail(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  buffer_state.auto_scroll_target = nil
+  if not buffer_state.auto_scroll then
+    buffer_state.auto_scroll = true
+    log.debug("cursor: tail engaged, buf " .. bufnr)
+  end
+end
+
+---Disengage tail mode.
+---@param bufnr integer
+function M.untail(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.auto_scroll then
+    buffer_state.auto_scroll = false
+    buffer_state.auto_scroll_target = nil
+    log.debug("cursor: tail disengaged, buf " .. bufnr)
+  end
+end
+
+---Whether tail mode is active for a buffer.
+---@param bufnr integer
+---@return boolean
+function M.is_tailing(bufnr)
+  return state.get_buffer_state(bufnr).auto_scroll == true
+end
+
+---Scroll to bottom if tail mode is active (no-op otherwise).
+---Before scrolling, detects whether the user moved the cursor above the
+---last follow() target (drift detection). This catches breakaway even when
+---CursorMoved is deferred past the next follow() call.
+---@param bufnr integer
+function M.follow(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.auto_scroll then
+    return
+  end
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+  if buffer_state.auto_scroll_target then
+    local current_line = vim.api.nvim_win_get_cursor(winid)[1]
+    if current_line < buffer_state.auto_scroll_target then
+      local target = buffer_state.auto_scroll_target
+      buffer_state.auto_scroll = false
+      buffer_state.auto_scroll_target = nil
+      log.debug("cursor: breakaway (drift) at line " .. current_line .. ", target was " .. target .. ", buf " .. bufnr)
+      return
+    end
+  end
+  M.request_move(bufnr, { bottom = true, force = true, reason = "auto-scroll" })
+  buffer_state.auto_scroll_target = vim.api.nvim_buf_line_count(bufnr)
+end
+
 ---Set up cursor engine autocmds and buffer cleanup.
 function M.setup()
   local augroup = vim.api.nvim_create_augroup("FlemmaCursor", { clear = true })
 
-  -- Reset idle timer on any user cursor movement in .chat buffers
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
     pattern = "*.chat",
     callback = function(ev)
       local bufnr = ev.buf
       local buffer_state = state.get_buffer_state(bufnr)
+
+      -- Reset idle timer for deferred cursor moves
       if buffer_state.cursor_pending and buffer_state.cursor_idle_timer then
         log.trace(
           "cursor: idle timer reset (CursorMoved), pending ("
@@ -254,6 +324,23 @@ function M.setup()
             .. bufnr
         )
         reset_idle_timer(buffer_state, bufnr)
+      end
+
+      -- Tail mode: breakaway / re-attach (only during active requests)
+      if not buffer_state.current_request then
+        return
+      end
+
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local last_line = vim.api.nvim_buf_line_count(bufnr)
+      local at_bottom = cursor_line >= last_line
+
+      if buffer_state.auto_scroll and not at_bottom then
+        buffer_state.auto_scroll = false
+        log.debug("cursor: breakaway at line " .. cursor_line .. "/" .. last_line .. ", buf " .. bufnr)
+      elseif not buffer_state.auto_scroll and at_bottom then
+        buffer_state.auto_scroll = true
+        log.debug("cursor: re-attached at line " .. cursor_line .. "/" .. last_line .. ", buf " .. bufnr)
       end
     end,
   })

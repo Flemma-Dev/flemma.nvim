@@ -435,7 +435,7 @@ describe("Tool concurrency gating in Phase 2", function()
 
     local throttle_seen = false
     for _, n in ipairs(captured1) do
-      if n.message:match("Executing") and n.message:match("max_concurrent") then
+      if n.message:match("queued") and n.message:match("max_concurrent") then
         throttle_seen = true
       end
     end
@@ -456,7 +456,7 @@ describe("Tool concurrency gating in Phase 2", function()
 
     local throttle_seen_silent = false
     for _, n in ipairs(captured2) do
-      if n.message:match("Executing") and n.message:match("max_concurrent") then
+      if n.message:match("queued") and n.message:match("max_concurrent") then
         throttle_seen_silent = true
       end
     end

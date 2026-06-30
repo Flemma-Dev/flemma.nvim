@@ -36,8 +36,8 @@ describe("Bash Tool", function()
     assert.is_true(bash_def.async)
   end)
 
-  it("declares can_auto_approve_if_sandboxed capability", function()
-    assert.is_truthy(vim.tbl_contains(bash_def.capabilities, "can_auto_approve_if_sandboxed"))
+  it("declares auto_approves_if_sandboxed capability", function()
+    assert.is_truthy(vim.tbl_contains(bash_def.capabilities, "auto_approves_if_sandboxed"))
   end)
 
   describe("execution", function()
@@ -104,6 +104,61 @@ describe("Bash Tool", function()
       assert.is_truthy(result.output:match("%[Showing lines"))
       -- Should mention the full output file
       assert.is_truthy(result.output:match("Full output:"))
+    end)
+
+    it("does not create store directory when command does not reference it", function()
+      local store = require("flemma.tools.store")
+      local target = vim.fn.tempname() .. "/should-not-exist"
+      local original = store.get_buffer_store_path
+      store.get_buffer_store_path = function()
+        return target
+      end
+
+      local result = run_bash({ label = "test", command = "echo hello" }, ctx)
+      assert.is_true(result.success)
+      assert.equals(0, vim.fn.isdirectory(target))
+
+      store.get_buffer_store_path = original
+    end)
+
+    it("creates store directory when command references $FLEMMA_TOOLS_STORE_PATH", function()
+      local store = require("flemma.tools.store")
+      local target = vim.fn.tempname() .. "/auto-created"
+      local original_get = store.get_buffer_store_path
+      local original_ensure = store.ensure_buffer_store_path
+      store.get_buffer_store_path = function()
+        return target
+      end
+      store.ensure_buffer_store_path = function()
+        vim.fn.mkdir(target, "p")
+        return target
+      end
+
+      local result = run_bash({
+        label = "test",
+        command = "ls $FLEMMA_TOOLS_STORE_PATH",
+      }, ctx)
+      assert.is_true(result.success)
+      assert.equals(1, vim.fn.isdirectory(target))
+
+      store.get_buffer_store_path = original_get
+      store.ensure_buffer_store_path = original_ensure
+    end)
+
+    it("still executes when the store directory cannot be created", function()
+      local store = require("flemma.tools.store")
+      local original_ensure = store.ensure_buffer_store_path
+      store.ensure_buffer_store_path = function()
+        error("Failed to create directory '/blocked/store'")
+      end
+
+      -- Restore before asserting so a failure cannot leak the stub into
+      -- later tests (the sandbox resolves store paths through this module).
+      local result = run_bash({ label = "test", command = "echo ok $FLEMMA_TOOLS_STORE_PATH" }, ctx)
+      store.ensure_buffer_store_path = original_ensure
+
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:find("ok", 1, true))
     end)
 
     it("returns cancel function that stops the job", function()
@@ -266,6 +321,20 @@ describe("Bash Tool", function()
       assert.is_truthy(result)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("done"))
+    end)
+
+    it("disables interactive pagers so paging commands cannot hang", function()
+      if not HAS_TERMINAL_PTY_FIX then
+        pending("requires Neovim 0.12+ (termopen backend)")
+        return
+      end
+      -- Under the PTY backend stdout is a tty, so git/less/man would launch an
+      -- interactive pager against the window-less ~5-row terminal PTY and block
+      -- forever. The backend forces GIT_PAGER/PAGER=cat to prevent that.
+      local result = run_bash({ label = "test", command = "echo gp=$GIT_PAGER pg=$PAGER" }, ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:match("gp=cat"))
+      assert.is_truthy(result.output:match("pg=cat"))
     end)
   end)
 end)

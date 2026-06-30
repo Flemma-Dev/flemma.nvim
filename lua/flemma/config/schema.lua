@@ -7,6 +7,7 @@
 --- Each module owns its own config schema (M.metadata.config_schema).
 --- Defaults from discovered schemas materialize into L10 at registration time.
 
+local h = require("flemma.hl")
 local s = require("flemma.schema")
 local symbols = require("flemma.symbols")
 
@@ -22,23 +23,6 @@ local BAR_POSITIONS = { "top", "bottom", "top left", "top right", "bottom left",
 ---@return flemma.schema.Node
 local function position(default)
   return s.enum(BAR_POSITIONS, default)
-end
-
---- HighlightValue: string | { dark: string, light: string }
---- String defaults produce a union with the string branch carrying the default.
---- Table defaults produce a union with the object branch carrying the defaults.
----@param default? string|table<string, string>
----@return flemma.schema.Node
-local function highlight(default)
-  local node
-  if type(default) == "table" then
-    node = s.union(s.string(), s.object({ dark = s.string(default.dark), light = s.string(default.light) }))
-  elseif type(default) == "string" then
-    node = s.union(s.string(default), s.object({ dark = s.string(), light = s.string() }))
-  else
-    node = s.union(s.string(), s.object({ dark = s.string(), light = s.string() }))
-  end
-  return node:type_as("flemma.config.HighlightValue")
 end
 
 --- ThinkingLevel: the set of valid thinking value forms (enum | number | false).
@@ -132,6 +116,14 @@ return s.object({
   ),
 
   -- ---------------------------------------------------------------------------
+  -- Provider modules — non-built-in provider registration
+  -- ---------------------------------------------------------------------------
+
+  providers = s.object({
+    modules = s.list(s.loadable(), {}),
+  }),
+
+  -- ---------------------------------------------------------------------------
   -- Tools & templating — what the model can do and how prompts are built
   -- ---------------------------------------------------------------------------
 
@@ -158,8 +150,17 @@ return s.object({
     show_spinner = s.boolean(true),
     cursor_after_result = s.enum({ "result", "stay", "next" }, "result"),
     modules = s.list(s.loadable(), {}),
-    truncate = s.object({
-      output_path_format = s.string("${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"),
+    store = s.object({
+      path_format = s.string("$chat"),
+      unnamed_path_format = s.string(
+        "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt"
+      ),
+      materialize = s.boolean(false),
+      preview = s.object({
+        lines = s.number(10),
+        bytes = s.number(2048),
+      }),
+      backup = s.union(s.string("version"), s.literal(false)),
     }),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)
@@ -216,47 +217,56 @@ return s.object({
   -- ---------------------------------------------------------------------------
 
   highlights = s.object({
-    -- Fallback colors used when highlight groups don't define fg/bg
-    defaults = s.object({
-      dark = s.object({ bg = s.string("#000000"), fg = s.string("#ffffff") }),
-      light = s.object({ bg = s.string("#ffffff"), fg = s.string("#000000") }),
-    }),
-    system = highlight("Special"),
-    user = highlight("Normal"),
-    assistant = highlight("Normal"),
-    lua_expression = highlight("PreProc"),
-    lua_code_block = highlight("PreProc"),
-    lua_delimiter = highlight("FlemmaLuaExpression"),
-    user_file_reference = highlight("Include"),
-    thinking_tag = highlight("Comment"),
-    thinking_block = highlight({
-      dark = "Comment+bg:#000000-fg:#333333",
-      light = "Comment-bg:#000000+fg:#333333",
-    }),
-    tool_icon = highlight("FlemmaToolUseTitle"),
-    tool_name = highlight("Function"),
-    tool_use_title = highlight("Function"),
-    tool_result_title = highlight("Function"),
-    tool_result_error = highlight("DiagnosticError"),
-    tool_result_pending = highlight("DiagnosticInfo"),
-    tool_result_approved = highlight("DiagnosticOk"),
-    tool_result_rejected = highlight("DiagnosticWarn"),
-    tool_result_denied = highlight("DiagnosticError"),
-    tool_result_aborted = highlight("DiagnosticError"),
-    tool_preview = highlight("Comment"),
-    fence_label = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
-    fence_bar = highlight("FlemmaFenceLabel"),
-    fold_preview = highlight("Comment"),
-    fold_meta = highlight("Comment"),
-    tool_detail = highlight("Comment"),
-    busy = highlight("DiagnosticWarn"),
-    role_style = s.string("bold"),
+    system = s.highlight(h.from("Special"):omit("bg")),
+    user = s.highlight(h.from("Normal"):omit("bg")),
+    assistant = s.highlight(h.from("Normal"):omit("bg")),
+    lua_expression = s.highlight(h.link("PreProc")),
+    lua_code_block = s.highlight(h.link("PreProc")),
+    lua_delimiter = s.highlight(h.link("FlemmaLuaExpression")),
+    user_file_reference = s.highlight(h.link("Include")),
+    thinking_tag = s.highlight(h.link("Comment")),
+    thinking_block = s.highlight(h.from("Comment"):mute("fg", "#333333")),
+    tool_icon = s.highlight(h.link("FlemmaToolUseTitle")),
+    tool_name = s.highlight(h.link("Function")),
+    tool_use_title = s.highlight(h.link("Function")),
+    tool_result_title = s.highlight(h.link("Function")),
+    tool_result_error = s.highlight(h.link("DiagnosticError")),
+    tool_result_pending = s.highlight(h.link("DiagnosticInfo")),
+    tool_result_approved = s.highlight(h.link("DiagnosticOk")),
+    tool_result_rejected = s.highlight(h.link("DiagnosticWarn")),
+    tool_result_denied = s.highlight(h.link("DiagnosticError")),
+    tool_result_aborted = s.highlight(h.link("DiagnosticError")),
+    tool_preview = s.highlight(h.link("Comment")),
+    tool_label = s.highlight(h.attrs({ italic = true })),
+    fence_label = s.highlight(h.from("Comment"):mute("fg", "#303030")),
+    fence_bar = s.highlight(h.link("FlemmaFenceLabel")),
+    fold_preview = s.highlight(h.link("Comment")),
+    fold_meta = s.highlight(h.link("Comment")),
+    tool_detail = s.highlight(h.link("Comment")),
+    busy = s.highlight(h.link("DiagnosticWarn")),
+    progress_accent = s.highlight(h.attrs({ bold = true })),
+    approval_indicator = s.highlight(h.from("Comment"):omit("bg")),
+    approval_label = s.highlight(
+      h.coalesce(
+        h.from("Folded")
+          :pick("fg")
+          :contrast("fg", h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")), 4.5),
+        h.from("Comment"):pick("fg")
+      )
+    ),
+    approval_key = s.highlight(h.link("MoreMsg")),
+    approval_action = s.highlight(h.from("ModeMsg"):tint("fg", "#202122")),
+    rejection_input = s.highlight(h.from("MsgArea")),
+    rejection_border = s.highlight(
+      h.coalesce(h.from("MsgArea"):pick("bg"), h.from("Normal")):merge(h.from("FloatBorder"):pick("fg"), "force")
+    ),
+    role_name = s.highlight(h.attrs({ bold = true })),
   }),
 
   ruler = s.object({
     enabled = s.boolean(true),
     char = s.string("─"),
-    hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
+    hl = s.highlight(h.from("Comment"):mute("fg", "#303030")),
   }),
 
   turns = s.object({
@@ -281,10 +291,10 @@ return s.object({
 
   line_highlights = s.object({
     enabled = s.boolean(true),
-    frontmatter = highlight({ dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }),
-    system = highlight({ dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }),
-    user = highlight({ dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }),
-    assistant = highlight({ dark = "Normal", light = "Normal" }),
+    frontmatter = s.highlight(h.from("Normal"):tint("bg", "#18111a")),
+    system = s.highlight(h.from("Normal"):tint("bg", "#101112")),
+    user = s.highlight(h.from("Normal"):tint("bg", "#202122")),
+    assistant = s.highlight(h.link("Normal")),
   }),
 
   -- ---------------------------------------------------------------------------
@@ -312,7 +322,7 @@ return s.object({
     statusline = s.object({
       format = s.union(
         s.string([[
-          {{ model.name }}
+          %#FlemmaStatusTextMuted#{{ provider.name }}/%*{{ model.name }}
           {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
           {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#·%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
           {%- if session.cost then %} %#FlemmaStatusTextMuted#·%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
@@ -320,6 +330,30 @@ return s.object({
         ]]),
         s.func():type_as("flemma.statusline.FormatFunction")
       ),
+    }),
+    approval = s.object({
+      enabled = s.boolean(true),
+      syntax_highlighting = s.boolean(true),
+      preview_lines = s.union(
+        s.object({
+          head = s.integer(6),
+          tail = s.integer(6),
+        }),
+        s.integer()
+      ):coerce(function(value, _)
+        if type(value) == "number" then
+          return { head = value, tail = value }
+        end
+        if type(value) == "table" and value[1] ~= nil then
+          return { head = value[1], tail = value[2] or value[1] }
+        end
+        return value
+      end),
+    }),
+    rejection = s.object({
+      enabled = s.boolean(true),
+      completion = s.boolean(false),
+      winblend = s.integer(15),
     }),
   }),
 
@@ -332,6 +366,7 @@ return s.object({
     disable_textwidth = s.boolean(true),
     auto_write = s.boolean(false),
     manage_updatetime = s.boolean(true),
+    compact_headers = s.boolean(true),
     fold = s.object({
       level = s.integer(1),
       gap = s.boolean(false),
@@ -355,6 +390,9 @@ return s.object({
       cancel = s.string("<C-c>"),
       tool_execute = s.string("<M-CR>"),
       tool_background = s.string("<M-b>"),
+      tool_approve = s.string("<M-a>"),
+      tool_reject = s.string("<M-r>"),
+      tool_approve_all = s.string("<M-A>"),
       message_next = s.string("]m"),
       message_prev = s.string("[m"),
       fold_toggle = s.union(s.string("<Space>"), s.literal(false)),
@@ -382,6 +420,7 @@ return s.object({
       rw_paths = s.list(s.string(), {
         "urn:flemma:cwd",
         "urn:flemma:buffer:path",
+        "urn:flemma:store",
         "/tmp",
         "${TMPDIR:-/tmp}",
         "${XDG_CACHE_HOME:-~/.cache}",
@@ -399,9 +438,10 @@ return s.object({
   }),
 
   secrets = s.object({
-    gcloud = s.object({
-      path = s.string("gcloud"),
-    }),
+    -- Resolver-specific config schemas resolved lazily via the secrets registry
+    [symbols.DISCOVER] = function(key)
+      return require("flemma.secrets").get_config_schema(key)
+    end,
   }),
 
   logging = s.object({

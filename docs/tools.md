@@ -2,6 +2,8 @@
 
 Flemma's tool system lets models request actions – run a calculation, execute a shell command, read or modify files – and receive structured results, all within the `.chat` buffer. This document covers approval, per-buffer configuration, custom tool registration, and the resolver API.
 
+Tools are the primary [model-facing surface](harness.md#model-facing-surface) of the harness: auto-injected parameters (`flemma.background`, `flemma.save_to`), the `flemma.jobs.status` polling tool, status suffixes, output truncation, and strict-schema rewriting are all documented in this file. The [gating surface](harness.md#gating-and-coordination-surface) — approval resolvers, capability tags, and sandbox auto-approval — is also covered here and in [sandbox.md](sandbox.md).
+
 For a quick overview of built-in tools and the basic workflow, see [The Agent](../README.md#the-agent) section in the README.
 
 ---
@@ -28,6 +30,8 @@ The cursor moves to the first `pending` placeholder so you can review it.
 - **`denied`** → an error result is injected (the model sees the tool was blocked).
 - **`rejected`** → an error result is injected, using any content you wrote inside the block as the error message.
 - **`pending`** → blocks the cycle. The cursor moves here and Flemma waits for you to act.
+
+The model-facing result the rejection produces is explicit. With no content, a `rejected` tool injects the literal error string `This tool has been rejected by the user.`; a `denied` tool injects the policy denial message. When you supply a reason — through the [rejection popup](ui.md#rejection-popup) or `:Flemma tool:reject <reason>` — the reason is wrapped as `User feedback: <reason>` and written into the fence, and that exact text becomes the `tool_result` error string the model reads.
 
 **Phase 3 – Send.** When no lifecycle-status placeholders remain (every tool has a real result), the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
 
@@ -61,8 +65,9 @@ You can **edit the status directly** in the header. This is the primary way to i
   ````
 
 - **Execute one tool:** press <kbd>Alt-Enter</kbd> on any tool block to execute or resolve it immediately (works for `approved`, `pending`, `rejected`, and `denied`).
-- **Approve via command:** `:Flemma tool:approve` toggles the tool under the cursor to `(approved)` without executing it – the next <kbd>Ctrl-]</kbd> runs it.
-- **Reject via command:** `:Flemma tool:reject` toggles the tool under the cursor to `(rejected)`. Append an optional message (`:Flemma tool:reject do not run rm -rf`) and it's written into the fence as the rejection reason the model will see.
+- **Approve via command or keymap:** `:Flemma tool:approve` (or <kbd>Alt-A</kbd>) toggles the tool under the cursor to `(approved)` without executing it – the next <kbd>Ctrl-]</kbd> runs it.
+- **Approve all pending:** `:Flemma tool:approve-all` (or <kbd>Alt-Shift-A</kbd>) approves every pending tool in the buffer at once.
+- **Reject via command or keymap:** `:Flemma tool:reject` (or <kbd>Alt-R</kbd>, which opens the [inline rejection popup](ui.md#rejection-popup)) toggles the tool under the cursor to `(rejected)`. Append an optional message (`:Flemma tool:reject do not run rm -rf`) and it's written into the fence as the rejection reason the model will see.
 
 ### Content-overwrite protection
 
@@ -171,7 +176,7 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to a temporary file.
+- **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to the [tool result store](#tool-result-store) and the truncated content ends with a notice pointing at it.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
 
 ### Bash execution backend
@@ -198,7 +203,7 @@ Async tools can run in the background without blocking the conversation. The too
 
 ### How tools enter background
 
-**Model-initiated.** Flemma injects a `background` boolean parameter into every async tool's schema. When the model sets `background: true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../lua/flemma/messages/tool-parameter--background.chat) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
+**Model-initiated.** Flemma injects a `flemma.background` boolean parameter into every async tool's schema (a [harness parameter](#harness-parameters), invisible to the tool itself). When the model sets `"flemma.background": true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../lua/flemma/messages/tool-parameter--background.chat) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
 
 **User-initiated.** Press <kbd>Alt-B</kbd> (or `:Flemma tool:background`) while the cursor is on an executing tool to move it to background mid-flight. The tool keeps running, but the buffer unlocks and the conversation advances. If all foreground tools are now clear, autopilot triggers the next send automatically.
 
@@ -224,12 +229,12 @@ When autopilot is enabled and background jobs complete at idle, Flemma schedules
 
 A built-in harness tool that lets the model query the status of a background job by its `job_id`. Returns one of:
 
-| Status                                  | Meaning                                      |
-| --------------------------------------- | -------------------------------------------- |
-| `running`                               | The tool is still executing                  |
-| `queued`                                | Execution finished; result awaiting delivery |
-| `completed`                             | Result already delivered into the buffer     |
-| `completed (removed from conversation)` | Job existed but its result block was deleted |
+| Status                                  | Meaning                                                                                            |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `running`                               | The tool is still executing                                                                        |
+| `completed (delivery pending)`          | Execution finished; the result is queued and will be injected automatically — don't re-run or poll |
+| `completed`                             | Result already delivered into the buffer                                                           |
+| `completed (removed from conversation)` | Job existed but its result block was deleted                                                       |
 
 The tool cross-checks in-memory state against the buffer AST, so even if the process state is cleared (e.g., after a restart), it falls back to scanning for `**Job Result:**` blocks.
 
@@ -246,7 +251,88 @@ When `lsp.enabled` is set (defaults to `true` whenever `vim.lsp` is available), 
 
 ### Opting out
 
-Set `backgroundable = false` on a tool definition to prevent the `background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool is also not backgroundable.
+Declare the `"disables_background"` capability on a tool definition to prevent the `flemma.background` parameter from being injected into its schema. Sync tools never receive the parameter regardless. The `flemma.jobs.status` harness tool declares this capability. Similarly, `"disables_save_to"` prevents `flemma.save_to` injection — harness tools declare both since their output is ephemeral coordination metadata.
+
+---
+
+## Tool result store
+
+Large tool outputs need a durable home outside the buffer. The **store** is a per-conversation directory — co-located with the `.chat` file by default — where Flemma writes full tool outputs. Three things write to it:
+
+- **Truncation overflow** — when a result exceeds the truncation limits (2000 lines / 50KB), the truncated content injected into the buffer ends with a `Full output: <path>` notice pointing at the complete output in the store. Always on; nothing to enable.
+- **`flemma.save_to` redirects** — the model can ask for any tool's output to be written to a file instead of injected into the conversation (see [below](#flemmasave_to--redirecting-output-to-a-file)).
+- **Eager materialization** — with `tools.store.materialize = true`, _every_ tool and job result is written to the store, truncated or not. Defaults to `false`: on tool-heavy conversations this duplicates content that already lives in the buffer.
+
+### Store location
+
+`tools.store.path_format` controls where results are written. It accepts a preset name or a template string:
+
+| Preset            | Expands to                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `$chat` (default) | `{{ __dirname }}/.flemma/{{ flemma.path.basename(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt`                      |
+| `$state`          | `${XDG_STATE_HOME:-$HOME/.flemma}/flemma/store/{{ flemma.path.flatten(__filename) }}/{{ source }}_{{ name }}_{{ id }}.txt` |
+
+With the default `$chat` preset, a truncated `bash` result in `~/notes/example.chat` lands in `~/notes/.flemma/example.chat/tool_bash_toolu_01.txt` — the store travels with the conversation. `$state` keeps chat directories clean by routing everything under `$XDG_STATE_HOME/flemma/store/` instead (`~/.flemma/store/` when `XDG_STATE_HOME` is unset), with the chat path flattened into a single directory name (`home--user--notes--example.chat`).
+
+Custom templates render with the standard [templating environment](templates.md) plus:
+
+| Variable                               | Value                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| `{{ source }}`                         | `"tool"` for foreground results, `"job"` for background job deliveries      |
+| `{{ name }}`                           | The tool name, wire-encoded (dots become `__`, e.g. `flemma__jobs__status`) |
+| `{{ id }}`                             | The tool/job ID, escaped — characters outside `[A-Za-z0-9._-]` become `--`  |
+| `{{ __filename }}` / `{{ __dirname }}` | Chat file path / directory                                                  |
+| `{{ bufnr }}`                          | Buffer number                                                               |
+| `flemma.path.*`                        | Path helpers (`basename`, `flatten`, …)                                     |
+
+After template rendering, `$VAR` / `${VAR:-default}` environment expansion applies, doubled `flemma` namespace segments collapse (`.flemma/flemma/` → `.flemma/`), and a tool name repeated within a single path segment is de-duplicated — IDs that embed the tool name don't produce `tool_bash_bash--…` filenames.
+
+Unsaved buffers have no chat path to derive from, so they use `tools.store.unnamed_path_format` instead (default: `${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt` — the process ID keeps concurrent Neovim instances apart). Presets are not valid there.
+
+> [!NOTE]
+> The store replaces the `tools.truncate.output_path_format` option from v0.12 and earlier. Truncation overflow now follows `tools.store.path_format` — by default landing next to the chat file instead of in `$TMPDIR`.
+
+### Overwrites and backups
+
+Re-running a tool writes to the same store path. Before overwriting, the configured backup strategy runs — the default `version` strategy renames the existing file to the next free `<stem>.<n>.<ext>` (e.g. `tool_bash_toolu_01.1.txt`), so the canonical path always holds the latest run. Set `tools.store.backup = false` to overwrite in place, or pass a Lua module path exporting `backup(path)` for a custom strategy.
+
+### `flemma.save_to` – redirecting output to a file
+
+Flemma injects an optional `flemma.save_to` string parameter into **every** tool's schema. When the model supplies a path, the full output is written there and the conversation receives a stub instead: a short head preview (`tools.store.preview`, default 10 lines / 2KB) followed by `[Output saved: /path/to/file — 1.2MB, 54321 lines]`. [The parameter description](../lua/flemma/messages/tool-parameter--save-to.chat) tells the model to reach for it when output is large or needs to live at a specific path.
+
+- Relative paths resolve against the chat file's directory; absolute and `~/…` paths work too.
+- `$FLEMMA_TOOLS_STORE_PATH/<filename>` targets the conversation's store directory.
+- An existing file at the destination is backed up first through `tools.store.backup` (the default `version` strategy renames it to the next free `<stem>.<n>.<ext>`), so a redirect never silently destroys prior content — set `tools.store.backup = false` to overwrite in place.
+- With the [sandbox](sandbox.md) enabled, the destination must be writable under the sandbox policy.
+- Redirects apply only to successful results, and work for both foreground results and background job deliveries.
+- If the redirect fails (destination is a directory, sandbox denies the write, …), the full output is injected as if `flemma.save_to` had not been set, with an explanatory notice appended so the model knows the path it asked for was not written: `[Output not saved: <reason>. Showing the full output instead.]`.
+
+### `$FLEMMA_TOOLS_STORE_PATH`
+
+The `bash` tool exports `$FLEMMA_TOOLS_STORE_PATH` into every command's environment, pointing at the conversation's store directory. Shell commands can write artefacts directly there (`curl -o "$FLEMMA_TOOLS_STORE_PATH/response.json" …`), and the same variable works inside `flemma.save_to` values. The store directory is granted read-write access in the default sandbox policy via the `urn:flemma:store` variable (see [docs/sandbox.md](sandbox.md#flemma-urn-variables)).
+
+### Harness parameters
+
+`flemma.background` and `flemma.save_to` are **harness parameters**: Flemma injects them into each tool's schema when serializing the prompt and strips them from the input before the tool's `execute` runs. Tool implementations never see them, and the namespaced names can't collide with real tool parameters. For [strict-mode](#strict-mode-for-tool-schemas) tools they are injected as nullable (`type: [t, "null"]`) and appended to `required`, preserving strict-schema invariants across providers.
+
+### Configuration
+
+```lua
+tools = {
+  store = {
+    path_format = "$chat",          -- "$chat", "$state", or a template string
+    unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",
+    materialize = false,            -- Write every result to the store, not just overflow and redirects
+    preview = {
+      lines = 10,                   -- Preview lines shown in the buffer for flemma.save_to redirects (0 = no preview)
+      bytes = 2048,                 -- Preview size cap
+    },
+    backup = "version",             -- Backup strategy before overwriting (false to disable)
+  },
+}
+```
+
+All options can be overridden per-buffer via `flemma.opt.tools.store` in frontmatter.
 
 ---
 
@@ -270,6 +356,8 @@ Each preview has two parts: a **detail** (the raw technical summary — path, co
 
 Folded message previews use the same `detail — label` layout but render label and detail as separate highlight chunks. The virt-line placeholder preview is a single string with one combined highlight — see [Styling](#styling).
 
+When `ui.approval.syntax_highlighting` is enabled (the default), preview content receives treesitter syntax highlighting — JSON tool inputs and YAML-style generic previews render with proper syntax colours.
+
 ### Built-in preview formatters
 
 Every built-in tool ships with a tailored `format_preview` function that returns a structured `{ label, detail }` preview:
@@ -288,7 +376,7 @@ Every built-in tool's `input_schema` includes a required `label` field — the L
 
 ### Generic fallback
 
-Tools without a `format_preview` function get a generic key-value summary: `tool_name: key1="val1", key2="val2"`. Scalar values appear first (sorted alphabetically), followed by table values shown as `{key1, key2}` (≤ 2 keys), `{key1, key2, +N more}`, or `[N items]` for arrays. If the input table contains a string `label` field, it is auto-promoted to the label slot and the rendering becomes `tool_name: kv_body — label`. This auto-promotion only applies to the generic fallback — when a tool ships its own `format_preview`, that function controls label entirely.
+Tools without a `format_preview` function get a YAML-style generic preview. Scalar values appear as `key: value` pairs and compound values are JSON-encoded. When the inline rendering (`{key: "value", ...}`) fits within the available width, it displays on a single line; otherwise it splits into a multi-line block mapping — for example, `tool_name: {query: "search term", limit: 10}`. If the input table contains a string `label` field, it is auto-promoted to the label slot and the rendering becomes `tool_name: {kv_body} — label`. This auto-promotion only applies to the generic fallback — when a tool ships its own `format_preview`, that function controls label entirely.
 
 ### Custom preview formatters
 
@@ -321,11 +409,12 @@ The full type signature is `fun(input: table, max_length: integer): flemma.tools
 
 #### Return shapes
 
-| Return type                     | Behaviour                                                                                                                                                                  |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `string`                        | Treated as `{ detail = the_string }`. Label is **never** auto-promoted from `input.label` for explicit returns — only the [generic fallback](#generic-fallback) does that. |
-| `{ label?, detail? }`           | Rendered as `detail — label` when both are present; otherwise just whichever is given.                                                                                     |
-| `{ label?, detail = string[] }` | The `detail` array is joined with a **double space** before display.                                                                                                       |
+| Return type                     | Behaviour                                                                                                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `string`                        | Treated as `{ detail = the_string }`. Label is **never** auto-promoted from `input.label` for explicit returns — only the [generic fallback](#generic-fallback) does that.                                               |
+| `{ label?, detail? }`           | Rendered as `detail — label` when both are present; otherwise just whichever is given.                                                                                                                                   |
+| `{ label?, detail = string[] }` | The `detail` array is joined with a **double space** before display.                                                                                                                                                     |
+| `{ ..., highlight? }`           | When `highlight = { lang = "yaml" }` (or another treesitter language), the preview receives syntax highlighting if `ui.approval.syntax_highlighting` is enabled. The generic fallback uses this for YAML-style previews. |
 
 Newlines in either field are collapsed to the `eol` character from `listchars` (or `↵` by default) and the result is truncated to fit the editor width.
 
@@ -333,15 +422,15 @@ Newlines in either field are collapsed to the `eol` character from `listchars` (
 
 Tool previews use three highlight groups:
 
-| Group               | Default                     | Applies to                                                          |
-| ------------------- | --------------------------- | ------------------------------------------------------------------- |
-| `FlemmaToolPreview` | `Comment`                   | The whole virt-line placeholder preview (single combined highlight) |
-| `FlemmaToolLabel`   | `italic` (`default = true`) | The label chunk inside folded message previews                      |
-| `FlemmaToolDetail`  | `Comment`                   | The detail chunk inside folded message previews                     |
+| Group               | Default                         | Applies to                                                                     |
+| ------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
+| `FlemmaToolPreview` | `Comment`                       | The whole virt-line placeholder preview (single combined highlight)            |
+| `FlemmaToolLabel`   | `tool_preview` color + `italic` | The label chunk in folded message previews and the approved tool-result footer |
+| `FlemmaToolDetail`  | `Comment`                       | The detail chunk inside folded message previews                                |
 
-The virt-line placeholder preview is rendered as a single string with `FlemmaToolPreview` blended over the role's line background — so label and detail share one highlight and there is no italic distinction in that view. The label/detail split (italic + dimmer) is only visible in folded message previews, where each chunk gets its own highlight.
+The virt-line placeholder preview is rendered as a single string with `FlemmaToolPreview` blended over the role's line background — so label and detail share one highlight and there is no italic distinction in that view. The label/detail split (the label adds italic over the same muted color) is only visible in folded message previews, where each chunk gets its own highlight.
 
-Customise `FlemmaToolDetail` via `highlights.tool_detail` in your config. `FlemmaToolLabel` applies italic styling unconditionally and is not configurable through the highlights table. See [docs/ui.md](ui.md#highlights-and-styles) for details.
+Customise `FlemmaToolDetail` via `highlights.tool_detail` in your config. `FlemmaToolLabel` is the preview color (`highlights.tool_preview`) with the `highlights.tool_label` accent merged on top — italic by default; set a `fg` in `highlights.tool_label` to recolor it. See [docs/ui.md](ui.md#highlights-and-styles) for details.
 
 ---
 
@@ -612,10 +701,10 @@ local result = ctx.truncate.truncate_tail(full_output)
 -- Truncate from the start (keep first N lines/bytes) – use for file reads
 local result = ctx.truncate.truncate_head(content)
 
--- Tail-truncate with an automatic overflow file: when truncation occurs, the
--- full output is written to a temp file (named with this tool call's id) and a
--- "[full output: /path/...]" hint is appended to the returned content. This is
--- what `bash` uses for its streaming output.
+-- Tail-truncate with automatic overflow handling: when truncation occurs, the
+-- full output is saved to the tool result store (named with this tool call's
+-- id) and a "Full output: /path/..." notice is appended to the returned
+-- content. This is what `bash` uses for its streaming output.
 local result = ctx.truncate.truncate_with_overflow(full_output, { direction = "tail" })
 
 -- Format byte counts for display
@@ -729,6 +818,44 @@ tools.register("my_tool", {
 
 When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. You can still pass a raw JSON Schema table for `input_schema` if you need full control — Flemma forwards whatever you give it.
 
+The injected [harness parameters](#harness-parameters) (`flemma.background`, `flemma.save_to`) follow these invariants automatically: on strict tools they are added as nullable and appended to `required`.
+
+---
+
+## Capability tags
+
+A tool definition can carry a `capabilities` field — a list of string tags that declare how Flemma should treat the tool. The registry, the approval chain, the harness-parameter injector, and the template processor consult these tags rather than special-casing tool names, so a custom tool opts into the same behaviour as a built-in by declaring the matching tag.
+
+```lua
+tools.register("my_tool", {
+  name = "my_tool",
+  description = "...",
+  capabilities = { "disables_save_to" },
+  -- ...
+})
+```
+
+The vocabulary is closed — each tag gates one specific behaviour:
+
+| Capability                   | What it gates                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `disables_background`        | Suppresses injection of the `flemma.background` [harness parameter](#harness-parameters) into the tool's schema. Only meaningful for async tools (sync tools never receive it). The `flemma.jobs.status` harness tool declares it.                                                                                                                                           |
+| `disables_save_to`           | Suppresses injection of the `flemma.save_to` [harness parameter](#harness-parameters) into the tool's schema. The `flemma.jobs.status` harness tool declares it — harness output is ephemeral coordination metadata that should never be redirected to a file.                                                                                                               |
+| `auto_approves_if_sandboxed` | Lets the sandbox [approval resolver](#approval-resolvers) (priority 25) auto-approve calls to this tool when the sandbox is enabled with an available backend and the user hasn't opted out. Only the built-in `bash` tool declares it.                                                                                                                                      |
+| `emits_template`             | Marks the tool's result content as template-bearing: its parsed inner segments are kept and run through the [template engine](templates.md) when the conversation is compiled, so `{{ … }}` expressions and `@./file` references inside the result are evaluated. Tools without this tag have their result content sent verbatim. Only the built-in `read` tool declares it. |
+
+Tags follow a `verb_target` naming convention (`disables_background`, `auto_approves_if_sandboxed`) — a verb describing the behaviour applied to the named target. Custom tools should reuse the tags above; an unrecognized tag is simply never queried and has no effect.
+
+Query a tool's tags programmatically with `registry.has_capability(name, capability)`:
+
+```lua
+local registry = require("flemma.tools.registry")
+registry.has_capability("read", "emits_template")        --> true
+registry.has_capability("bash", "auto_approves_if_sandboxed") --> true
+```
+
+It returns `false` when the tool is unregistered or declares no `capabilities` list.
+
 ---
 
 ## Async tool definitions
@@ -803,7 +930,7 @@ Built-in resolvers are registered during `setup()`:
 | Priority | Name                            | Source                                                                                                                                                                                                        |
 | -------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 100      | `urn:flemma:approval:config`    | Unified resolver — reads the merged `tools.auto_approve` value from all config layers (DEFAULTS → SETUP → RUNTIME → FRONTMATTER), evaluates a list, function, or `$preset` reference, and returns a decision. |
-| 25       | `urn:flemma:approval:sandbox`   | Auto-approve tools with `can_auto_approve_if_sandboxed` capability when sandbox is enabled and available                                                                                                      |
+| 25       | `urn:flemma:approval:sandbox`   | Auto-approve tools with `auto_approves_if_sandboxed` capability when sandbox is enabled and available                                                                                                         |
 | 0        | `urn:flemma:approval:catch-all` | Only when `tools.require_approval = false`                                                                                                                                                                    |
 
 Third-party plugins register at the default priority of 50. Set `priority` higher to run before built-in resolvers (e.g., 200 to override config), or lower to act as a fallback.
@@ -811,7 +938,7 @@ Third-party plugins register at the default priority of 50. Set `priority` highe
 > [!NOTE]
 > Earlier releases used separate `config` and `frontmatter` resolvers. The unified resolver at priority 100 now consults the merged config store directly, so frontmatter overrides take effect through layer precedence rather than a separate resolver entry. Per-buffer `flemma.opt.tools.auto_approve` writes still beat global config — the merge happens before the resolver runs.
 
-The sandbox resolver (priority 25) auto-approves tools that declare `"can_auto_approve_if_sandboxed"` in their `capabilities` array when the sandbox is enabled with an available backend and the user hasn't opted out per-tool or globally. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter, or take ownership of the policy with `auto_approve:set(...)` in frontmatter (a `set` op signals you're handling approval entirely for that buffer). See [docs/sandbox.md](sandbox.md#requirements) for the full list of conditions.
+The sandbox resolver (priority 25) auto-approves tools that declare `"auto_approves_if_sandboxed"` in their `capabilities` array when the sandbox is enabled with an available backend and the user hasn't opted out per-tool or globally. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter, or take ownership of the policy with `auto_approve:set(...)` in frontmatter (a `set` op signals you're handling approval entirely for that buffer). See [docs/sandbox.md](sandbox.md#requirements) for the full list of conditions.
 
 ### Registering a resolver
 

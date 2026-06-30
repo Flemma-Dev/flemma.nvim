@@ -140,23 +140,21 @@ describe("preprocessor.syntax", function()
       preprocessor.register(rewriter)
 
       local config = require("flemma.config").materialize()
-      local set_highlight_called = false
-      syntax.apply(config, function()
-        set_highlight_called = true
-      end)
-      assert.is_false(set_highlight_called)
+      -- Should not error with a rewriter that has no get_vim_syntax
+      syntax.apply(config)
 
       preprocessor.unregister("no-syntax")
     end)
 
-    it("should call set_highlight for each rule", function()
+    it("should set highlights for each rule via HlOp:set()", function()
+      local h = require("flemma.hl")
       -- Unregister built-ins so we control exactly what's registered
       preprocessor.unregister("file-references")
 
       local rewriter = preprocessor.create_rewriter("test-syntax")
       rewriter.get_vim_syntax = function(_)
         return {
-          { kind = "match", group = "TestSyntaxMatch", pattern = "test", hl = "Include" },
+          { kind = "match", group = "FlemmaTestSyntaxMatch", pattern = "test", hl = h.link("Include") },
         }
       end
       preprocessor.register(rewriter)
@@ -167,15 +165,13 @@ describe("preprocessor.syntax", function()
       vim.bo[bufnr].filetype = "chat"
       vim.cmd("runtime! syntax/chat.vim")
 
-      local highlight_calls = {}
-      syntax.apply(require("flemma.config").materialize(), function(group, value)
-        table.insert(highlight_calls, { group = group, value = value })
-      end)
+      syntax.apply(require("flemma.config").materialize())
 
-      assert.are.equal(1, #highlight_calls)
-      assert.are.equal("TestSyntaxMatch", highlight_calls[1].group)
-      assert.are.equal("Include", highlight_calls[1].value)
+      -- Verify the highlight group was created
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaTestSyntaxMatch" })
+      assert.is_not_nil(hl.link)
 
+      vim.cmd("highlight clear FlemmaTestSyntaxMatch")
       preprocessor.unregister("test-syntax")
     end)
   end)

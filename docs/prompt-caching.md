@@ -1,6 +1,6 @@
 # Prompt Caching
 
-Flemma supports prompt caching across all supported providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use.
+Flemma supports prompt caching across all supported providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use. Prompt caching is a model-invisible economics optimization that follows from the _(conversation, environment)_ principle — the [environment-shaping surface](harness.md#environment-shaping-surface) must be deterministic for caching to work.
 
 Prefix stability is a core design discipline for Flemma. Provider caches only pay off when the request prefix is byte-identical to the previous request, so Flemma actively engineers for that — sorting tools alphabetically, canonicalizing JSON key order, freezing date/time per buffer, gating async tool discovery before the first send, and placing cache breakpoints deliberately. The next section documents what Flemma keeps stable; the per-provider sections describe what each provider does with the stable prefix.
 
@@ -12,7 +12,7 @@ A single mutated byte in the wrong place invalidates the cache from that point f
 
 - **Tool ordering.** Tools are sorted alphabetically by name before being added to the request, regardless of registration order, source (built-in vs MCP), or whether they're enabled per-file. Two requests with the same tool set always produce identical tool definitions. The sort lives in `flemma.tools.get_sorted_for_prompt` and every provider adapter routes through it.
 
-- **JSON key ordering.** Request bodies are serialized with object keys sorted alphabetically, except for explicitly marked _trailing keys_ (`messages`, `contents`, `tools`) which are kept at the end. This pins the smaller static config in the cacheable prefix and pushes the mutable arrays to the tail where the conversation-tail breakpoint can pick them up. See `flemma.utilities.json.encode_ordered`, which `flemma.client` uses for every request.
+- **JSON key ordering.** Request bodies are serialized with object keys sorted alphabetically, except for explicitly marked _trailing keys_ (`system` and `messages` on Anthropic, `contents` on Vertex, `input` on the OpenAI Responses API and Codex, plus `tools` everywhere) which are kept at the end. This pins the smaller static config in the cacheable prefix and pushes the mutable arrays to the tail where the conversation-tail breakpoint can pick them up. See `flemma.utilities.json.encode_ordered`, which `flemma.client` uses for every request.
 
 - **Date and time per buffer.** When a personality renders the system prompt (e.g. `include('urn:flemma:personality:coding-assistant')`), the `date` and `time` fields are captured **once on the first request** and reused for every subsequent request in that buffer's lifetime. The buffer can stay open for hours, but the date/time line in the system prompt stays frozen. The cached values live in the buffer's `personality_environment` state and clear only when the buffer is wiped. Other environment fields — `cwd`, `current_file`, `git_branch`, `filetype` — are fetched fresh each request so renames and branch switches still flow through.
 
@@ -34,7 +34,7 @@ Some changes always bust the cache, no matter what Flemma does. Watch for them i
 
 - **Editing earlier conversation turns.** The buffer is the state — and the buffer is what gets sent. Editing any character of an earlier message, even fixing a typo in your own user turn, changes the request body at that position and invalidates the cache from there forward.
 
-- **Changing the system prompt or personality.** Switching personalities, modifying the system message, or changing project context files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`) all change the rendered system prompt.
+- **Changing the system prompt or personality.** Switching personalities, modifying the system message, or changing project context files (`AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`) all change the rendered system prompt.
 
 - **File references whose content has changed.** `@./path` is resolved fresh every request — if the file changed since the previous send, the resolved content changes too.
 
@@ -46,17 +46,17 @@ After each request, the usage bar shows cached vs. uncached input tokens (when t
 
 ## Quick Comparison
 
-|               | Anthropic             | OpenAI                | Vertex AI       | Moonshot           |
-| ------------- | --------------------- | --------------------- | --------------- | ------------------ |
-| Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       | Automatic          |
-| Min. tokens   | 2,048–4,096\*         | 1,024                 | 1,024–2,048     | —                  |
-| Read discount | 90% (0.1x)            | 50% (0.5x)            | 90% (0.1x)      | 80% (0.2x)         |
-| Write cost    | 1.25x–2.0x            | Free                  | Free            | Free               |
-| Control       | `cache_retention`     | `cache_retention`     | None (implicit) | `prompt_cache_key` |
+|               | Anthropic             | OpenAI                | Vertex AI       | Moonshot           | Codex      |
+| ------------- | --------------------- | --------------------- | --------------- | ------------------ | ---------- |
+| Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       | Automatic          | Automatic  |
+| Min. tokens   | 2,048–4,096\*         | 1,024                 | 1,024–2,048     | —                  | 1,024      |
+| Read discount | 90% (0.1x)            | 90% (0.1x)            | 90% (0.1x)      | 80% (0.2x)         | 90% (0.1x) |
+| Write cost    | 1.25x–2.0x            | Free                  | Free            | Free               | Free       |
+| Control       | `cache_retention`     | `cache_retention`     | None (implicit) | `prompt_cache_key` | None       |
 
 When caching is active, the usage bar includes cache percentage and token counts. Costs are adjusted to reflect each provider's discount on cached input.
 
-_\*The legacy Haiku 3 model uses a 1,024-token threshold. All current 4.x Anthropic models require at least 2,048 (Opus/Sonnet) or 4,096 (Haiku 4.5) tokens before caching activates._
+_\*All current 4.x Anthropic models require at least 2,048 (Opus/Sonnet) or 4,096 (Haiku 4.5) tokens before caching activates._
 
 ---
 
@@ -75,20 +75,20 @@ The `cache_retention` parameter controls the caching strategy[^anthropic-cache-p
 When caching is active, the usage bar includes cache percentage and read/write token counts. Costs are adjusted accordingly – cache reads are 90% cheaper than regular input tokens.
 
 > [!NOTE]
-> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4,096 tokens** for Haiku 4.5; **2,048 tokens** for every current Opus and Sonnet (4.7, 4.6, 4.5, 4.1, 4, and the matching Sonnet 4.x family); **1,024 tokens** only on the legacy Haiku 3. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected — caching benefits grow with longer conversations and system prompts. The authoritative per-model values live in `lua/flemma/models/anthropic.lua` (`min_cache_tokens`).
+> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4,096 tokens** for Haiku 4.5; **2,048 tokens** for every current Opus and Sonnet (Opus 4.8, 4.7, 4.6, 4.5, 4.1 and Sonnet 4.6, 4.5). If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected — caching benefits grow with longer conversations and system prompts. The authoritative per-model values live in `lua/flemma/models/anthropic.lua` (`min_cache_tokens`).
 
 ---
 
 ## OpenAI
 
-Flemma sends prompt caching hints to the OpenAI Responses API using the `cache_retention` parameter[^openai-cache]. When caching is active, Flemma sends the buffer's file path as `prompt_cache_key` and a retention policy as `prompt_cache_retention`. When a cache hit occurs, the usage bar includes the cache percentage and read token count. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
+Flemma sends prompt caching hints to the OpenAI Responses API using the `cache_retention` parameter[^openai-cache]. When caching is active, Flemma sends the buffer's file path as `prompt_cache_key` and a retention policy as `prompt_cache_retention`. When a cache hit occurs, the usage bar includes the cache percentage and read token count. Costs are adjusted to reflect the discount on cached input[^openai-cache-pricing]. For current GPT-5.x models the cache read rate is 90% cheaper than regular input (`cache_read` is 0.1x the input price — e.g. flagship input `5.0` / `cache_read` `0.50`, default input `2.50` / `cache_read` `0.25`). Legacy GPT-4o/4.1-era pricing was less aggressive (cache reads at roughly half the input rate). The authoritative per-model values live in `lua/flemma/models/openai.lua`.
 
 The `cache_retention` parameter controls the caching strategy:
 
 | Value     | TTL        | Write cost       | Read cost | Description                                           |
 | --------- | ---------- | ---------------- | --------- | ----------------------------------------------------- |
-| `"short"` | 5–10 min   | free (invisible) | 0.5x      | Default. `in_memory` retention, good for active chat. |
-| `"long"`  | up to 24 h | free (invisible) | 0.5x      | Extended retention for long sessions.                 |
+| `"short"` | 5–10 min   | free (invisible) | 0.1x      | Default. `in_memory` retention, good for active chat. |
+| `"long"`  | up to 24 h | free (invisible) | 0.1x      | Extended retention for long sessions.                 |
 | `"none"`  | —          | —                | —         | No caching hints sent.                                |
 
 > [!NOTE]
@@ -106,7 +106,7 @@ The `cache_retention` parameter controls the caching strategy:
 
 ## Vertex AI
 
-Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it – no configuration or request changes are needed. When a cache hit occurs, the usage bar includes the cache percentage and read token count. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
+Modern Gemini models — the 2.5 family through the current 3.x family (the Flemma default is `gemini-3.1-pro-preview`) — support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it – no configuration or request changes are needed. When a cache hit occurs, the usage bar includes the cache percentage and read token count. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
 
 | Metric      | Value         | Description                                            |
 | ----------- | ------------- | ------------------------------------------------------ |
@@ -119,7 +119,7 @@ Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecu
 >
 > - **Minimum token thresholds** vary by model: **1,024 tokens** for Flash, **2,048 tokens** for Pro[^vertex-cache]. Shorter prompts are never cached.
 > - **Prefix must be identical** between requests. Changing tools, system instructions, or earlier conversation turns invalidates the cache from that point forward.
-> - **Only Gemini 2.5+ models** support implicit caching. Older Gemini models (2.0, 1.5) do not report cached tokens.
+> - **Only Gemini 2.5 and newer models** (the 2.5 and 3.x families) support implicit caching. Older Gemini models (2.0, 1.5) do not report cached tokens.
 > - **Cache propagation takes time.** Like OpenAI, the first request populates the cache and immediate follow-up requests may not see a hit. Allow a few seconds between requests.
 > - **No user control.** There is no TTL parameter or opt-out – caching is managed entirely by Google's infrastructure.
 >
@@ -150,6 +150,12 @@ flemma.opt.moonshot = { prompt_cache_key = "my-project-key" }
 ```
 
 When a cache hit occurs, the usage bar includes the cached token count. Caching is available on kimi-k2 family models; moonshot-v1-\* models do not report cached tokens.
+
+---
+
+## Codex (experimental)
+
+The experimental Codex backend uses the OpenAI Responses API wire format but does not expose any caching controls. Its requests always send `store: false`, and the Codex adapter never sends `prompt_cache_key` or `prompt_cache_retention` — it inherits the no-op `_apply_extra_body` from the Responses base (`lua/flemma/provider/openai_responses.lua`) rather than the OpenAI adapter's caching override. As a result the general `cache_retention` parameter has **no effect** on Codex, the same surprise noted for Vertex's implicit cache and Moonshot. Caching, if any, is handled entirely by the ChatGPT backend; cached reads, when reported, are billed at the same 0.1x discount as the equivalent GPT-5.x models.
 
 ---
 

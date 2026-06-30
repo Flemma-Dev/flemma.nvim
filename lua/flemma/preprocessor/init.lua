@@ -107,7 +107,7 @@ local DEFAULT_PRIORITY = 500
 ---@field end_? string For "region": end pattern (trailing _ avoids Lua reserved word)
 ---@field containedin? string|string[] "*" (default) or subset like {"user", "system"}
 ---@field contains? string Vim syntax groups this region contains (for nested highlighting)
----@field hl string|table Highlight value (same format as config highlight values)
+---@field hl flemma.hl.HlOp Highlight op for this group
 ---@field options? string Extra Vim syntax options ("oneline", "keepend", "display", etc.)
 ---@field raw? string Escape hatch: raw VimScript string, bypasses generation
 

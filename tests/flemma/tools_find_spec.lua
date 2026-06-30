@@ -37,9 +37,9 @@ describe("Find Tool", function()
     assert.is_truthy(find_def.description:match("glob pattern"))
   end)
 
-  it("does not declare can_auto_approve_if_sandboxed (approved via $standard preset)", function()
+  it("does not declare auto_approves_if_sandboxed (approved via $standard preset)", function()
     if find_def.capabilities then
-      assert.is_falsy(vim.tbl_contains(find_def.capabilities, "can_auto_approve_if_sandboxed"))
+      assert.is_falsy(vim.tbl_contains(find_def.capabilities, "auto_approves_if_sandboxed"))
     end
   end)
 

@@ -42,7 +42,7 @@ describe("binary tool result end-to-end", function()
     -- Set up the preprocessor hook (file_references rewriter + others)
     preprocessor_mod.setup()
 
-    -- Set up built-in tools (registers the real read tool with template_tool_result capability)
+    -- Set up built-in tools (registers the real read tool with emits_template capability)
     registry.clear()
     tools_mod.setup()
   end)
@@ -126,7 +126,7 @@ describe("binary tool result end-to-end", function()
     assert.is_not_nil(tr_part, "tool_result part should be present in evaluated @You message")
     assert.equals("call_img_001", tr_part.tool_use_id)
 
-    -- The read tool has template_tool_result capability → .parts should be populated
+    -- The read tool has emits_template capability → .parts should be populated
     assert.is_table(tr_part.parts, "tool_result should have .parts from capture mechanism")
     assert.is_true(#tr_part.parts > 0, "tool_result .parts should be non-empty")
 
@@ -148,7 +148,7 @@ describe("binary tool result end-to-end", function()
   end)
 
   it("collapses tool_result to content string for tools without the capability", function()
-    -- Register a plain tool without template_tool_result capability
+    -- Register a plain tool without emits_template capability
     registry.register("plain_fetch", {
       name = "plain_fetch",
       description = "A tool without binary capability",

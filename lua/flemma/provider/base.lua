@@ -33,7 +33,7 @@ Methods are grouped into three categories:
     response buffer setup. See concrete providers for the pattern.
   - `get_credential(self)` — return a `flemma.secrets.Credential` table
     describing what this provider needs (kind, service, description, etc.).
-    `get_api_key()` in base calls this, then resolves via `secrets.resolve()`.
+    `resolve_credential()` in base calls this, then resolves via `secrets.resolve()`.
 
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
@@ -44,8 +44,6 @@ Methods are grouped into three categories:
     Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
     from JSON responses.
-  - `try_import_from_buffer(lines)` — import conversations from
-    external formats (static, no instance state).
   - `is_context_overflow(self, message)` — detect context window overflow
     from error messages.
   - `is_auth_error(self, message)` — detect authentication failures
@@ -72,9 +70,14 @@ Capabilities contract (registered via `registry.register`)
 - `outputs_thinking` — provider streams thinking content into the buffer.
 - `output_has_thoughts` — whether `output_tokens` already includes thinking
   tokens for cost calculation (default `false`).
+- `close_on_complete` — terminate the HTTP connection after `on_response_complete`
+  fires (default `true`). Backends that leave SSE streams open after the terminal
+  event benefit automatically; providers that require the connection to stay open
+  past completion can set this to `false`.
 - `min_thinking_budget` — minimum valid thinking budget value (omit if N/A).
 
-Missing boolean capabilities default to `false` at registration time.
+Missing boolean capabilities default to `false` at registration time, except
+`close_on_complete` which defaults to `true`.
 ]]
 
 local bridge = require("flemma.bridge")
@@ -134,11 +137,12 @@ local tool_names = require("flemma.utilities.tools")
 ---@class flemma.provider.Base
 ---@field parameters flemma.provider.Parameters
 ---@field state flemma.provider.ProviderState
+---@field compact_headers? boolean Omit the blank line between tool headers and fences
 ---@field endpoint? string
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
 ---@field get_credential fun(self): flemma.secrets.Credential Credential descriptor (providers must override)
----@field get_api_key fun(self): string|nil Resolve credentials via secrets module
+---@field resolve_credential fun(self): flemma.secrets.Result|nil Resolve credentials via secrets module
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 local M = {}
@@ -184,10 +188,9 @@ function M.get_credential(self)
 end
 
 ---@param self flemma.provider.Base
----@return string|nil
-function M.get_api_key(self)
-  local result = secrets.resolve(self:get_credential())
-  return result and result.value or nil
+---@return flemma.secrets.Result|nil
+function M.resolve_credential(self)
+  return secrets.resolve(self:get_credential()) or nil
 end
 
 --- @abstract
@@ -380,15 +383,6 @@ function M.extract_json_response_error(self, data)
   return nil
 end
 
---- Try to import conversation from buffer lines in an external format.
---- Override to support importing from provider-specific formats (e.g. Anthropic
---- JSON exports). This is a static function — no instance state needed.
----@param lines string[]
----@return string|nil
-function M.try_import_from_buffer(lines)
-  return nil
-end
-
 --- Detect whether an error message indicates a context window overflow.
 --- Override to add provider-specific patterns beyond the base set.
 ---@param message string|nil The error message to check
@@ -499,6 +493,15 @@ function M:format_rate_limit_details()
     table.sort(details)
     return table.concat(details, "\n")
   end
+  return nil
+end
+
+--- Extract a rate limit snapshot from the most recent response.
+--- Subscription-based providers override this to parse provider-specific
+--- headers or response fields into a generic RateLimitSnapshot.
+--- Returns nil for usage-based providers (the default).
+---@return flemma.session.RateLimitSnapshot|nil
+function M:get_rate_limit_snapshot()
   return nil
 end
 
@@ -760,8 +763,9 @@ function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
   local fence = string.rep("`", math.max(3, max_ticks + 1))
 
   local prefix = self:_get_content_prefix()
+  local header_gap = self.compact_headers and "\n" or "\n\n"
   local formatted = string.format(
-    "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+    "%s**Tool Use:** `%s` (`%s`)" .. header_gap .. "%sjson\n%s\n%s\n",
     prefix,
     decoded_name,
     id,

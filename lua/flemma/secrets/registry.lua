@@ -5,9 +5,13 @@ local M = {}
 
 local registry_utils = require("flemma.utilities.registry")
 
+---@class flemma.secrets.ResolverMetadata
+---@field config_schema? flemma.schema.ObjectNode Resolver-specific config schema, composed into the global `secrets` node via DISCOVER
+
 ---@class flemma.secrets.Resolver
 ---@field name string
 ---@field priority integer
+---@field metadata? flemma.secrets.ResolverMetadata
 ---@field supports fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware<table>): boolean
 ---@field resolve fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware<table>): flemma.secrets.Result|nil
 ---@field resolve_async? fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.secrets.Context, callback: fun(result: flemma.secrets.Result|nil))
@@ -46,6 +50,14 @@ end
 ---@return boolean
 function M.has(name)
   return resolvers[name] ~= nil
+end
+
+--- Get a resolver's config schema for DISCOVER resolution.
+---@param name string
+---@return flemma.schema.ObjectNode|nil
+function M.get_config_schema(name)
+  local resolver = resolvers[name]
+  return resolver and resolver.metadata and resolver.metadata.config_schema or nil
 end
 
 --- Return all resolvers sorted by priority descending.

@@ -90,6 +90,17 @@ describe("utilities.variables", function()
   end)
 
   describe("expand_inline", function()
+    it("terminates on mutually-referential inline resolvers", function()
+      variables.register_inline("SPEC_RING_A", function()
+        return "$SPEC_RING_B"
+      end)
+      variables.register_inline("SPEC_RING_B", function()
+        return "$SPEC_RING_A"
+      end)
+      local result = variables.expand_inline("x $SPEC_RING_A y")
+      assert.is_string(result)
+    end)
+
     it("expands ${VAR:-default} within a larger string", function()
       local original = os.getenv("FLEMMA_TEST_UNSET_VAR_1")
       assert.is_nil(original)
@@ -145,6 +156,45 @@ describe("utilities.variables", function()
       local home = os.getenv("HOME") or ""
       local result = variables.expand_inline("~/documents/file.txt")
       assert.equals(home .. "/documents/file.txt", result)
+    end)
+
+    it("expands $VAR inside ${VAR:-default} fallback", function()
+      local home = os.getenv("HOME")
+      local result = variables.expand_inline("${FLEMMA_TEST_NONEXISTENT_12345:-$HOME/.flemma}/store")
+      assert.equals(home .. "/.flemma/store", result)
+    end)
+
+    it("expands nested ${VAR:-default} in fallback", function()
+      local result =
+        variables.expand_inline("${FLEMMA_TEST_NONEXISTENT_12345:-${FLEMMA_TEST_ALSO_NONEXISTENT:-/final}}/x")
+      assert.equals("/final/x", result)
+    end)
+  end)
+
+  describe("register_inline", function()
+    it("resolves inline-registered variables before os.getenv", function()
+      variables.register_inline("FLEMMA_TEST_INLINE_VAR", function()
+        return "/resolved/path"
+      end)
+      local result = variables.expand_inline("prefix/$FLEMMA_TEST_INLINE_VAR/suffix")
+      assert.equals("prefix//resolved/path/suffix", result)
+    end)
+
+    it("falls back to default when inline resolver returns nil", function()
+      variables.register_inline("FLEMMA_TEST_NIL_VAR", function()
+        return nil
+      end)
+      local result = variables.expand_inline("${FLEMMA_TEST_NIL_VAR:-/fallback}/x")
+      assert.equals("/fallback/x", result)
+    end)
+
+    it("is cleared by clear()", function()
+      variables.register_inline("FLEMMA_TEST_CLEARED", function()
+        return "/value"
+      end)
+      variables.clear()
+      local result = variables.expand_inline("$FLEMMA_TEST_CLEARED")
+      assert.equals("", result)
     end)
   end)
 

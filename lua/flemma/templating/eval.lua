@@ -210,7 +210,9 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
 
     check_file_drift(env, target_path, content)
 
-    -- Parse content for {{ }} expressions and @./ file references
+    -- Parse content for {{ }} expressions only (@./ file references are NOT
+    -- desugared inside includes — they are handled by the preprocessor, and
+    -- only on top-level messages).
     local segments = parser.parse_inline_content(content)
 
     -- Create isolated child environment (does NOT inherit user variables)

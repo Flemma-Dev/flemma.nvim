@@ -93,6 +93,12 @@ local function is_nullable_node(node)
   return getmetatable(node) == schema_types.NullableNode
 end
 
+---@param node flemma.schema.Node
+---@return boolean
+local function is_hlop_node(node)
+  return getmetatable(node) == schema_types.HlOpNode
+end
+
 -- ---------------------------------------------------------------------------
 -- Registry boot — populate built-in entries so DISCOVER caches resolve
 -- ---------------------------------------------------------------------------
@@ -119,12 +125,15 @@ local function boot_registries(schema)
   -- Sandbox: setup() registers bwrap then does a simple config validation
   require("flemma.sandbox").setup()
 
+  -- Secrets: setup() registers built-in resolvers only (experimental ones self-register with their adapter).
+  require("flemma.secrets").setup()
+
   -- Trigger DISCOVER on schema nodes so caches are populated.
   -- Walk each registry and poke the corresponding schema node.
   local providers = require("flemma.provider.registry").get_all()
   local parameters_node = navigation.unwrap_optional(navigation.navigate_schema(schema, "parameters"))
   for name, entry in pairs(providers) do
-    if entry.config_schema then
+    if entry.metadata and entry.metadata.config_schema then
       parameters_node:get_child_schema(name)
     end
   end
@@ -144,6 +153,14 @@ local function boot_registries(schema)
   for _, entry in ipairs(all_backends) do
     if entry.config_schema then
       backends_node:get_child_schema(entry.name)
+    end
+  end
+
+  local secrets_resolvers = require("flemma.secrets.registry").get_all_sorted()
+  local secrets_node = navigation.unwrap_optional(navigation.navigate_schema(schema, "secrets"))
+  for _, resolver in ipairs(secrets_resolvers) do
+    if resolver.metadata and resolver.metadata.config_schema then
+      secrets_node:get_child_schema(resolver.name)
     end
   end
 end
@@ -205,6 +222,10 @@ local function node_to_type(node, class_name_for_objects)
 
   if is_func_node(node) then
     return "fun(...)"
+  end
+
+  if is_hlop_node(node) then
+    return "flemma.hl.HlOp"
   end
 
   if is_list_node(node) then

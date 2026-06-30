@@ -60,9 +60,9 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 
 `tools/` manages the tool registry (`get_all()` filters by `enabled`), executor, injector, and approval flow. Built-in tool definitions live in `tools/definitions/builtin/` (bash, edit, find, grep, ls, read, write, mcporter). Harness tools live in `tools/definitions/harness/` (jobs status). The registry is a table keyed by name — `pairs()` does not guarantee order; sort by name when building tool arrays for deterministic prompt caching.
 
-**Background jobs** allow tools to run asynchronously. The executor assigns job IDs, routes completions to a queue, and supports mid-flight backgrounding (promoting a running foreground tool to background). Job completions drain at conversation idle via `core.drain_job_completions()`. The `flemma:jobs:status` harness tool lets the LLM query job state, cross-checked against the AST for buffer truth. The `background` parameter is auto-injected into async tool schemas.
+**Background jobs** allow tools to run asynchronously. The executor assigns job IDs, routes completions to a queue, and supports mid-flight backgrounding (promoting a running foreground tool to background). Job completions drain at conversation idle via `core.drain_job_completions()`. The `flemma.jobs.status` harness tool lets the LLM query job state, cross-checked against the AST for buffer truth. The `flemma.background` parameter is auto-injected into async tool schemas.
 
-**Gotcha:** Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`. The walker prefers it over sync `:resolve`. A resolver that does `vim.system(cmd):wait()` in sync `:resolve` will block the editor. Additionally, `provider:get_api_key()` returns `string|nil` only — failures flow through suspense boundaries, not return-value diagnostics.
+**Gotcha:** Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`. The walker prefers it over sync `:resolve`. A resolver that does `vim.system(cmd):wait()` in sync `:resolve` will block the editor. Additionally, `provider:resolve_credential()` returns `flemma.secrets.Result|nil` only — failures flow through suspense boundaries, not return-value diagnostics.
 
 ### Output: Buffer Writing and UI
 
@@ -137,7 +137,7 @@ All `require()` calls go at the top of the file, before any function definition.
 ### Naming
 
 - **Full, descriptive names** — never abbreviate (`definition` not `def_entry`, `provider_name` not `prov_name`)
-- Functions: verb-based (`build_request()`, `parse_response()`, `get_api_key()`)
+- Functions: verb-based (`build_request()`, `parse_response()`, `resolve_credential()`)
 - Constants: `UPPER_SNAKE_CASE` at module top
 - Types/classes: `PascalCase` with dot-namespacing following file path (`flemma.ast.DocumentNode`)
 - Private functions: `local function name()` (not exported on `M`)
@@ -163,6 +163,8 @@ Production file names prefer single words; multi-word descriptive names use snak
 
 - **`tostring(5.0)` returns `"5"` in LuaJIT**, not `"5.0"`. Account for this in assertions and string formatting involving numeric results.
 - **`a and b or c` fails when `b` is falsy.** `true and false or x` evaluates to `x`, not `false`. Always use explicit `if/else` when the "true" branch value could be `false` or `nil`. This bit a dual-call convention closure (`maybe_item ~= nil and maybe_item or self_or_item`) where `maybe_item` was legitimately `false`.
+- **`os.tmpname()` on LuaJIT creates and leaks a file.** It `mkstemp()`s `/tmp/lua_XXXXXX` (the file exists on disk, mode 0600) and returns the name; callers that only use the name leak one empty file per call into shared `/tmp`. Use `vim.fn.tempname()` — Neovim's private per-instance temp dir, removed on exit.
+
 - **`vim.NIL` is truthy.** JSON `null` decoded without `luanil` options produces `vim.NIL` userdata that passes `if x then` guards. This is why the JSON wrapper rule exists.
 
 ---
@@ -194,7 +196,6 @@ Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-expl
 - Add fresh specs for every new feature **and every bug fix**. Write the failing test first (TDD) when the reproduction is automatable. Place supporting data in `tests/fixtures/` with scenario-driven names.
 - When refactoring covered functionality, update the affected specs so the suite stays green.
 - Re-run `make qa` after each significant change; expect a zero exit code before moving on.
-- **`"Failed to parse API call data"` in test output is expected.** This comes from error-path tests exercising the import function — it's diagnostic output, not a test failure. Always check the exit code to determine pass/fail.
 
 ### Key testing patterns
 
@@ -230,6 +231,7 @@ Fixed parser edge case with nested thinking blocks
 - **Never edit `package.json` version or `CHANGELOG.md` manually** — `pnpm changeset version` manages both
 - When the user asks to release, run `pnpm changeset version` to consume pending changesets, then commit the result
 - A GitHub Actions workflow (`.github/workflows/release.yml`) automatically creates a "Version Packages" PR when changesets accumulate on `main`
+- **Naming a minor release?** Each minor version gets a single-word typographic codename — invoke the `release-naming` skill (`.claude/skills/release-naming/`), which logs picks in the `Incipit` ledger so names are never reused
 
 ## Knowledge Management
 
@@ -250,6 +252,10 @@ Fixed parser edge case with nested thinking blocks
 - **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
 
 - **Never dismiss a `make qa` failure as "pre-existing".** If `make qa` fails, it's your problem. Fix it before committing — even if the failure looks unrelated to your change. The only way to prove a failure is pre-existing is to stash your changes and confirm it fails on the clean parent commit. Assuming without checking leads to shipping broken code.
+
+- **Tests must never create or delete fixed paths under `${TMPDIR:-/tmp}`.** `make qa` runs every spec file in parallel across multiple Neovim versions in the same `$TMPDIR`, and buffer numbers restart per process — a path keyed only by bufnr (or any fixed name) is byte-identical across sibling processes, and one process's `rm -rf` cleanup lands inside another's create→assert window. Use `vim.fn.tempname()` roots (process-unique) or the pid-scoped unnamed store default.
+
+- **Hook-payload mocks must honor type contracts.** `hooks.dispatch()` in a spec reaches every global subscriber registered by `flemma.setup()` (called by `tests/minimal_init.lua` and again by spec `before_each` blocks), and errors in their `vim.schedule`d continuations fail no test — they only surface as `attempt to call method` walls in failed-gate replays. Build payloads with real constructors (`session.Request.new(...)`, not bare field tables) and disable subsystems the spec doesn't exercise (e.g., `ui = { usage = { enabled = false } }`).
 
 ## Session Closure Checklist
 

@@ -1,5 +1,5 @@
 --- File-references rewriter
---- Converts @./path, @../path, and @~/path references into include() expressions
+--- Converts @./path, @../path, @~/path, and @//absolute/path references into include() expressions
 --- that the processor evaluates into file parts.
 ---@class flemma.preprocessor.rewriters.FileReferences
 local M = {}
@@ -54,8 +54,7 @@ local function handle_file_reference(match, ctx)
     table.insert(opts_parts, "[symbols.BINARY] = true")
   end
 
-  local path = url_decode(raw_path)
-  ---@cast path string
+  local path = url_decode(raw_path) --[[@as string]]
 
   -- @// convention: strip the leading / so //tmp/foo becomes /tmp/foo
   if path:sub(1, 2) == "//" then

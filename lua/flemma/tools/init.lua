@@ -250,7 +250,7 @@ end
 --- If it's already a plain table, pass it through unchanged.
 ---@param definition flemma.tools.ToolDefinition
 ---@return flemma.tools.JSONSchema
-function M.to_json_schema(definition)
+local function to_json_schema(definition)
   local schema = definition.input_schema
   if type(schema.to_json_schema) == "function" then
     return schema:to_json_schema()
@@ -258,21 +258,39 @@ function M.to_json_schema(definition)
   return schema --[[@as flemma.tools.JSONSchema]]
 end
 
----Serialize a tool's input_schema for prompt inclusion, injecting the
----`background` parameter for async tools that haven't opted out.
+---Serialize a tool's input_schema for prompt inclusion, injecting harness
+---parameters: `flemma.background` for async tools and `flemma.save_to` for all,
+---unless the tool declares `disables_background` or `disables_save_to` capabilities.
 ---@param definition flemma.tools.ToolDefinition
 ---@return flemma.tools.JSONSchema
 function M.to_json_schema_for_prompt(definition)
-  local schema = M.to_json_schema(definition)
-  if definition.async and definition.backgroundable ~= false then
-    schema = vim.deepcopy(schema)
-    schema.properties = schema.properties or {}
-    schema.properties.background = {
-      type = "boolean",
+  local schema = to_json_schema(definition)
+  schema = vim.deepcopy(schema)
+  schema.properties = schema.properties or {}
+  local is_strict = definition.strict == true
+  local has_cap = registry.has_capability
+  if definition.async and not has_cap(definition.name, "disables_background") then
+    schema.properties["flemma.background"] = {
+      type = is_strict and { "boolean", "null" } or "boolean",
       default = false,
       description = messages.render("tool-parameter--background"),
     }
-    log.trace("tools: injected background parameter into schema for " .. definition.name)
+    if is_strict then
+      schema.required = schema.required or {}
+      table.insert(schema.required, "flemma.background")
+    end
+    log.trace("tools: injected flemma.background parameter into schema for " .. definition.name)
+  end
+  if not has_cap(definition.name, "disables_save_to") then
+    schema.properties["flemma.save_to"] = {
+      type = is_strict and { "string", "null" } or "string",
+      description = messages.render("tool-parameter--save-to"),
+    }
+    if is_strict then
+      schema.required = schema.required or {}
+      table.insert(schema.required, "flemma.save_to")
+    end
+    log.trace("tools: injected flemma.save_to parameter into schema for " .. definition.name)
   end
   return schema
 end

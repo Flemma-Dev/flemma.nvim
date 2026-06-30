@@ -71,7 +71,7 @@ end
 ---@class flemma.utilities.buffer.ScratchOpts
 ---@field bufhidden? "wipe"|"hide" Default "wipe"
 ---@field modifiable? boolean Default true
----@field undolevels? integer Default -1 (disable undo)
+---@field undolevels? integer|false Default -1 (disable undo). Pass `false` to inherit the user's global.
 
 ---Create a scratch buffer with Flemma's standard options for floating-window content.
 ---@param opts? flemma.utilities.buffer.ScratchOpts
@@ -81,11 +81,27 @@ function M.create_scratch_buffer(opts)
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.bo[bufnr].buftype = "nofile"
   vim.bo[bufnr].bufhidden = opts.bufhidden or "wipe"
-  vim.bo[bufnr].undolevels = opts.undolevels or -1
+  if opts.undolevels ~= false then
+    vim.bo[bufnr].undolevels = opts.undolevels or -1
+  end
   if opts.modifiable == false then
     vim.bo[bufnr].modifiable = false
   end
   return bufnr
+end
+
+---Get the buffer's one-level indent string, respecting shiftwidth, tabstop, and expandtab.
+---@param bufnr integer Buffer handle
+---@return string
+function M.get_indent_string(bufnr)
+  local sw = vim.bo[bufnr].shiftwidth
+  if sw == 0 then
+    sw = vim.bo[bufnr].tabstop
+  end
+  if vim.bo[bufnr].expandtab then
+    return string.rep(" ", sw)
+  end
+  return "\t"
 end
 
 return M

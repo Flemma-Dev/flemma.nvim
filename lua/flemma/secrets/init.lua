@@ -4,6 +4,7 @@
 local M = {}
 
 local cache = require("flemma.secrets.cache")
+local config = require("flemma.config")
 local context = require("flemma.secrets.context")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
@@ -130,8 +131,11 @@ end
 ---@param source string
 ---@param resolver? flemma.secrets.Resolver
 function M.register(source, resolver)
+  ---@type flemma.secrets.Resolver?
+  local registered
   if resolver then
     registry.register(source, resolver)
+    registered = resolver
   else
     local ok, mod = pcall(require, source)
     if not ok then
@@ -145,7 +149,20 @@ function M.register(source, resolver)
       return
     end
     registry.register(mod.name, mod)
+    registered = mod
   end
+
+  -- Materialize config_schema defaults into the DEFAULTS layer.
+  if registered and registered.metadata and registered.metadata.config_schema then
+    config.register_module_defaults("secrets", registered.name, registered.metadata.config_schema)
+  end
+end
+
+--- Get a resolver's config schema for DISCOVER resolution.
+---@param name string The resolver name
+---@return flemma.schema.ObjectNode|nil config_schema Resolver config schema, or nil if not registered
+function M.get_config_schema(name)
+  return registry.get_config_schema(name)
 end
 
 --- Load all builtin resolvers. Called during plugin setup.

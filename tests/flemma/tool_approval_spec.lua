@@ -2712,18 +2712,18 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("approve", result)
   end)
 
-  it("does not affect tools without can_auto_approve_if_sandboxed capability", function()
+  it("does not affect tools without auto_approves_if_sandboxed capability", function()
     setup_with_sandbox()
     -- "calculator" has no capabilities — should require approval
     local result = approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
 
-  it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
+  it("auto-approves custom tool that declares auto_approves_if_sandboxed", function()
     registry.register("my_sandboxed_tool", {
       name = "my_sandboxed_tool",
       description = "A custom sandboxed tool",
-      capabilities = { "can_auto_approve_if_sandboxed" },
+      capabilities = { "auto_approves_if_sandboxed" },
       input_schema = { type = "object", properties = {} },
     })
     setup_with_sandbox()
@@ -2920,5 +2920,309 @@ describe("Sandbox auto-approval resolver", function()
     })
     evaluate_frontmatter(bufnr)
     assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+  end)
+end)
+
+-- ============================================================================
+-- Executor Approval Tests
+-- ============================================================================
+
+describe("Executor Approval", function()
+  local executor
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.parser"] = nil
+    package.loaded["flemma.state"] = nil
+    executor = require("flemma.tools.executor")
+    set_config_and_setup({})
+  end)
+
+  after_each(function()
+    approval.clear()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  describe("approve_all_pending", function()
+    it("approves all pending tool results in buffer", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      local ok, err = executor.approve_all_pending(bufnr)
+      assert.is_true(ok)
+      assert.is_nil(err)
+
+      local lines = get_lines(bufnr)
+      local approved_count = 0
+      for _, line in ipairs(lines) do
+        if line:find("%(approved%)") then
+          approved_count = approved_count + 1
+        end
+      end
+      assert.are.equal(2, approved_count, "both tools should be approved")
+    end)
+
+    it("returns false when no pending tools exist", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (approved)",
+        "",
+        "```",
+        "```",
+      })
+
+      local ok, err = executor.approve_all_pending(bufnr)
+      assert.is_false(ok)
+      assert.is_truthy(err)
+    end)
+
+    it("reports failure when approval fails mid-batch", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      -- Corrupt tool_b's Tool Use header so the parser can no longer match
+      -- tool_b's tool_result to a tool_use. approve_all_pending gathers
+      -- pending tool_ids from tool_result segments, then calls approve()
+      -- for each. approve() -> validate_lifecycle_status re-parses the
+      -- buffer and fails when no tool_use matches tool_b.
+      local lines = get_lines(bufnr)
+      for i, line in ipairs(lines) do
+        if line:find("Tool Use.*tool_b") then
+          vim.api.nvim_buf_set_lines(bufnr, i - 1, i, false, { "CORRUPTED HEADER" })
+          break
+        end
+      end
+
+      local ok, err = executor.approve_all_pending(bufnr)
+      assert.is_false(ok)
+      assert.is_truthy(err)
+      assert.is_truthy(err:find("tool_b"), "error should mention the failed tool_id")
+    end)
+  end)
+
+  describe("cursor advancement", function()
+    it("advances cursor to next pending tool after approval", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      vim.api.nvim_set_current_buf(bufnr)
+      local tool_a_line = nil
+      for i, line in ipairs(get_lines(bufnr)) do
+        if line:find("tool_a.*pending") then
+          tool_a_line = i
+          break
+        end
+      end
+      assert.is_truthy(tool_a_line, "should find tool_a pending line")
+      vim.api.nvim_win_set_cursor(0, { tool_a_line, 0 })
+
+      executor.approve_at_cursor(bufnr)
+
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local cursor_text = vim.api.nvim_buf_get_lines(bufnr, cursor_line - 1, cursor_line, false)[1]
+      assert.is_truthy(cursor_text:find("tool_b"), "cursor should advance to next pending tool")
+    end)
+
+    it("wraps to first pending tool when last is resolved", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_c`)",
+        "",
+        "```json",
+        '{"command":"echo c"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_c` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      vim.api.nvim_set_current_buf(bufnr)
+      -- Find tool_c's pending line and place cursor there
+      local tool_c_line = nil
+      for i, line in ipairs(get_lines(bufnr)) do
+        if line:find("tool_c.*pending") then
+          tool_c_line = i
+          break
+        end
+      end
+      assert.is_truthy(tool_c_line, "should find tool_c pending line")
+      vim.api.nvim_win_set_cursor(0, { tool_c_line, 0 })
+
+      -- Approve tool_c (last pending tool) — cursor should wrap to tool_a
+      executor.approve_at_cursor(bufnr)
+
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local cursor_text = vim.api.nvim_buf_get_lines(bufnr, cursor_line - 1, cursor_line, false)[1]
+      assert.is_truthy(cursor_text:find("tool_a"), "cursor should wrap to first pending tool (tool_a)")
+    end)
+
+    it("stays on resolved tool when cursor_after_result is stay", function()
+      -- Force fresh executor + navigation modules so they pick up the
+      -- config override below. The before_each clears executor but not
+      -- navigation; re-clearing both ensures a coherent module graph.
+      package.loaded["flemma.tools.executor"] = nil
+      package.loaded["flemma.navigation"] = nil
+      executor = require("flemma.tools.executor")
+
+      -- Override the config with cursor_after_result = "stay" using the
+      -- same init/apply/finalize pattern used by the advance_phase2 test.
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { cursor_after_result = "stay" } })
+      require("flemma.presets").setup(nil)
+      config_facade.finalize(config_facade.LAYERS.SETUP)
+      approval.clear()
+      approval.setup()
+
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_a`)",
+        "",
+        "```json",
+        '{"command":"echo a"}',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`tool_b`)",
+        "",
+        "```json",
+        '{"command":"echo b"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `tool_a` (pending)",
+        "",
+        "```",
+        "```",
+        "",
+        "**Tool Result:** `tool_b` (pending)",
+        "",
+        "```",
+        "```",
+      })
+
+      vim.api.nvim_set_current_buf(bufnr)
+      local tool_a_line = nil
+      for i, line in ipairs(get_lines(bufnr)) do
+        if line:find("tool_a.*pending") then
+          tool_a_line = i
+          break
+        end
+      end
+      assert.is_truthy(tool_a_line, "should find tool_a pending line")
+      vim.api.nvim_win_set_cursor(0, { tool_a_line, 0 })
+
+      executor.approve_at_cursor(bufnr)
+
+      -- Cursor should NOT advance to tool_b
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      assert.equals(tool_a_line, cursor_line, "cursor should stay on the resolved tool")
+    end)
   end)
 end)

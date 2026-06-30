@@ -20,6 +20,7 @@ describe("core.send_to_provider suspense handling", function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.session"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
@@ -30,6 +31,10 @@ describe("core.send_to_provider suspense handling", function()
     package.loaded["flemma.secrets.cache"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.usage"] = nil
+    package.loaded["flemma.usage.prefetch"] = nil
+    package.loaded["flemma.hooks"] = nil
+    package.loaded["flemma.emittable"] = nil
 
     local flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
@@ -48,7 +53,7 @@ describe("core.send_to_provider suspense handling", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("re-raises suspense from get_api_key past the prep pcall", function()
+  it("re-raises suspense from resolve_credential past the prep pcall", function()
     local boundary = readiness.get_or_create_boundary("test:suspense", function(done)
       done()
     end)
@@ -169,7 +174,6 @@ describe("core.send_to_provider suspense handling", function()
       name = "bash",
       description = "Test bash",
       async = true,
-      backgroundable = true,
       input_schema = {
         type = "object",
         properties = {
@@ -307,5 +311,92 @@ describe("core.send_to_provider suspense handling", function()
     assert.is_false(has_unknown_tool, "should not get 'Unknown tool' error while async sources are pending")
 
     approval.unregister("test-auto-approve-all")
+  end)
+
+  it("does not reuse stale frontmatter tool diagnostics after tool readiness retry", function()
+    local client = require("flemma.client")
+    local config = require("flemma.config")
+    local core = require("flemma.core")
+    local tools_mod = require("flemma.tools")
+
+    local fake_mcporter = vim.fn.tempname()
+    local handle = assert(io.open(fake_mcporter, "w"))
+    handle:write("#!/usr/bin/env sh\n")
+    handle:write('if [ "$1" = "list" ]; then sleep 1.2; printf "[]\\n"; exit 0; fi\n')
+    handle:write("exit 1\n")
+    handle:close()
+    vim.fn.system({ "chmod", "+x", fake_mcporter })
+
+    local writer = config.writer(nil, config.LAYERS.SETUP)
+    writer.tools.mcporter.enabled = true
+    writer.tools.mcporter.path = fake_mcporter
+    writer.tools.mcporter.timeout = 3
+
+    tools_mod.register_module("extras.flemma.tools.calculator")
+    tools_mod.register("flemma.tools.definitions.builtin.mcporter")
+    assert.is_false(tools_mod.is_ready(), "test setup should have MCPorter pending before send")
+
+    local notifications = {}
+    notify._set_impl(function(msg)
+      table.insert(notifications, {
+        message = msg.message,
+        ready = tools_mod.is_ready(),
+      })
+      return msg
+    end)
+
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.tools = { "!calculator", "+calculator_async" }',
+      'flemma.opt.tools.auto_approve = { "!bash", "+calculator_async" }',
+      "flemma.opt.tools.max_concurrent = 4",
+      "",
+      'name = "Flemma Jr."',
+      "```",
+      "@System:",
+      "{{ include('urn:flemma:personality:coding-assistant') }}",
+      "",
+      '- For "calculator_async" tools, ALWAYS use 2000 as delay (milliseconds)',
+      "@You:",
+      "Hello, who are you? I'm {{ name }}! What tools do you have available to you, can do you 2+2 for me and also 4+4?",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    core.send_or_execute({ bufnr = bufnr })
+
+    vim.wait(2000, function()
+      return tools_mod.is_ready()
+    end)
+    assert.is_true(tools_mod.is_ready(), "MCPorter should finish loading before checking resumed diagnostics")
+
+    vim.wait(1000, function()
+      if core._get_last_request_body() ~= nil then
+        return true
+      end
+      for _, notification in ipairs(notifications) do
+        if notification.message:match("Request blocked") then
+          return true
+        end
+      end
+      return false
+    end)
+
+    local blocked_message = nil
+    local blocked_after_ready = false
+    for _, notification in ipairs(notifications) do
+      if notification.message:match("Request blocked") then
+        blocked_message = notification.message
+        blocked_after_ready = notification.ready
+        break
+      end
+    end
+
+    assert.is_nil(blocked_message, "retry should not print stale diagnostics after tool readiness")
+    assert.is_false(blocked_after_ready, "stale diagnostics should not be emitted after readiness")
+    assert.is_not_nil(core._get_last_request_body(), "request should be sent after tool readiness resolves")
   end)
 end)

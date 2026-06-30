@@ -25,26 +25,6 @@ function M.resolve_error_message(status, content)
   return messages.render("tool-denied")
 end
 
----Find the tool_use segment for a given tool ID
----@param doc flemma.ast.DocumentNode
----@param tool_id string
----@return flemma.ast.ToolUseSegment|nil segment
----@return flemma.ast.MessageNode|nil message
----@return integer|nil message_index
-local function find_tool_use_by_id(doc, tool_id)
-  for i, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" and seg.id == tool_id then
-          ---@cast seg flemma.ast.ToolUseSegment
-          return seg, msg, i
-        end
-      end
-    end
-  end
-  return nil, nil, nil
-end
-
 --- Find the @You: message immediately following a given message index
 --- @param doc table Parsed document AST
 --- @param after_msg_idx integer Message index to look after
@@ -99,8 +79,9 @@ end
 
 --- Format result content into lines for buffer insertion
 --- @param result table ExecutionResult {success, output, error}
+--- @param compact? boolean When true, omit the blank line between header and fence
 --- @return string[] lines, boolean is_error
-local function format_result_lines(result)
+local function format_result_lines(result, compact)
   local is_error = not result.success
   local content
 
@@ -125,7 +106,9 @@ local function format_result_lines(result)
   end
 
   local lines = {}
-  table.insert(lines, "") -- blank line before fence
+  if not compact then
+    table.insert(lines, "")
+  end
   table.insert(lines, fence .. lang_tag)
   for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
     table.insert(lines, line)
@@ -152,7 +135,7 @@ end
 --- which is required for correct multi-tool ordering on subsequent injections.
 --- @param bufnr integer
 --- @param tool_id string
---- @param inject_opts? { status?: flemma.ast.ToolStatus } When status is set, header gets a `(status)` suffix
+--- @param inject_opts? { status?: flemma.ast.ToolStatus, compact?: boolean } When status is set, header gets a `(status)` suffix; compact omits the blank line between header and fence
 --- @return integer|nil header_line 1-based line number where header was inserted, or nil on error
 --- @return string|nil error message
 --- @return { modified: boolean }|nil opts Metadata about the injection (e.g., whether buffer was modified)
@@ -163,7 +146,7 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg, assistant_msg, assistant_idx = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg, assistant_msg, assistant_idx = ast.find_tool_use_by_id(doc, tool_id)
   if not tool_use_seg or not assistant_msg or not assistant_idx then
     return nil, "Tool use block not found in buffer", { modified = false }
   end
@@ -203,6 +186,7 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
     header_text = header_text .. " (" .. inject_opts.status .. ")"
   end
   local fence_open = "```"
+  local compact = inject_opts and inject_opts.compact
 
   if you_msg then
     -- @You: message exists - find where to insert our placeholder
@@ -229,7 +213,12 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
       if predecessor then
         -- Insert after the predecessor result's block
         local insert_after = predecessor.position.end_line
-        set_lines(bufnr, insert_after, insert_after, { "", header_text, "", fence_open, "```" })
+        set_lines(
+          bufnr,
+          insert_after,
+          insert_after,
+          compact and { "", header_text, fence_open, "```" } or { "", header_text, "", fence_open, "```" }
+        )
         return insert_after + 2, nil, { modified = true } -- +1 for blank line, +1 for 1-based
       else
         -- Our tool comes before all existing results - insert before the first one
@@ -237,7 +226,12 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
         local first_start = first_result.position.start_line
 
         -- Insert before the first result
-        set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })
+        set_lines(
+          bufnr,
+          first_start - 1,
+          first_start - 1,
+          compact and { header_text, fence_open, "```", "" } or { header_text, "", fence_open, "```", "" }
+        )
         return first_start, nil, { modified = true }
       end
     else
@@ -255,25 +249,45 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
 
       if has_content then
         -- @You: has content on the next line — insert placeholder before it
-        set_lines(bufnr, content_start - 1, content_start - 1, {
-          "",
-          header_text,
-          "",
-          fence_open,
-          "```",
-          "",
-        })
+        local placeholder_lines = compact
+            and {
+              "",
+              header_text,
+              fence_open,
+              "```",
+              "",
+            }
+          or {
+            "",
+            header_text,
+            "",
+            fence_open,
+            "```",
+            "",
+          }
+        set_lines(bufnr, content_start - 1, content_start - 1, placeholder_lines)
         return content_start + 1, nil, { modified = true }
       else
         -- @You: line is followed by empty/no content — insert after marker
-        set_lines(bufnr, you_start, you_start, { "", header_text, "", fence_open, "```" })
+        set_lines(
+          bufnr,
+          you_start,
+          you_start,
+          compact and { "", header_text, fence_open, "```" } or { "", header_text, "", fence_open, "```" }
+        )
         return you_start + 2, nil, { modified = true }
       end
     end
   else
     -- No @You: message exists - create one after the assistant message
     local insert_after = assistant_msg.position.end_line --[[@as integer]]
-    set_lines(bufnr, insert_after, insert_after, { "", "@You:", "", header_text, "", fence_open, "```" })
+    set_lines(
+      bufnr,
+      insert_after,
+      insert_after,
+      compact and { "", "@You:", "", header_text, fence_open, "```" }
+        or { "", "@You:", "", header_text, "", fence_open, "```" }
+    )
     return insert_after + 4, nil, { modified = true } -- +1 blank +1 @You: +1 blank +1 header = +4
   end
 end
@@ -283,9 +297,10 @@ end
 --- @param bufnr integer
 --- @param tool_id string
 --- @param result table ExecutionResult {success, output, error}
+--- @param opts? { compact?: boolean }
 --- @return boolean success
 --- @return string|nil error message
-function M.inject_result(bufnr, tool_id, result)
+function M.inject_result(bufnr, tool_id, result, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return false, "Buffer is no longer valid"
   end
@@ -293,12 +308,13 @@ function M.inject_result(bufnr, tool_id, result)
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find existing tool_result placeholder
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local sibling = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   local existing_seg = (sibling and sibling.kind == "tool_result") and sibling --[[@as flemma.ast.ToolResultSegment]]
     or nil
 
-  local content_lines, is_error = format_result_lines(result)
+  local compact = opts and opts.compact
+  local content_lines, is_error = format_result_lines(result, compact)
 
   if existing_seg then
     -- Update existing: replace content from header line to end of block
@@ -322,14 +338,14 @@ function M.inject_result(bufnr, tool_id, result)
   else
     -- No placeholder exists - inject full result (shouldn't happen normally)
     -- Re-inject placeholder + content
-    local header_line, err = M.inject_placeholder(bufnr, tool_id)
+    local header_line, err = M.inject_placeholder(bufnr, tool_id, opts and { compact = compact })
     if not header_line then
       return false, err
     end
 
     -- Placeholder now includes an empty code block, so the parser will find it.
     -- Recursive call to replace placeholder content with actual result.
-    return M.inject_result(bufnr, tool_id, result)
+    return M.inject_result(bufnr, tool_id, result, opts)
   end
 end
 
@@ -338,10 +354,11 @@ end
 --- @param bufnr integer
 --- @param tool_id string
 --- @param result table ExecutionResult {success, output, error}
+--- @param opts? { compact?: boolean }
 --- @return boolean success
 --- @return string|nil error message
-function M.inject_or_replace(bufnr, tool_id, result)
-  return M.inject_result(bufnr, tool_id, result)
+function M.inject_or_replace(bufnr, tool_id, result, opts)
+  return M.inject_result(bufnr, tool_id, result, opts)
 end
 
 ---Rewrite the `(status)` suffix on a tool_result header. Passing `nil` clears
@@ -360,7 +377,7 @@ function M.set_header_status(bufnr, tool_id, status)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id
@@ -398,7 +415,7 @@ function M.set_header_modeline(bufnr, tool_id, modeline_content)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id
@@ -417,16 +434,17 @@ end
 ---@param bufnr integer
 ---@param tool_id string
 ---@param content string
+---@param opts? { compact?: boolean }
 ---@return boolean success
 ---@return string|nil error_message
-function M.set_fence_content(bufnr, tool_id, content)
+function M.set_fence_content(bufnr, tool_id, content, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return false, "Buffer is no longer valid"
   end
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
   if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id
@@ -434,7 +452,8 @@ function M.set_fence_content(bufnr, tool_id, content)
   ---@cast seg flemma.ast.ToolResultSegment
 
   local fence = codeblock.get_fence(content)
-  local new_lines = { "", fence }
+  local compact = opts and opts.compact
+  local new_lines = compact and { fence } or { "", fence }
   if content ~= "" then
     for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
       table.insert(new_lines, line)
@@ -454,14 +473,15 @@ end
 ---@param bufnr integer
 ---@param job_id string
 ---@param result flemma.tools.ExecutionResult
+---@param opts? { compact?: boolean }
 ---@return flemma.tools.injector.Placement
-function M.append_job_result(bufnr, job_id, result)
+function M.append_job_result(bufnr, job_id, result, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     log.warn("injector: append_job_result skipped, buffer " .. bufnr .. " invalid")
     return "appended"
   end
 
-  local content_lines, is_error = format_result_lines(result)
+  local content_lines, is_error = format_result_lines(result, opts and opts.compact)
   local header = ("**Job Result:** `%s`"):format(job_id)
   if is_error then
     header = header .. " (error)"

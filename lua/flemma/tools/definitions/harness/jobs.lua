@@ -14,11 +14,13 @@ M.definitions = {
   {
     name = "flemma.jobs.status",
     description = "Check the status of a background job. "
-      .. "Returns whether the job is still running, queued for delivery, or already completed. "
+      .. 'Returns "running" while the job is executing, "completed (delivery pending)" once it has finished '
+      .. "and its result is queued to be injected into the conversation automatically (do not re-run the tool "
+      .. 'or keep polling — the result is on its way), or "completed" when the result is already in the conversation. '
       .. "Use this to check on long-running background tasks instead of retrying them.",
     strict = true,
     async = false,
-    backgroundable = false,
+    capabilities = { "disables_background", "disables_save_to" },
     ---@return flemma.tools.ToolPreview
     format_preview = function(input)
       return input.job_id
@@ -39,8 +41,21 @@ M.definitions = {
 
       for tool_id, entry in pairs(pending) do
         if entry.job_id == job_id then
+          local status = "running"
           local elapsed = os.time() - entry.started_at
-          local status = entry.completed and "queued" or "running"
+          if entry.completed then
+            -- The job has finished; its result sits in the delivery queue.
+            -- Report it as completed — a bare "queued" reads as "waiting to
+            -- start" to the model — and freeze elapsed at the actual runtime
+            -- so it stops growing after completion.
+            status = "completed (delivery pending)"
+            for _, delivery in ipairs(buffer_state.delivery_queue or {}) do
+              if delivery.job_id == job_id and delivery.completed_at then
+                elapsed = delivery.completed_at - entry.started_at
+                break
+              end
+            end
+          end
           log.debug("flemma.jobs.status: job " .. job_id .. " → " .. status .. " (elapsed=" .. elapsed .. "s)")
           return {
             success = true,
@@ -58,15 +73,16 @@ M.definitions = {
       local queue = buffer_state.delivery_queue or {}
       for _, delivery in ipairs(queue) do
         if delivery.job_id == job_id then
-          log.debug("flemma.jobs.status: job " .. job_id .. " → queued (in delivery_queue)")
+          log.debug("flemma.jobs.status: job " .. job_id .. " → completed (delivery pending) (in delivery_queue)")
           return {
             success = true,
             output = json.encode({
-              status = "queued",
+              status = "completed (delivery pending)",
               job_id = job_id,
               tool_id = delivery.tool_id,
               tool_name = delivery.tool_name,
-              elapsed_seconds = 0,
+              -- No pending entry → runtime unknown. Omit elapsed_seconds
+              -- rather than report a misleading 0 ("just queued").
             }),
           }
         end

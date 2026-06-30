@@ -3,20 +3,14 @@ describe("Highlight", function()
   local highlight
 
   before_each(function()
-    package.loaded["flemma"] = nil
-    package.loaded["flemma.highlight"] = nil
-    package.loaded["flemma.config"] = nil
-    package.loaded["flemma.state"] = nil
-    package.loaded["flemma.tools"] = nil
-    package.loaded["flemma.core"] = nil
-
     flemma = require("flemma")
     highlight = require("flemma.highlight")
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    -- Clear Flemma highlight groups so `default = true` doesn't leak between tests
+    -- Use `highlight clear` (not nvim_set_hl(0, name, {})) so that default = true
+    -- in apply_syntax() can re-define the groups in the next test.
     for _, group in ipairs({
       "FlemmaRoleSystem",
       "FlemmaRoleUser",
@@ -29,39 +23,36 @@ describe("Highlight", function()
       "FlemmaAssistant",
       "FlemmaAssistantSpinner",
     }) do
-      vim.api.nvim_set_hl(0, group, {})
+      vim.cmd("highlight clear " .. group)
     end
-    -- Defensive reset: tests in this describe may install a notify capture impl
-    -- inline; ensure it doesn't leak if the test fails before its own reset runs.
     require("flemma.notify")._reset_impl()
   end)
 
   describe("role marker highlights", function()
     it("should have fg color even when FlemmaAssistant only defines bg", function()
-      -- Setup with bg-only expression for assistant
+      local h = require("flemma.hl")
       flemma.setup({
         highlights = {
-          assistant = "Normal+bg:#102020",
+          assistant = h.from("Normal"):blend("bg", "+#102020"),
         },
       })
 
-      -- Create a buffer with chat content so apply_syntax runs
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
 
-      -- Apply syntax to define the highlight groups
       highlight.apply_syntax()
 
-      -- FlemmaRoleAssistant should have a fg color (fallback from Normal or defaults)
       local role_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleAssistant", link = false })
       assert.is_not_nil(role_hl.fg, "FlemmaRoleAssistant should have fg even when FlemmaAssistant only defines bg")
     end)
 
-    it("should apply role_style as gui attributes", function()
-      flemma.setup({
-        highlights = { role_style = "bold,underline" },
+    it("should apply role_name as gui attributes", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { role_name = h.attrs({ bold = true, underline = true }) },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -71,70 +62,22 @@ describe("Highlight", function()
 
       highlight.apply_syntax()
 
-      -- Style attrs are on the Name variant (used by extmark on just the role name text)
       local name_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleUserName", link = false })
       assert.is_true(name_hl.bold, "FlemmaRoleUserName should have bold")
       assert.is_true(name_hl.underline, "FlemmaRoleUserName should have underline")
-      -- Base group (used by syntax) should have fg but no style attrs
       local role_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleUser", link = false })
       assert.is_not_nil(role_hl.fg, "FlemmaRoleUser should have fg")
       assert.is_nil(role_hl.bold, "FlemmaRoleUser should not have bold")
       assert.is_nil(role_hl.underline, "FlemmaRoleUser should not have underline")
     end)
 
-    it("should warn on invalid role_style with 'Did you mean' suggestion", function()
-      local notify = require("flemma.notify")
-      local notifications = {}
-      notify._set_impl(function(notification)
-        table.insert(notifications, notification)
-        return notification
-      end)
-
-      flemma.setup({
-        highlights = { role_style = "bold,italics" },
-      })
-
-      local bufnr = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_set_current_buf(bufnr)
-      vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
-
-      highlight.apply_syntax()
-
-      vim.wait(10, function()
-        return false
-      end)
-      notify._reset_impl()
-
-      -- Should have warned about 'italics' and suggested 'italic'
-      local found = false
-      for _, n in ipairs(notifications) do
-        if
-          n.message:match("invalid role_style 'italics'")
-          and n.message:match("Did you mean 'italic'")
-          and n.opts
-          and n.opts.once == true
-        then
-          found = true
-          break
-        end
-      end
-      assert.is_true(found, "Should warn about 'italics' with suggestion 'italic'")
-
-      -- Valid 'bold' should still be applied
-      local name_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleUserName", link = false })
-      assert.is_true(name_hl.bold, "FlemmaRoleUserName should still have bold")
-      assert.is_nil(name_hl.underline, "FlemmaRoleUserName should not have underline (italics was invalid)")
-    end)
-
     it("should use fg from base highlight group when available", function()
-      -- Set a known fg on a test group
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
       vim.api.nvim_set_hl(0, "TestHighlight", { fg = "#ff0000" })
 
-      flemma.setup({
-        highlights = {
-          system = "TestHighlight",
-        },
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { system = h.link("TestHighlight") },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -151,10 +94,10 @@ describe("Highlight", function()
 
   describe("spinner highlight", function()
     it("should have fg but no bg", function()
-      flemma.setup({
-        highlights = {
-          assistant = "Normal+bg:#102020",
-        },
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { assistant = h.from("Normal"):blend("bg", "+#102020") },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -170,8 +113,6 @@ describe("Highlight", function()
     end)
 
     it("should not be a link to FlemmaAssistant", function()
-      flemma.setup({})
-
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
@@ -224,9 +165,41 @@ describe("Highlight", function()
       assert.is_truthy(hl.link or hl.fg, "FlemmaToolPreview should still be defined")
     end)
 
+    it("merges FlemmaToolLabel from the preview color plus italic (not bright Normal)", function()
+      -- Distinct Comment vs Normal so we can prove the label takes the muted
+      -- preview/Comment fg, not the bright Normal it used to inherit when it was
+      -- `:set` as an italic-only group with no fg of its own.
+      local saved_comment = vim.api.nvim_get_hl(0, { name = "Comment" })
+      local saved_normal = vim.api.nvim_get_hl(0, { name = "Normal" })
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x888888 })
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xeeeeee, bg = 0x1a1a1a })
+      -- FlemmaToolLabel persists across tests and apply_syntax `:set`s it with
+      -- default = true, so an already-defined group would shadow our custom
+      -- Comment. Clear it (via :highlight clear, per the after_each note) so
+      -- apply_syntax redefines it fresh.
+      vim.cmd("silent! highlight clear FlemmaToolLabel")
+
+      setup_and_apply()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolLabel", link = false })
+
+      -- Restore/clear before asserting so a failure can't leak test state.
+      vim.api.nvim_set_hl(0, "Comment", saved_comment)
+      vim.api.nvim_set_hl(0, "Normal", saved_normal)
+      vim.cmd("silent! highlight clear FlemmaToolLabel")
+
+      assert.is_true(hl.italic, "FlemmaToolLabel should keep the label's italic accent")
+      assert.are.equal(
+        0x888888,
+        hl.fg,
+        "FlemmaToolLabel fg should be merged from the preview color (Comment), not the bright Normal fallback"
+      )
+    end)
+
     it("should accept renamed config key tool_use_title", function()
+      local h = require("flemma.hl")
       flemma.setup({
-        highlights = { tool_use_title = "DiagnosticInfo" },
+        highlights = { tool_use_title = h.link("DiagnosticInfo") },
       })
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
@@ -239,8 +212,9 @@ describe("Highlight", function()
     end)
 
     it("should accept renamed config key tool_result_title", function()
+      local h = require("flemma.hl")
       flemma.setup({
-        highlights = { tool_result_title = "DiagnosticInfo" },
+        highlights = { tool_result_title = h.link("DiagnosticInfo") },
       })
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
@@ -251,67 +225,6 @@ describe("Highlight", function()
       local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolResultTitle" })
       assert.is_truthy(hl.link or hl.fg, "FlemmaToolResultTitle should be defined via tool_result_title config key")
     end)
-  end)
-end)
-
-describe("^ contrast operator in expressions", function()
-  local highlight
-  local color
-
-  before_each(function()
-    package.loaded["flemma"] = nil
-    package.loaded["flemma.highlight"] = nil
-    package.loaded["flemma.config"] = nil
-    package.loaded["flemma.state"] = nil
-    package.loaded["flemma.tools"] = nil
-    package.loaded["flemma.utilities.color"] = nil
-    require("flemma").setup({})
-    highlight = require("flemma.highlight")
-    color = require("flemma.utilities.color")
-    -- Set up known highlight groups for testing
-    vim.api.nvim_set_hl(0, "TestDarkBg", { bg = 0x111111, fg = 0x222222 })
-    vim.api.nvim_set_hl(0, "TestLightFg", { fg = 0xffffff })
-  end)
-
-  after_each(function()
-    vim.api.nvim_set_hl(0, "TestDarkBg", {})
-    vim.api.nvim_set_hl(0, "TestLightFg", {})
-  end)
-
-  it("should pass through fg that already meets contrast", function()
-    -- White fg against dark bg: already high contrast
-    local result = highlight.resolve_expression("TestLightFg^fg:4.5", "#111111")
-    assert.is_not_nil(result)
-    assert.is_not_nil(result.fg)
-    assert.are.equal("#ffffff", result.fg)
-  end)
-
-  it("should adjust fg when contrast is insufficient", function()
-    -- Dark fg against dark bg: insufficient contrast
-    local result = highlight.resolve_expression("TestDarkBg^fg:4.5", "#111111")
-    assert.is_not_nil(result)
-    assert.is_not_nil(result.fg)
-    -- Should be lighter than the original #222222
-    local ratio = color.contrast_ratio(result.fg, "#111111")
-    assert.is_true(ratio >= 4.5, "adjusted fg should meet 4.5:1 contrast: got " .. tostring(ratio))
-  end)
-
-  it("should compose with blend operations: blend first then contrast", function()
-    -- Blend first, then ensure contrast
-    local result = highlight.resolve_expression("TestLightFg-fg:#dddddd^fg:4.5", "#111111")
-    assert.is_not_nil(result)
-    assert.is_not_nil(result.fg)
-    local ratio = color.contrast_ratio(result.fg, "#111111")
-    assert.is_true(ratio >= 4.5, "composed expression should meet contrast: got " .. tostring(ratio))
-  end)
-
-  it("should ignore ^ operator when no contrast_bg provided", function()
-    -- Without contrast_bg, ^ is a no-op (doesn't crash, returns blended result)
-    local result = highlight.resolve_expression("TestDarkBg^fg:4.5", nil)
-    assert.is_not_nil(result)
-    assert.is_not_nil(result.fg)
-    -- Should be the original value, unadjusted
-    assert.are.equal("#222222", result.fg)
   end)
 end)
 
@@ -528,8 +441,8 @@ describe("CursorLine overlay highlights", function()
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    vim.api.nvim_set_hl(0, "Normal", {})
-    vim.api.nvim_set_hl(0, "CursorLine", {})
+    vim.cmd("highlight clear Normal")
+    vim.cmd("highlight clear CursorLine")
     for _, group in ipairs({
       "FlemmaLineFrontmatterCursorLine",
       "FlemmaLineSystemCursorLine",
@@ -543,7 +456,7 @@ describe("CursorLine overlay highlights", function()
       "FlemmaLineFrontmatter",
       "FlemmaThinkingBlock",
     }) do
-      vim.api.nvim_set_hl(0, group, {})
+      vim.cmd("highlight clear " .. group)
     end
   end)
 
@@ -672,7 +585,7 @@ describe("CursorLine overlay highlights", function()
       assert.are_not.equal(0x303030, label_variant.fg, "adjusted fg should differ from original")
     end)
 
-    it("should not create variants when contrast already passes", function()
+    it("should preserve fg unchanged when contrast already passes", function()
       -- Set a high-contrast fence fg (white on dark)
       vim.api.nvim_set_hl(0, "FlemmaFenceLabel", { fg = 0xffffff })
       vim.api.nvim_set_hl(0, "FlemmaFenceBar", { fg = 0xffffff })
@@ -680,7 +593,10 @@ describe("CursorLine overlay highlights", function()
       setup_and_apply()
 
       local map = highlight.get_fence_cursorline_map()
-      assert.is_falsy(map["FlemmaLineAssistantCursorLine"], "should not create variants when contrast passes")
+      local assistant_variants = map["FlemmaLineAssistantCursorLine"]
+      assert.is_truthy(assistant_variants, "variants are always created")
+      local label_variant = vim.api.nvim_get_hl(0, { name = assistant_variants.FlemmaFenceLabel, link = false })
+      assert.are.equal(0xffffff, label_variant.fg, "fg should be unchanged when contrast passes")
     end)
 
     it("should return empty map when CursorLine has no attributes", function()
@@ -692,6 +608,204 @@ describe("CursorLine overlay highlights", function()
       local map = highlight.get_fence_cursorline_map()
       assert.are.same({}, map)
     end)
+  end)
+end)
+
+describe("HlOp-based exclusion and approval highlights", function()
+  local highlight
+
+  before_each(function()
+    package.loaded["flemma.highlight"] = nil
+
+    for _, group in ipairs({
+      "FlemmaToolName",
+      "FlemmaApprovalIndicator",
+      "FlemmaApprovalLabel",
+      "FlemmaApprovalKey",
+      "FlemmaApprovalAction",
+    }) do
+      vim.cmd("highlight clear " .. group)
+    end
+
+    vim.api.nvim_set_hl(0, "TestExclusion", { fg = 0xaabbcc, bg = 0x112233, italic = true, bold = true })
+    vim.api.nvim_set_hl(0, "TestExclFgOnly", { fg = 0xff0000 })
+
+    -- Ensure Normal is defined (CursorLine tests may clear it)
+    if not next(vim.api.nvim_get_hl(0, { name = "Normal", link = false })) then
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xeeeeee, bg = 0x1a1a2e })
+    end
+
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    vim.api.nvim_set_hl(0, "TestExclusion", {})
+    vim.api.nvim_set_hl(0, "TestExclFgOnly", {})
+    for _, group in ipairs({
+      "FlemmaToolName",
+      "FlemmaApprovalIndicator",
+      "FlemmaApprovalLabel",
+      "FlemmaApprovalKey",
+      "FlemmaApprovalAction",
+    }) do
+      vim.cmd("highlight clear " .. group)
+    end
+  end)
+
+  describe("omit via HlOp config", function()
+    it("should omit bg when configured with :omit('bg')", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { tool_name = h.from("TestExclusion"):omit("bg") },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName", link = false })
+      assert.are.equal(0xaabbcc, hl.fg, "should keep fg from TestExclusion")
+      assert.is_nil(hl.bg, "should omit bg")
+      assert.is_true(hl.italic, "should keep italic from TestExclusion")
+      assert.is_true(hl.bold, "should keep bold from TestExclusion")
+    end)
+
+    it("should omit multiple attributes", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { tool_name = h.from("TestExclusion"):omit("bg", "italic") },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName", link = false })
+      assert.are.equal(0xaabbcc, hl.fg, "should keep fg")
+      assert.is_nil(hl.bg, "should omit bg")
+      assert.is_nil(hl.italic, "should omit italic")
+      assert.is_true(hl.bold, "should keep bold")
+    end)
+
+    it("should link when configured with h.link()", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { tool_name = h.link("TestExclusion") },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName" })
+      assert.are.equal("TestExclusion", hl.link, "should link without modifications")
+    end)
+  end)
+
+  describe("approval group highlights", function()
+    it("should set approval sub-groups directly without bg inheritance", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { approval_indicator = h.from("TestExclusion"):omit("bg") },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
+      assert.are.equal(0xaabbcc, hl.fg, "should keep fg from TestExclusion")
+      assert.is_nil(hl.bg, "bg omitted → no bg fallback")
+    end)
+
+    it("should preserve group's own bg", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { approval_indicator = h.from("TestExclusion") },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalIndicator", link = false })
+      assert.are.equal(0x112233, hl.bg, "should keep group's own bg")
+    end)
+
+    it("should inherit italic from group when present", function()
+      local h = require("flemma.hl")
+      local config = require("flemma.config")
+      config.apply(config.LAYERS.SETUP, {
+        highlights = { approval_label = h.from("TestExclusion") },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaApprovalLabel", link = false })
+      assert.is_true(hl.italic, "should keep group's own italic")
+    end)
+  end)
+end)
+
+describe("ColorScheme autocmd refresh", function()
+  local highlight
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.core"] = nil
+
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0xeeeeee, bg = 0x1a1a2e })
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    for _, group in ipairs({
+      "FlemmaSystem",
+      "FlemmaUser",
+      "FlemmaAssistant",
+      "FlemmaAssistantSpinner",
+      "FlemmaRoleSystem",
+      "FlemmaRoleUser",
+      "FlemmaRoleAssistant",
+    }) do
+      vim.cmd("highlight clear " .. group)
+    end
+  end)
+
+  it("should call apply_syntax when ColorScheme fires", function()
+    highlight.setup()
+
+    local call_count = 0
+    local original = highlight.apply_syntax
+    highlight.apply_syntax = function()
+      call_count = call_count + 1
+      original()
+    end
+
+    vim.api.nvim_exec_autocmds("ColorScheme", { pattern = "*" })
+    assert.are.equal(1, call_count, "apply_syntax should fire once on ColorScheme")
+
+    highlight.apply_syntax = original
   end)
 end)
 

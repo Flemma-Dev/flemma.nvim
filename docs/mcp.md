@@ -141,15 +141,17 @@ As a performance shortcut, servers whose entire toolset is excluded by an `exclu
 
 ### Tool naming
 
-Each discovered tool is named `server.tool_name` using a dot separator. Dots in server names themselves are replaced with hyphens to keep the separator unambiguous.
+Each discovered tool is named `server.tool_name` using a dot separator. The server name is used verbatim — dots inside it are preserved, so a server named `my.custom.server` simply becomes part of the joined name.
 
 | MCPorter server + tool          | Flemma tool name            |
 | ------------------------------- | --------------------------- |
 | `slack` + `channels_list`       | `slack.channels_list`       |
 | `github` + `search_code`        | `github.search_code`        |
-| `my.custom.server` + `do_thing` | `my-custom-server.do_thing` |
+| `my.custom.server` + `do_thing` | `my.custom.server.do_thing` |
 
-On the wire (in API requests to LLM providers), the dot is encoded to `__` to satisfy provider name constraints (`[a-zA-Z0-9_-]+`). This encoding is transparent — you always use dots in config and frontmatter, and the progress bar and other UI surfaces decode `__` back to `.` for display.
+On the wire (in API requests to LLM providers), every dot is encoded to `__` to satisfy provider name constraints (`[a-zA-Z0-9_-]+`) — so `my.custom.server.do_thing` is sent as `my__custom__server__do_thing`. This encoding is transparent — you always use dots in config and frontmatter, and the progress bar and other UI surfaces decode `__` back to `.` for display.
+
+Because the full dotted name is what `include`/`exclude` match against, write your globs with dots too: `my.custom.server.*` matches every tool from `my.custom.server`, and `my.custom.server.do_thing` matches that one tool.
 
 > [!NOTE]
 > The tool name separator changed from `:` to `.` in v0.12. Older configs using `"server:tool"` patterns will no longer match — update them to `"server.tool"`.
@@ -162,9 +164,20 @@ When the model invokes an MCP tool, Flemma runs:
 mcporter call <server>.<tool> --args '<json>' --output json
 ```
 
-The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the response is not shaped like a `CallToolResult` (no `content` array), Flemma falls back to inserting the raw output text verbatim — so non-conforming MCP servers still return something usable. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
+The response is parsed as an MCP [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-11-25/schema#calltoolresult). Only text content blocks are extracted -- image, audio, and resource blocks are not representable in the `.chat` buffer format and are dropped with a log warning. If the response is not shaped like a `CallToolResult` (no `content` array), Flemma falls back to inserting the raw output text verbatim — so non-conforming MCP servers still return something usable. If the MCP server returns a tool-level error (`isError: true`), it surfaces as a tool error in the conversation.
 
-Outputs run through `ctx.truncate.truncate_with_overflow` the same way every other tool's output does, so large responses get truncated and the full text saved to an overflow file.
+Outputs run through `ctx.truncate.truncate_with_overflow` the same way every other tool's output does, so large responses get truncated and the full text saved to the [tool result store](tools.md#tool-result-store).
+
+### Full tool citizens
+
+Discovered MCP tools are ordinary Flemma tool definitions, so they get the same treatment as built-ins:
+
+- **Harness parameters.** Every MCP tool's schema gains the auto-injected [`flemma.save_to`](tools.md#flemmasave_to--redirecting-output-to-a-file) parameter (offered to all tools, for redirecting large output to a file). Because MCP calls run asynchronously, they also gain the `flemma.background` parameter, letting the model background a slow call and pick the result up later. See [Harness parameters](tools.md#harness-parameters) for details.
+- **Approval flow.** Every MCP call passes through the standard [tool approval](tools.md#tool-approval) cycle — it lands as a `**Tool Result:**` placeholder with a status (`pending` / `approved` / `denied` / `rejected`) and is only dispatched once approved, exactly like a `bash` or `write` call.
+
+### Security
+
+Unlike built-in tools, MCP execution is **not sandboxed**. Flemma runs each call by spawning the `mcporter` CLI directly with `vim.fn.jobstart` — there is no argv-level sandbox wrapper around the command, so the MCP server (and whatever it does) runs with your full user privileges. This is an asymmetry with built-in tools, which can be wrapped by a sandbox backend; see [What the sandbox does and does not do](sandbox.md#what-the-sandbox-does-and-does-not-do). Only enable MCP servers you trust, and rely on the approval flow above to review what each call does before it runs.
 
 ### Timeouts
 

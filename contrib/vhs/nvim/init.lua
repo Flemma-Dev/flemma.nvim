@@ -30,27 +30,22 @@ local parser_install_dir = vim.fn.stdpath("cache") .. "/treesitters"
 
 vim.fn.mkdir(parser_install_dir, "p")
 
-vim.opt.runtimepath:prepend(parser_install_dir)
-
-require("nvim-treesitter.configs").setup({
-  parser_install_dir = parser_install_dir,
-  ensure_installed = {
-    "markdown",
-    "markdown_inline",
-    "lua",
-    "json",
-  },
-  highlight = {
-    enable = true,
-    additional_vim_regex_highlighting = false,
-  },
-  install = {
-    notify_compile_progress = false,
-  },
+-- nvim-treesitter's `main` branch (Neovim 0.11+) replaced the classic
+-- `require("nvim-treesitter.configs").setup{}` API. Parsers are installed
+-- explicitly via the Makefile's screencast pre-step; `setup{ install_dir }`
+-- prepends that directory to the runtimepath so the parsers are found.
+require("nvim-treesitter").setup({
+  install_dir = parser_install_dir,
 })
 
-require("treesitter-context").setup({
-  enable = false,
+-- The classic API auto-enabled highlighting for every parser-backed filetype;
+-- the new API does not, so start Treesitter per buffer. `.chat` buffers render
+-- through the markdown parser (registered by flemma.setup), so include `chat`.
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "chat", "markdown", "lua", "json" },
+  callback = function(ev)
+    pcall(vim.treesitter.start, ev.buf)
+  end,
 })
 
 require("screenkey").setup({
@@ -78,6 +73,7 @@ require("flemma").setup({
       "$standard",
       "calculator",
     },
+    auto_approve_sandboxed = false,
   },
   editing = {
     auto_write = true,

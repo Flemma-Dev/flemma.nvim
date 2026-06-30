@@ -16,6 +16,8 @@ local context_module = require("flemma.context")
 local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
+local store = require("flemma.tools.store")
+local navigation = require("flemma.navigation")
 local tool_context = require("flemma.tools.context")
 local path_util = require("flemma.utilities.path")
 local truncate_module = require("flemma.tools.truncate")
@@ -42,12 +44,15 @@ local JOB_ID_LENGTH = 8
 ---@field completed boolean
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
+---@field save_to string|nil Redirect destination from flemma.save_to
+---@field overflow_path string|nil Store path of the full output when truncation overflowed
 
 ---@class flemma.tools.JobDelivery
 ---@field job_id string
 ---@field tool_id string
 ---@field tool_name string
 ---@field result flemma.tools.ExecutionResult
+---@field save_to string|nil Redirect destination from flemma.save_to
 ---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
 
 ---Check whether a named tool is available for a buffer's resolved tool set.
@@ -238,20 +243,7 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find the tool_use segment by ID
-  ---@type flemma.ast.ToolUseSegment|nil
-  local tool_use_seg = nil
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "tool_use" and seg.id == tool_id then
-        tool_use_seg = seg --[[@as flemma.ast.ToolUseSegment]]
-        break
-      end
-    end
-    if tool_use_seg then
-      break
-    end
-  end
-
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   if not tool_use_seg then
     return
   end
@@ -296,6 +288,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       tool_id = tool_id,
       tool_name = entry.tool_name,
       result = result,
+      save_to = entry.save_to,
     })
     hooks.dispatch("tool:completed", {
       bufnr = bufnr,
@@ -340,8 +333,51 @@ local function do_completion(bufnr, tool_id, result, opts)
     pcall(vim.cmd --[[@as function]], "undojoin")
   end
 
+  -- Materialize result to store (before buffer injection). Skipped when
+  -- truncation overflow already wrote the full output to the same store path
+  -- (this result holds only the truncated content), and when flemma.save_to
+  -- makes the redirect destination the single home of the content.
+  local completion_config = config_facade.get(bufnr)
+  local store_config = completion_config.tools and completion_config.tools.store or {}
+  if not (entry and (entry.overflow_path or entry.save_to)) then
+    local buffer_ctx = context_module.from_buffer(bufnr)
+    local _store_path, store_err = store.materialize_for_completion({
+      bufnr = bufnr,
+      __filename = buffer_ctx:get_filename(),
+      __dirname = buffer_ctx:get_dirname(),
+      tool_name = entry and entry.tool_name,
+      tool_id = tool_id,
+      source = "tool",
+      result = result,
+      store_config = store_config,
+    })
+    if store_err then
+      log.warn("executor: failed to materialize result for " .. tool_id .. ": " .. store_err)
+    end
+  end
+
+  -- Handle redirect (flemma.save_to)
+  local redirect_save_to = entry and entry.save_to
+  if redirect_save_to and result.success then
+    local new_result, redirect_err = store.apply_redirect({
+      save_to = redirect_save_to,
+      result = result,
+      bufnr = bufnr,
+      store_config = store_config,
+    })
+    result = new_result
+    if redirect_err then
+      log.warn("executor: redirect failed for " .. tool_id .. ": " .. redirect_err)
+    end
+  end
+
   -- Inject result into buffer
-  local ok, err = injector.inject_result(bufnr, tool_id, result)
+  local ok, err = injector.inject_result(
+    bufnr,
+    tool_id,
+    result,
+    { compact = completion_config.editing and completion_config.editing.compact_headers }
+  )
   if not ok then
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
@@ -355,8 +391,7 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
   if ok and autopilot.get_state(bufnr) ~= "armed" then
-    local config = config_facade.get(bufnr)
-    local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
+    local cursor_mode = completion_config.tools and completion_config.tools.cursor_after_result or "result"
     if cursor_mode ~= "stay" then
       move_cursor_after_result(bufnr, tool_id, cursor_mode)
     end
@@ -495,6 +530,11 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
+        local store_config
+        do
+          local cfg = config_facade.materialize(bufnr)
+          store_config = cfg.tools and cfg.tools.store or {}
+        end
         local bound = setmetatable({
           truncate_with_overflow = function(text, opts)
             opts.bufnr = bufnr
@@ -505,7 +545,24 @@ function M.build_execution_context(params)
             if not opts.id then
               opts.id = params.tool_id or ""
             end
-            return truncate_module.truncate_with_overflow(text, opts)
+            opts.store_opts = {
+              __filename = params.__filename,
+              __dirname = params.__dirname,
+              name = params.tool_name,
+              path_format = store_config.path_format,
+              unnamed_path_format = store_config.unnamed_path_format,
+              backup = store_config.backup,
+            }
+            local result = truncate_module.truncate_with_overflow(text, opts)
+            if result.overflow_path then
+              -- Record on the pending entry so do_completion knows the store
+              -- file already holds the full output for this tool_id.
+              local entry = get_buffer_pending(bufnr)[params.tool_id or ""]
+              if entry then
+                entry.overflow_path = result.overflow_path
+              end
+            end
+            return result
           end,
         }, { __index = truncate_module })
         rawset(self, "truncate", bound)
@@ -534,13 +591,20 @@ function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
-  -- Extract execution directives from the tool input so that both the normal
-  -- flow (core.lua) and manual approval (execute_at_cursor) share one path.
-  local is_background = context.input and context.input.background == true
-  if is_background then
+  -- Extract harness directives (flemma.*) from the tool input so that both the
+  -- normal flow (core.lua) and manual approval (execute_at_cursor) share one path.
+  local is_background = context.input and context.input["flemma.background"] == true
+  local save_to = context.input and context.input["flemma.save_to"] --[[@as string|nil]]
+  if is_background or save_to then
     context.input = vim.tbl_extend("keep", {}, context.input)
-    context.input.background = nil
+    context.input["flemma.background"] = nil
+    context.input["flemma.save_to"] = nil
+  end
+  if is_background then
     log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested background execution")
+  end
+  if save_to then
+    log.debug("executor: tool " .. tool_id .. " (" .. tool_name .. ") requested save_to: " .. save_to)
   end
 
   -- Check for API request in flight (mutually exclusive)
@@ -579,7 +643,13 @@ function M.execute(bufnr, context)
       else
         placeholder_text = messages.render("job-executing--untracked")
       end
-      local fence_ok, fence_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+      local readopt_config = config_facade.materialize(bufnr)
+      local fence_ok, fence_err = injector.set_fence_content(
+        bufnr,
+        tool_id,
+        placeholder_text,
+        { compact = readopt_config.editing and readopt_config.editing.compact_headers }
+      )
       if not fence_ok then
         log.warn("executor: failed to set re-adopt placeholder for " .. tool_id .. ": " .. (fence_err or "unknown"))
       end
@@ -618,6 +688,7 @@ function M.execute(bufnr, context)
     started_at = os.time(),
     completed = false,
     placeholder_modified = false,
+    save_to = save_to,
   }
   if is_background then
     -- Reuse existing job_id from the tool_result header when re-executing, so that
@@ -646,8 +717,12 @@ function M.execute(bufnr, context)
   -- Lock buffer to prevent user edits during execution
   state.lock_buffer(bufnr)
 
+  local exec_config = config_facade.materialize(bufnr)
+  local exec_compact = exec_config.editing and exec_config.editing.compact_headers
+
   -- Phase 1: Inject placeholder (pcall to ensure cleanup on unexpected errors like textlock)
-  local ph_ok, header_line, inject_err, placeholder_opts = pcall(injector.inject_placeholder, bufnr, tool_id)
+  local ph_ok, header_line, inject_err, placeholder_opts =
+    pcall(injector.inject_placeholder, bufnr, tool_id, { compact = exec_compact })
   if not ph_ok then
     cleanup_pending(bufnr, tool_id)
     maybe_unlock_buffer(bufnr)
@@ -685,7 +760,7 @@ function M.execute(bufnr, context)
     else
       placeholder_text = messages.render("job-executing--untracked")
     end
-    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text)
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text, { compact = exec_compact })
     if not f_ok then
       log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
     end
@@ -700,8 +775,7 @@ function M.execute(bufnr, context)
   end
 
   -- Show execution indicator
-  local config = config_facade.materialize(bufnr)
-  if not config.tools or config.tools.show_spinner ~= false then
+  if not exec_config.tools or exec_config.tools.show_spinner ~= false then
     indicators.show_tool_indicator(bufnr, tool_id, header_line)
   end
 
@@ -717,7 +791,7 @@ function M.execute(bufnr, context)
   local dirname = buffer_context:get_dirname()
 
   -- Resolve cwd: config value may be a URN or variable
-  local tool_config = config.tools and config.tools[tool_name]
+  local tool_config = exec_config.tools and exec_config.tools[tool_name]
   local raw_cwd = tool_config and tool_config.cwd
   local resolved_cwd
   if raw_cwd then
@@ -729,7 +803,7 @@ function M.execute(bufnr, context)
   local exec_context = M.build_execution_context({
     bufnr = bufnr,
     cwd = resolved_cwd,
-    timeout = (config.tools and config.tools.default_timeout) or DEFAULT_TIMEOUT,
+    timeout = (exec_config.tools and exec_config.tools.default_timeout) or DEFAULT_TIMEOUT,
     tool_name = tool_name,
     tool_id = tool_id,
     __dirname = dirname,
@@ -958,7 +1032,13 @@ function M.background_at_cursor(bufnr)
   else
     job_placeholder_text = messages.render("job-executing--untracked")
   end
-  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, job_placeholder_text)
+  local bg_config = config_facade.materialize(bufnr)
+  local content_ok, content_err = injector.set_fence_content(
+    bufnr,
+    ctx.tool_id,
+    job_placeholder_text,
+    { compact = bg_config.editing and bg_config.editing.compact_headers }
+  )
   if not content_ok then
     log.warn(
       "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
@@ -1041,13 +1121,16 @@ function M.resolve_orphaned_jobs(bufnr)
     log.trace("executor: no orphaned background jobs in buffer " .. bufnr)
   end
 
+  local orphan_config = #orphans > 0 and config_facade.materialize(bufnr) or nil
+  local orphan_compact_opts = orphan_config
+    and { compact = orphan_config.editing and orphan_config.editing.compact_headers }
   for _, orphan in ipairs(orphans) do
     log.debug("executor: resolving orphan " .. orphan.job_id .. " with error completion")
     injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
     injector.append_job_result(bufnr, orphan.job_id, {
       success = false,
       error = messages.render("job-lost"),
-    })
+    }, orphan_compact_opts)
   end
 
   return #orphans
@@ -1091,18 +1174,7 @@ end
 ---@return string|nil error
 local function validate_lifecycle_status(bufnr, tool_id)
   local doc = parser.get_parsed_document(bufnr)
-  local tool_use_seg = nil
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "tool_use" and seg.id == tool_id then
-        tool_use_seg = seg
-        break
-      end
-    end
-    if tool_use_seg then
-      break
-    end
-  end
+  local tool_use_seg = ast.find_tool_use_by_id(doc, tool_id)
   if not tool_use_seg then
     return false, "Tool not found: " .. tool_id
   end
@@ -1121,9 +1193,11 @@ end
 ---Re-engages autopilot if it was paused waiting for approval.
 ---@param bufnr integer
 ---@param tool_id string
+---@param opts? { defer_ui?: boolean } defer_ui skips the synchronous UI refresh
+---  (used by approve_all_pending, which refreshes once after the whole batch)
 ---@return boolean success
 ---@return string|nil error
-function M.approve(bufnr, tool_id)
+function M.approve(bufnr, tool_id, opts)
   local valid, validate_err = validate_lifecycle_status(bufnr, tool_id)
   if not valid then
     return false, validate_err
@@ -1131,6 +1205,15 @@ function M.approve(bufnr, tool_id)
   local ok, update_err = injector.set_header_status(bufnr, tool_id, "approved")
   if not ok then
     return false, update_err
+  end
+  -- Refresh the full UI synchronously so the interactive approval prompt and the
+  -- settled "— <label>" preview footer swap in a single redraw frame. The prompt
+  -- (tool_approval_ns) is otherwise dropped on the incidental CursorMoved while
+  -- the footer (tool_preview_ns, rendered only by add_tool_previews inside
+  -- update_ui) doesn't appear until the next CursorHold-driven update_ui — which
+  -- made the buffer "dance" up then down ~updatetime ms apart.
+  if not (opts and opts.defer_ui) then
+    ui.update_ui(bufnr)
   end
   editing.auto_write(bufnr)
   autopilot.nudge(bufnr)
@@ -1156,11 +1239,20 @@ function M.reject(bufnr, tool_id, message)
     return false, update_err
   end
   if message and message ~= "" then
-    local content_ok, content_err = injector.set_fence_content(bufnr, tool_id, message)
+    local reject_config = config_facade.materialize(bufnr)
+    local content_ok, content_err = injector.set_fence_content(
+      bufnr,
+      tool_id,
+      message,
+      { compact = reject_config.editing and reject_config.editing.compact_headers }
+    )
     if not content_ok then
       return false, content_err
     end
   end
+  -- Refresh synchronously for the same reason as M.approve: keep the approval
+  -- prompt → settled-state swap within one redraw frame instead of dancing.
+  ui.update_ui(bufnr)
   editing.auto_write(bufnr)
   autopilot.nudge(bufnr)
   return true, nil
@@ -1168,6 +1260,7 @@ end
 
 ---Set the `(approved)` header suffix on the tool_result placeholder at cursor.
 ---Resolves the tool ID from cursor position, then delegates to approve().
+---Advances cursor to the next pending tool result if any remain.
 ---@param bufnr integer
 ---@return boolean success
 ---@return string|nil error
@@ -1176,11 +1269,16 @@ function M.approve_at_cursor(bufnr)
   if not ctx then
     return false, err
   end
-  return M.approve(bufnr, ctx.tool_id)
+  local ok, approve_err = M.approve(bufnr, ctx.tool_id)
+  if ok then
+    navigation.advance_to_next_pending(bufnr, ctx.tool_id)
+  end
+  return ok, approve_err
 end
 
 ---Set the `(rejected)` header suffix on the tool_result placeholder at cursor.
 ---Resolves the tool ID from cursor position, then delegates to reject().
+---Advances cursor to the next pending tool result if any remain.
 ---@param bufnr integer
 ---@param message string|nil Optional rejection message written into the fence
 ---@return boolean success
@@ -1190,7 +1288,49 @@ function M.reject_at_cursor(bufnr, message)
   if not ctx then
     return false, err
   end
-  return M.reject(bufnr, ctx.tool_id, message)
+  local ok, reject_err = M.reject(bufnr, ctx.tool_id, message)
+  if ok then
+    navigation.advance_to_next_pending(bufnr, ctx.tool_id)
+  end
+  return ok, reject_err
+end
+
+---Approve all pending tool_result placeholders in the buffer.
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
+function M.approve_all_pending(bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+  local pending_ids = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.status == "pending" then
+        pending_ids[#pending_ids + 1] = seg.tool_use_id
+      end
+    end
+  end
+
+  if #pending_ids == 0 then
+    return false, "No pending tools to approve"
+  end
+
+  local failures = {}
+  for _, tool_id in ipairs(pending_ids) do
+    -- Defer the per-tool UI refresh; render once after the whole batch below.
+    local ok, approve_err = M.approve(bufnr, tool_id, { defer_ui = true })
+    if not ok then
+      failures[#failures + 1] = tool_id .. ": " .. (approve_err or "unknown")
+    end
+  end
+
+  ui.update_ui(bufnr)
+
+  if #failures > 0 then
+    log.warn("approve_all_pending: " .. #failures .. " failure(s): " .. table.concat(failures, "; "))
+    return false, table.concat(failures, "; ")
+  end
+
+  return true, nil
 end
 
 ---Resolve and execute the tool at cursor position.
@@ -1212,10 +1352,11 @@ function M.execute_at_cursor(bufnr)
   if result_seg and result_seg.kind == "tool_result" then
     ---@cast result_seg flemma.ast.ToolResultSegment
     if result_seg.status and (result_seg.status == "rejected" or result_seg.status == "denied") then
+      local eac_config = config_facade.materialize(bufnr)
       injector.inject_result(bufnr, ctx.tool_id, {
         success = false,
         error = injector.resolve_error_message(result_seg.status --[[@as "rejected"|"denied"]], result_seg.content),
-      })
+      }, { compact = eac_config.editing and eac_config.editing.compact_headers })
       if autopilot.get_state(bufnr) == "paused" then
         autopilot.arm(bufnr)
       end

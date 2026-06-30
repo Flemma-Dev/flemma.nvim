@@ -3,6 +3,7 @@
 --- local socat listener that captures the raw request.
 
 local client = require("flemma.client")
+local json = require("flemma.utilities.json")
 
 -- ─── unit: prepare_curl_command ────────────────────────────────────────────
 
@@ -87,6 +88,67 @@ describe("client.send_json_request()", function()
     local expected_prefix = '{"input_tokens":5432}'
     assert.is_not_nil(received_body, "on_body should receive a body string")
     assert.equals(expected_prefix, vim.trim(received_body --[[@as string]]))
+  end)
+end)
+
+-- ─── unit: request body temp file hygiene ──────────────────────────────────
+
+describe("client request body temp file", function()
+  after_each(function()
+    client.clear_fixtures()
+  end)
+
+  it("is created in Neovim's private temp dir and removed on completion", function()
+    local private_dir = vim.fn.fnamemodify(vim.fn.tempname(), ":h")
+
+    ---@return table<string, boolean>
+    local function snapshot()
+      local set = {}
+      for _, path in ipairs(vim.fn.glob(private_dir .. "/*", false, true)) do
+        set[path] = true
+      end
+      return set
+    end
+
+    local before = snapshot()
+
+    client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
+
+    local done = false
+    client.send_json_request({
+      endpoint = "https://api.anthropic.com/v1/messages/count_tokens",
+      headers = { "content-type: application/json" },
+      request_body = { probe = "tmp-file-location" },
+      parameters = {},
+    }, function()
+      done = true
+    end)
+
+    -- jobstart callbacks have not run yet, so the body file still exists.
+    -- It must live in Neovim's private temp dir (0700, removed on exit) —
+    -- not in shared /tmp, where LuaJIT's os.tmpname() used to drop both a
+    -- leaked mkstemp file and, on killed requests, the world-readable body.
+    local created = {}
+    for _, path in ipairs(vim.fn.glob(private_dir .. "/*", false, true)) do
+      if not before[path] then
+        table.insert(created, path)
+      end
+    end
+    assert.equals(1, #created, "request body file must be created in the private temp dir")
+
+    local f = assert(io.open(created[1], "r"))
+    local content = f:read("*a")
+    f:close()
+    assert.equals("tmp-file-location", json.decode(content).probe)
+
+    assert.is_true(
+      vim.wait(2000, function()
+        return done
+      end, 10),
+      "on_body should fire within the timeout"
+    )
+
+    assert.is_nil(vim.uv.fs_stat(created[1]), "request body file must be removed after completion")
   end)
 end)
 

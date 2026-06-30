@@ -93,10 +93,9 @@ end
 
 --- Apply syntax rules and highlights from all registered rewriters.
 --- Iterates rewriters that define get_vim_syntax, generates Vim syntax commands,
---- and applies highlights via the provided set_highlight callback.
+--- and sets highlight groups from the rule's HlOp.
 ---@param config flemma.Config
----@param set_highlight fun(group_name: string, value: string|table)
-function M.apply(config, set_highlight)
+function M.apply(config)
   local rewriters = preprocessor.get_all()
 
   for _, rewriter in ipairs(rewriters) do
@@ -107,7 +106,9 @@ function M.apply(config, set_highlight)
         if cmd ~= "" then
           vim.cmd(cmd)
         end
-        set_highlight(rule.group, rule.hl)
+        ---@type flemma.hl.HlOp
+        local hl_op = rule.hl
+        hl_op:set(rule.group)
       end
     end
   end

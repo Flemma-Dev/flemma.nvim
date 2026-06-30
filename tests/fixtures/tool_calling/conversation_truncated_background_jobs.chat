@@ -28,13 +28,13 @@ In this Flemma.nvim checkout, calculate 2+2 and 4+4, then check the Lua module c
 **Tool Use:** `bash` (`toolu_count_lua_modules`)
 
 ```json
-{"label":"counting Lua modules","command":"find lua/flemma -name '*.lua' | wc -l","background":true,"timeout":30}
+{"label":"counting Lua modules","command":"find lua/flemma -name '*.lua' | wc -l","flemma.background":true,"timeout":30}
 ```
 
 **Tool Use:** `bash` (`toolu_git_branch`)
 
 ```json
-{"label":"checking git branch","command":"git branch --show-current","background":true,"timeout":30}
+{"label":"checking git branch","command":"git branch --show-current","flemma.background":true,"timeout":30}
 ```
 
 <thinking>

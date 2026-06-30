@@ -6,13 +6,18 @@ local config_facade
 describe("flemma.secrets.context", function()
   before_each(function()
     package.loaded["flemma.secrets.context"] = nil
+    package.loaded["flemma.secrets"] = nil
+    package.loaded["flemma.secrets.registry"] = nil
+    package.loaded["flemma.secrets.resolvers.gcloud"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.schema"] = nil
     config_facade = require("flemma.config")
-    local schema = require("flemma.config.schema")
-    config_facade.init(schema)
+    config_facade.init(require("flemma.config.schema"))
+    -- gcloud's default now materializes when its resolver registers (the schema
+    -- moved from a static field to a DISCOVER-resolved one owned by the resolver).
+    require("flemma.secrets").register("flemma.secrets.resolvers.gcloud")
     context = require("flemma.secrets.context")
   end)
 

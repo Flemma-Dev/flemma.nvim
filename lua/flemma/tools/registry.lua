@@ -38,6 +38,10 @@ local M = {}
 ---@class flemma.StructuredToolPreview
 ---@field label? string  Human-readable intent — shown italic, truncated last
 ---@field detail? string|string[] Raw technical summary — shown dimmer, truncated first. Tables are joined with double-space upstream.
+---@field highlight? flemma.StructuredToolPreview.Highlight
+
+---@class flemma.StructuredToolPreview.Highlight
+---@field lang string TreeSitter language name (e.g., "bash", "lua", "python")
 
 ---@alias flemma.tools.ToolPreview string | flemma.StructuredToolPreview
 
@@ -51,11 +55,10 @@ local M = {}
 ---@field input_schema flemma.tools.JSONSchema|flemma.schema.Node JSON Schema table or schema DSL node (serialized via to_json_schema())
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
----@field backgroundable? boolean Set to false to prevent background execution even though tool is async (default true for async tools)
 ---@field enabled? boolean|fun(config: flemma.Config): boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools). When a function, evaluated at query time with the resolved config.
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
----@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
+---@field capabilities? string[] Declarative capability tags (verb_target convention) queried by resolvers, policies, and harness injection
 ---@field format_preview? fun(input: table<string, any>, max_length: integer): flemma.tools.ToolPreview Custom preview body generator. Returns a plain string (backward-compatible) or a StructuredToolPreview {label?, detail?}. When a string is returned, label is never auto-promoted. When StructuredToolPreview is returned, label is shown italic and detail is shown dimmer in fold text.
 ---@field personalities? table<string, table<string, string|string[]>> Personality-scoped parts keyed by personality name, then by part name
 ---@field metadata? flemma.tools.ToolMetadata Tool metadata including config schema for DISCOVER resolution

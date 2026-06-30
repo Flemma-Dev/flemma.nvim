@@ -4,7 +4,6 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local path_util = require("flemma.utilities.path")
-local notify = require("flemma.notify")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
 local sink = require("flemma.sink")
@@ -418,7 +417,8 @@ end
 ---@param self flemma.provider.Anthropic
 ---@return string[]
 function M.get_request_headers(self)
-  local api_key = self:get_api_key()
+  local credential = self:resolve_credential()
+  local api_key = credential and credential.value
 
   return {
     "x-api-key: " .. api_key,
@@ -638,132 +638,6 @@ function M._process_data(self, data, _parsed, callbacks)
   then
     log.warn("anthropic._process_data(): Unknown event type: " .. log.inspect(data.type))
   end
-end
-
----@param content string
----@return string
-local function import_prepare_json(content)
-  local lines = {}
-  -- Process each line individually
-  for line in content:gmatch("[^\r\n]+") do
-    -- Only look for unquoted property names at the start of the line
-    line = line:gsub("^%s*([%w_%.-]+)%s*:", function(prop)
-      return string.format('"%s":', prop)
-    end)
-    lines[#lines + 1] = line
-  end
-
-  -- Join lines back together with spaces
-  return table.concat(lines, " ")
-end
-
----@param lines string[]
----@return string
-local function import_extract_content(lines)
-  local content = {}
-  local capturing = false
-
-  for _, line in ipairs(lines) do
-    if line:match("anthropic%.messages%.create%(") then
-      capturing = true
-      -- Get everything after the opening parenthesis
-      local after_paren = line:match("%((.*)$")
-      if after_paren then
-        content[#content + 1] = after_paren
-      end
-    elseif capturing then
-      if line:match("^%s*%}%)%s*;%s*$") then
-        -- Last line - only take the closing brace
-        content[#content + 1] = "}"
-        break
-      else
-        content[#content + 1] = line
-      end
-    end
-  end
-
-  return table.concat(content, "\n")
-end
-
----@param content string|table
----@return string
-local function import_get_message_text(content)
-  if type(content) == "string" then
-    return content
-  elseif type(content) == "table" then
-    if content[1] and content[1].type == "text" then
-      return content[1].text
-    end
-  end
-  return ""
-end
-
----@param data table<string, any>
----@return string
-local function import_generate_chat(data)
-  local output = {}
-
-  -- Add system message if present
-  if data.system then
-    table.insert(output, "@System:")
-    table.insert(output, data.system)
-    table.insert(output, "")
-  end
-
-  -- Process messages
-  for _, msg in ipairs(data.messages or {}) do
-    local role_marker = msg.role == "user" and "@You:" or "@Assistant:"
-    local text = import_get_message_text(msg.content)
-
-    -- Add blank line before message if needed
-    if #output > 0 and output[#output] ~= "" then
-      table.insert(output, "")
-    end
-
-    table.insert(output, role_marker)
-    table.insert(output, text)
-  end
-
-  return table.concat(output, "\n")
-end
-
--- Try to import from buffer lines (Claude Workbench format)
----@param lines string[]
----@return string|nil
-function M.try_import_from_buffer(lines)
-  -- Extract and prepare content
-  local content = import_extract_content(lines)
-  if #content == 0 then
-    notify.error("No Anthropic API call found in buffer.")
-    return nil
-  end
-
-  local json_str = import_prepare_json(content)
-
-  -- Parse JSON with better error handling
-  local ok, data = pcall(json.decode, json_str)
-  if not ok then
-    -- Log the problematic JSON string for debugging
-    -- Get temp dir and path separator
-    local tmp_path = os.tmpname()
-    local tmp_dir = tmp_path:match("^(.+)[/\\]")
-    local sep = tmp_path:match("[/\\]")
-    local debug_file = io.open(tmp_dir .. sep .. "flemma_import_debug.log", "w")
-    if debug_file then
-      debug_file:write("Original content:\n")
-      debug_file:write(content .. "\n\n")
-      debug_file:write("Prepared JSON:\n")
-      debug_file:write(json_str .. "\n")
-      debug_file:close()
-    end
-
-    notify.error("Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log")
-    return nil
-  end
-
-  -- Generate chat content
-  local chat_content = import_generate_chat(data)
-  return chat_content
 end
 
 ---Query Anthropic's /v1/messages/count_tokens endpoint and report the result

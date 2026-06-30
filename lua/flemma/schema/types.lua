@@ -6,6 +6,7 @@ local M = {}
 
 local symbols = require("flemma.symbols")
 local loader = require("flemma.loader")
+local hl = require("flemma.hl")
 
 -- ---------------------------------------------------------------------------
 -- Coerce context type (used by Node:coerce and consumers)
@@ -1443,6 +1444,62 @@ function LiteralNode:to_json_schema()
 end
 
 -- ---------------------------------------------------------------------------
+-- HlOpNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.schema.HlOpNode : flemma.schema.Node
+---@field _default? flemma.hl.HlOp
+local HlOpNode = setmetatable({}, { __index = Node })
+HlOpNode.__index = HlOpNode
+
+---@return boolean
+function HlOpNode:has_default()
+  return self._default ~= nil
+end
+
+---@return flemma.hl.HlOp|nil
+function HlOpNode:materialize()
+  return self._default
+end
+
+---@param value any
+---@return boolean, string?
+function HlOpNode:validate_value(value)
+  if type(value) == "string" then
+    if value == "" then
+      return false, "highlight string must not be empty"
+    end
+    if value:sub(1, 1) == "#" and not value:match("^#%x%x%x%x%x%x$") then
+      return false, "invalid hex color (expected #RRGGBB): " .. value
+    end
+    return true
+  end
+  if type(value) ~= "table" then
+    return false, "expected flemma.hl.HlOp or string, got " .. type(value)
+  end
+  if type(value.get) ~= "function" or type(value.set) ~= "function" then
+    return false, "expected flemma.hl.HlOp instance (missing :get() or :set())"
+  end
+  return true
+end
+
+---@param default? flemma.hl.HlOp
+---@return flemma.schema.HlOpNode
+function HlOpNode.new(default)
+  local node = setmetatable({ _default = default }, HlOpNode)
+  node._coerce = function(value, _ctx)
+    if type(value) ~= "string" then
+      return value
+    end
+    if value:match("^#%x%x%x%x%x%x$") then
+      return hl.hex(value)
+    end
+    return hl.link(value)
+  end
+  return node
+end
+
+-- ---------------------------------------------------------------------------
 -- Cross-type chainable modifiers
 -- ---------------------------------------------------------------------------
 
@@ -1480,5 +1537,6 @@ M.LoadableNode = LoadableNode
 M.FuncNode = FuncNode
 M.LiteralNode = LiteralNode
 M.NullableNode = NullableNode
+M.HlOpNode = HlOpNode
 
 return M

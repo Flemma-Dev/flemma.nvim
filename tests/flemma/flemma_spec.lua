@@ -120,10 +120,11 @@ describe("flemma.setup", function()
 
   it("merges user config with defaults", function()
     local flemma = require("flemma")
+    local h = require("flemma.hl")
     flemma.setup({
       provider = "openai",
       highlights = {
-        user = "#ff0000",
+        user = h.hex("#ff0000"),
       },
     })
 
@@ -131,10 +132,13 @@ describe("flemma.setup", function()
 
     -- Check that user-provided values are set
     assert.are.equal("openai", config.provider)
-    assert.are.equal("#ff0000", config.highlights.user)
+    assert.same({ fg = "#ff0000" }, config.highlights.user:get())
 
-    -- Check that default values are preserved
-    assert.are.equal("Special", config.highlights.system)
+    -- Check that default values are preserved (system default derives fg from Special, no bg)
+    local system_hl = config.highlights.system:get()
+    assert.is_not_nil(system_hl.fg, "system highlight should have fg")
+    assert.is_nil(system_hl.bg, "system highlight should not carry bg")
+    assert.is_nil(system_hl.link, "system highlight should resolve to attrs, not a link")
     assert.are.equal(true, config.ui.pricing.enabled)
   end)
 

@@ -89,6 +89,7 @@ s.union(s.list(s.string()), s.func(), s.string())
 ```
 
 **Key coerce patterns in the schema:**
+
 - `tools.auto_approve` — expands `$preset` strings to tool name lists
 - `tools.autopilot` — coerces `boolean` to `{ enabled = bool }`
 - Highlight fields — union of string (color) or object (full highlight spec)
@@ -96,6 +97,7 @@ s.union(s.list(s.string()), s.func(), s.string())
 ## Adding a New Config Field
 
 1. **Edit `definition.lua`** — add the field to the appropriate `s.object()`:
+
    ```lua
    my_feature = s.object({
      enabled = s.boolean(false),
@@ -104,12 +106,14 @@ s.union(s.list(s.string()), s.func(), s.string())
    ```
 
 2. **If the field belongs to a provider/tool/sandbox backend** — add `metadata.config_schema` on the module itself:
+
    ```lua
    -- In the module file
    M.metadata.config_schema = s.object({
      my_option = s.optional(s.string("default")),
    })
    ```
+
    The DISCOVER callback in `definition.lua` will resolve it lazily when first accessed.
 
 3. **Run `make qa`** — the type checker and tests will catch schema mismatches.
@@ -132,18 +136,18 @@ Aliases resolve to canonical paths only, never to other aliases. They work at an
 
 Every node supports:
 
-| Method | Returns | Purpose |
-|--------|---------|---------|
-| `:materialize()` | default value or nil | Build default tree |
-| `:validate_value(v)` | `ok, err?` | Type check a value |
-| `:is_list()` | boolean | True for ListNode (and UnionNode with list branch) |
-| `:is_object()` | boolean | True for ObjectNode |
-| `:has_default()` | boolean | Whether node carries a default |
-| `:get_child_schema(key)` | Node or nil | ObjectNode child lookup |
-| `:get_item_schema()` | Node or nil | ListNode item type |
-| `:resolve_alias(key)` | canonical path or nil | ObjectNode alias lookup |
-| `:has_discover()` | boolean | ObjectNode has DISCOVER callback |
-| `:all_known_fields()` | iterator | ObjectNode static + cached DISCOVER fields |
+| Method                   | Returns               | Purpose                                            |
+| ------------------------ | --------------------- | -------------------------------------------------- |
+| `:materialize()`         | default value or nil  | Build default tree                                 |
+| `:validate_value(v)`     | `ok, err?`            | Type check a value                                 |
+| `:is_list()`             | boolean               | True for ListNode (and UnionNode with list branch) |
+| `:is_object()`           | boolean               | True for ObjectNode                                |
+| `:has_default()`         | boolean               | Whether node carries a default                     |
+| `:get_child_schema(key)` | Node or nil           | ObjectNode child lookup                            |
+| `:get_item_schema()`     | Node or nil           | ListNode item type                                 |
+| `:resolve_alias(key)`    | canonical path or nil | ObjectNode alias lookup                            |
+| `:has_discover()`        | boolean               | ObjectNode has DISCOVER callback                   |
+| `:all_known_fields()`    | iterator              | ObjectNode static + cached DISCOVER fields         |
 
 ## Navigation
 

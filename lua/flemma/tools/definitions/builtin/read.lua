@@ -38,7 +38,7 @@ M.definitions = {
       },
     },
     async = false,
-    capabilities = { "template_tool_result" },
+    capabilities = { "emits_template" },
     ---@return flemma.tools.ToolPreview
     format_preview = function(input)
       local detail_parts = { input.path }

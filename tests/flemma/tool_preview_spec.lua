@@ -1,5 +1,6 @@
 --- Tests for tool use preview virtual lines inside empty tool_result placeholder fences
---- Covers: format_tool_preview formatting and add_tool_previews extmark placement
+--- Covers: tool-use body/preview formatting (get_tool_use_body, format_tool_preview_body,
+--- format_tool_preview_multiline) and add_tool_previews extmark placement
 
 -- Clear module caches for clean state
 package.loaded["flemma.ui"] = nil
@@ -48,225 +49,6 @@ describe("format_content_preview", function()
 end)
 
 describe("Tool Preview", function()
-  describe("format_tool_preview", function()
-    it("formats single-key input as tool_name: key=value", function()
-      local result = ui_preview.format_tool_preview("run_cmd", { command = "ls -la /tmp" })
-      assert.are.equal('run_cmd: command="ls -la /tmp"', result)
-    end)
-
-    it("formats multi-key input with sorted keys", function()
-      local result = ui_preview.format_tool_preview("search", { query = "foo", path = "./src" })
-      -- Keys are sorted alphabetically for determinism
-      assert.are.equal('search: path="./src", query="foo"', result)
-    end)
-
-    it("truncates long values to max_length", function()
-      local long_command = string.rep("a", 200)
-      local result = ui_preview.format_tool_preview("bash", { command = long_command }, 60)
-      local width = vim.api.nvim_strwidth(result)
-      assert.is_truthy(width <= 60, "Result should be at most 60 display cols, got " .. width)
-      assert.is_truthy(result:match("…$"), "Should end with truncation marker")
-    end)
-
-    it("uses default max_length when not specified", function()
-      local long_command = string.rep("a", 200)
-      local result = ui_preview.format_tool_preview("bash", { command = long_command })
-      local width = vim.api.nvim_strwidth(result)
-      assert.is_truthy(width <= 80, "Result should be at most 80 display cols (default), got " .. width)
-      assert.is_truthy(result:match("…$"), "Should end with truncation marker")
-    end)
-
-    it("handles empty input table", function()
-      local result = ui_preview.format_tool_preview("noop", {})
-      assert.are.equal("noop", result)
-    end)
-
-    it("formats non-string values with tostring", function()
-      local result = ui_preview.format_tool_preview("math_eval", { expression = "1+1", precision = 2 })
-      -- Keys sorted: expression, precision
-      assert.are.equal('math_eval: expression="1+1", precision=2', result)
-    end)
-
-    it("formats boolean values without quotes", function()
-      local result = ui_preview.format_tool_preview("toggle", { enabled = true })
-      assert.are.equal("toggle: enabled=true", result)
-    end)
-
-    it("formats array values as [N items]", function()
-      local result = ui_preview.format_tool_preview("tool", { items = { "a", "b", "c" } })
-      assert.are.equal("tool: items=[3 items]", result)
-    end)
-
-    it("formats single-element array as [1 item]", function()
-      local result = ui_preview.format_tool_preview("tool", { items = { "only" } })
-      assert.are.equal("tool: items=[1 item]", result)
-    end)
-
-    it("formats object values with key preview", function()
-      local result = ui_preview.format_tool_preview("tool", { config = { host = "localhost", port = 8080 } })
-      assert.are.equal("tool: config={host, port}", result)
-    end)
-
-    it("formats object values with +N more for >2 keys", function()
-      local result = ui_preview.format_tool_preview("tool", { config = { a = 1, b = 2, c = 3, d = 4 } })
-      assert.are.equal("tool: config={a, b, +2 more}", result)
-    end)
-
-    it("formats empty table values as {}", function()
-      local result = ui_preview.format_tool_preview("tool", { opts = {} })
-      assert.are.equal("tool: opts={}", result)
-    end)
-
-    it("lists scalar keys before table keys", function()
-      local result = ui_preview.format_tool_preview("tool", { x = 10, y = { 1, 2, 3 }, z = "hi" })
-      assert.are.equal('tool: x=10, z="hi", y=[3 items]', result)
-    end)
-
-    it("escapes quotes in string values", function()
-      local result = ui_preview.format_tool_preview("run_cmd", { command = 'echo "hello"' })
-      assert.are.equal('run_cmd: command="echo \\"hello\\""', result)
-    end)
-
-    it("collapses newlines in string values", function()
-      local result = ui_preview.format_tool_preview("run_cmd", { command = "echo hello\necho world" })
-      assert.are.equal('run_cmd: command="echo hello↵echo world"', result)
-    end)
-
-    it("uses custom format_preview from tool registry", function()
-      local registry = require("flemma.tools.registry")
-      registry.register("custom_tool", {
-        name = "custom_tool",
-        description = "test tool",
-        input_schema = { type = "object", properties = {} },
-        format_preview = function(input)
-          return "custom: " .. input.key
-        end,
-      })
-
-      local result = ui_preview.format_tool_preview("custom_tool", { key = "value" })
-      assert.are.equal("custom_tool: custom: value", result)
-
-      -- Clean up
-      registry.unregister("custom_tool")
-    end)
-
-    it("falls back to generic formatting when no format_preview", function()
-      local result = ui_preview.format_tool_preview("unknown_tool", { key = "value" })
-      assert.are.equal('unknown_tool: key="value"', result)
-    end)
-
-    it("renders label — detail with em dash when structured preview has both fields", function()
-      local registry = require("flemma.tools.registry")
-      registry.register("emtool", {
-        name = "emtool",
-        description = "test",
-        input_schema = { type = "object", properties = {}, required = {} },
-        format_preview = function(_input)
-          return { label = "My label", detail = "my detail" }
-        end,
-      })
-      local result = ui_preview.format_tool_preview("emtool", {}, 80)
-      -- Expected: "emtool: My label — my detail"
-      assert.is_truthy(result:match("My label"), "should contain label")
-      assert.is_truthy(result:match("my detail"), "should contain detail")
-      assert.is_truthy(result:match("—"), "should contain em dash separator")
-
-      registry.unregister("emtool")
-    end)
-
-    it("renders label only when structured preview has no detail", function()
-      local registry = require("flemma.tools.registry")
-      registry.register("labeltool", {
-        name = "labeltool",
-        description = "test",
-        input_schema = { type = "object", properties = {}, required = {} },
-        format_preview = function(_input)
-          return { label = "Only label" }
-        end,
-      })
-      local result = ui_preview.format_tool_preview("labeltool", {}, 80)
-      assert.is_truthy(result:match("Only label"))
-      assert.is_falsy(result:match("—"))
-
-      registry.unregister("labeltool")
-    end)
-
-    it("renders detail only (no em dash) when structured preview has no label", function()
-      local registry = require("flemma.tools.registry")
-      registry.register("detailtool", {
-        name = "detailtool",
-        description = "test",
-        input_schema = { type = "object", properties = {}, required = {} },
-        format_preview = function(_input)
-          return { detail = "just detail" }
-        end,
-      })
-      local result = ui_preview.format_tool_preview("detailtool", {}, 80)
-      assert.is_truthy(result:match("just detail"))
-      assert.is_falsy(result:match("—"))
-
-      registry.unregister("detailtool")
-    end)
-
-    it("collapses newlines in custom format_preview output", function()
-      local registry = require("flemma.tools.registry")
-      registry.register("newline_tool", {
-        name = "newline_tool",
-        description = "test tool",
-        input_schema = { type = "object", properties = {} },
-        format_preview = function(_input)
-          return "line1\nline2"
-        end,
-      })
-
-      local result = ui_preview.format_tool_preview("newline_tool", {})
-      assert.are.equal("newline_tool: line1↵line2", result)
-
-      registry.unregister("newline_tool")
-    end)
-
-    it("truncates custom format_preview output to max_length", function()
-      local registry = require("flemma.tools.registry")
-      registry.register("long_tool", {
-        name = "long_tool",
-        description = "test tool",
-        input_schema = { type = "object", properties = {} },
-        format_preview = function(_input)
-          return string.rep("x", 200)
-        end,
-      })
-
-      local result = ui_preview.format_tool_preview("long_tool", {}, 40)
-      local width = vim.api.nvim_strwidth(result)
-      assert.is_truthy(width <= 40, "Should truncate to max_length, got " .. width)
-      assert.is_truthy(result:match("^long_tool: "), "Should start with tool name prefix")
-      assert.is_truthy(result:match("…$"), "Should end with truncation marker")
-
-      registry.unregister("long_tool")
-    end)
-
-    it("passes available width (after name prefix) to format_preview", function()
-      local registry = require("flemma.tools.registry")
-      local received_max_length
-
-      registry.register("width_tool", {
-        name = "width_tool",
-        description = "test tool",
-        input_schema = { type = "object", properties = {} },
-        format_preview = function(_input, max_length)
-          received_max_length = max_length
-          return "body"
-        end,
-      })
-
-      ui_preview.format_tool_preview("width_tool", {}, 50)
-      -- "width_tool: " is 12 chars, so available should be 50 - 12 = 38
-      assert.are.equal(38, received_max_length)
-
-      registry.unregister("width_tool")
-    end)
-  end)
-
   describe("add_tool_previews", function()
     -- Access the preview namespace
     local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
@@ -466,105 +248,6 @@ describe("Tool Preview", function()
       assert.are.equal(0, #all_marks, "Should NOT place preview for resolved tool results")
     end)
   end)
-
-  describe("built-in tool format_preview", function()
-    before_each(function()
-      package.loaded["flemma"] = nil
-      package.loaded["flemma.ui.preview"] = nil
-      package.loaded["flemma.tools.approval"] = nil
-      package.loaded["flemma.tools.registry"] = nil
-      package.loaded["flemma.tools"] = nil
-      package.loaded["extras.flemma.tools.calculator"] = nil
-      package.loaded["flemma.tools.definitions.builtin.bash"] = nil
-      package.loaded["flemma.tools.definitions.builtin.read"] = nil
-      package.loaded["flemma.tools.definitions.builtin.edit"] = nil
-      package.loaded["flemma.tools.definitions.builtin.write"] = nil
-
-      require("flemma").setup({})
-      require("flemma.tools").register("extras.flemma.tools.calculator")
-      ui_preview = require("flemma.ui.preview")
-    end)
-
-    it("calculator shows expression", function()
-      local result = ui_preview.format_tool_preview("calculator", { expression = "2 + 2 * 3" })
-      assert.are.equal("calculator: 2 + 2 * 3", result)
-    end)
-
-    it("calculator_async shows expression and delay", function()
-      local result = ui_preview.format_tool_preview("calculator_async", { expression = "sqrt(16)", delay = 500 })
-      assert.are.equal("calculator_async: sqrt(16) — ⏲500ms", result)
-    end)
-
-    it("calculator_async omits delay when nil", function()
-      local result = ui_preview.format_tool_preview("calculator_async", { expression = "1+1" })
-      assert.are.equal("calculator_async: 1+1", result)
-    end)
-
-    it("bash shows $ command — label with label", function()
-      local result = ui_preview.format_tool_preview("bash", { command = "ls -la /tmp", label = "list files" })
-      assert.are.equal("bash: $ ls -la /tmp — list files", result)
-    end)
-
-    it("bash omits label when not provided", function()
-      local result = ui_preview.format_tool_preview("bash", { command = "echo hello" })
-      assert.are.equal("bash: $ echo hello", result)
-    end)
-
-    it("read shows path — label with offset and limit", function()
-      local result = ui_preview.format_tool_preview(
-        "read",
-        { path = "./src/main.lua", offset = 10, limit = 50, label = "read config" }
-      )
-      assert.are.equal("read: ./src/main.lua  +10,50 — read config", result)
-    end)
-
-    it("read shows path with offset only", function()
-      local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", offset = 10 })
-      assert.are.equal("read: ./src/main.lua  +10", result)
-    end)
-
-    it("read shows path with limit only", function()
-      local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", limit = 50 })
-      assert.are.equal("read: ./src/main.lua  +0,50", result)
-    end)
-
-    it("read shows path — label without offset or limit", function()
-      local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", label = "check file" })
-      assert.are.equal("read: ./src/main.lua — check file", result)
-    end)
-
-    it("edit shows path — label with label", function()
-      local result = ui_preview.format_tool_preview(
-        "edit",
-        { path = "./src/main.lua", oldText = "foo", newText = "bar", label = "fix typo" }
-      )
-      assert.are.equal("edit: ./src/main.lua — fix typo", result)
-    end)
-
-    it("edit shows plain path without label", function()
-      local result =
-        ui_preview.format_tool_preview("edit", { path = "./src/main.lua", oldText = "foo", newText = "bar" })
-      assert.are.equal("edit: ./src/main.lua", result)
-    end)
-
-    it("write shows path — label with byte size and label", function()
-      local content = string.rep("x", 1536)
-      local result =
-        ui_preview.format_tool_preview("write", { path = "./src/main.lua", content = content, label = "create module" })
-      assert.are.equal("write: ./src/main.lua  (1.5KB) — create module", result)
-    end)
-
-    it("write shows bytes for small content", function()
-      local result = ui_preview.format_tool_preview("write", { path = "./readme.txt", content = "hello" })
-      assert.are.equal("write: ./readme.txt  (5B)", result)
-    end)
-
-    it("write shows path — label with size when content is empty", function()
-      local result =
-        ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
-      assert.are.equal("write: ./empty.txt  (0B) — create empty", result)
-    end)
-  end)
 end)
 
 describe("get_tool_use_body structured return", function()
@@ -635,6 +318,389 @@ describe("get_tool_use_body structured return", function()
   end)
 end)
 
+describe("built-in tool format_preview (via get_tool_use_body)", function()
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.ui.preview"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["extras.flemma.tools.calculator"] = nil
+    package.loaded["flemma.tools.definitions.builtin.bash"] = nil
+    package.loaded["flemma.tools.definitions.builtin.read"] = nil
+    package.loaded["flemma.tools.definitions.builtin.edit"] = nil
+    package.loaded["flemma.tools.definitions.builtin.write"] = nil
+
+    require("flemma").setup({})
+    require("flemma.tools").register("extras.flemma.tools.calculator")
+    ui_preview = require("flemma.ui.preview")
+  end)
+
+  it("calculator shows expression as detail", function()
+    local result = ui_preview.get_tool_use_body("calculator", { expression = "2 + 2 * 3" }, 80)
+    assert.are.equal("2 + 2 * 3", result.detail)
+    assert.is_nil(result.label)
+  end)
+
+  it("calculator_async shows expression detail and delay label", function()
+    local result = ui_preview.get_tool_use_body("calculator_async", { expression = "sqrt(16)", delay = 500 }, 80)
+    assert.are.equal("sqrt(16)", result.detail)
+    assert.are.equal("⏲500ms", result.label)
+  end)
+
+  it("calculator_async omits delay label when nil", function()
+    local result = ui_preview.get_tool_use_body("calculator_async", { expression = "1+1" }, 80)
+    assert.are.equal("1+1", result.detail)
+    assert.is_nil(result.label)
+  end)
+
+  it("bash shows $ command detail with label", function()
+    local result = ui_preview.get_tool_use_body("bash", { command = "ls -la /tmp", label = "list files" }, 80)
+    assert.are.equal("$ ls -la /tmp", result.detail)
+    assert.are.equal("list files", result.label)
+  end)
+
+  it("bash omits label when not provided", function()
+    local result = ui_preview.get_tool_use_body("bash", { command = "echo hello" }, 80)
+    assert.are.equal("$ echo hello", result.detail)
+    assert.is_nil(result.label)
+  end)
+
+  it("read shows path with offset and limit range", function()
+    local result = ui_preview.get_tool_use_body(
+      "read",
+      { path = "./src/main.lua", offset = 10, limit = 50, label = "read config" },
+      80
+    )
+    assert.are.equal("./src/main.lua  +10,50", result.detail)
+    assert.are.equal("read config", result.label)
+  end)
+
+  it("read shows path with offset only", function()
+    local result = ui_preview.get_tool_use_body("read", { path = "./src/main.lua", offset = 10 }, 80)
+    assert.are.equal("./src/main.lua  +10", result.detail)
+  end)
+
+  it("read shows path with limit only", function()
+    local result = ui_preview.get_tool_use_body("read", { path = "./src/main.lua", limit = 50 }, 80)
+    assert.are.equal("./src/main.lua  +0,50", result.detail)
+  end)
+
+  it("read shows plain path with label", function()
+    local result = ui_preview.get_tool_use_body("read", { path = "./src/main.lua", label = "check file" }, 80)
+    assert.are.equal("./src/main.lua", result.detail)
+    assert.are.equal("check file", result.label)
+  end)
+
+  it("edit shows path detail with label", function()
+    local result = ui_preview.get_tool_use_body(
+      "edit",
+      { path = "./src/main.lua", oldText = "foo", newText = "bar", label = "fix typo" },
+      80
+    )
+    assert.are.equal("./src/main.lua", result.detail)
+    assert.are.equal("fix typo", result.label)
+  end)
+
+  it("edit shows plain path without label", function()
+    local result =
+      ui_preview.get_tool_use_body("edit", { path = "./src/main.lua", oldText = "foo", newText = "bar" }, 80)
+    assert.are.equal("./src/main.lua", result.detail)
+    assert.is_nil(result.label)
+  end)
+
+  it("write shows path with byte size and label", function()
+    local content = string.rep("x", 1536)
+    local result =
+      ui_preview.get_tool_use_body("write", { path = "./src/main.lua", content = content, label = "create module" }, 80)
+    assert.are.equal("./src/main.lua  (1.5KB)", result.detail)
+    assert.are.equal("create module", result.label)
+  end)
+
+  it("write shows bytes for small content", function()
+    local result = ui_preview.get_tool_use_body("write", { path = "./readme.txt", content = "hello" }, 80)
+    assert.are.equal("./readme.txt  (5B)", result.detail)
+  end)
+
+  it("write shows size when content is empty with label", function()
+    local result =
+      ui_preview.get_tool_use_body("write", { path = "./empty.txt", content = "", label = "create empty" }, 80)
+    assert.are.equal("./empty.txt  (0B)", result.detail)
+    assert.are.equal("create empty", result.label)
+  end)
+end)
+
+describe("format_tool_preview_multiline", function()
+  local registry
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    ui_preview = require("flemma.ui.preview")
+    registry = require("flemma.tools.registry")
+  end)
+
+  after_each(function()
+    registry.clear()
+  end)
+
+  it("returns single-line array for simple input", function()
+    local lines = ui_preview.format_tool_preview_multiline("edit", { path = "src/main.lua" }, 80)
+    assert.are.equal(1, #lines)
+    assert.is_truthy(lines[1]:find("edit:"), "first line should have tool name prefix")
+    assert.is_truthy(lines[1]:find("src/main.lua"), "first line should have detail")
+  end)
+
+  it("splits multi-line detail into separate entries", function()
+    registry.register("multiline_tool", {
+      name = "multiline_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("multiline_tool", {
+      body = "line1\nline2\nline3",
+    }, 80)
+    assert.are.equal(3, #lines)
+    assert.is_truthy(lines[1]:find("multiline_tool:"), "first line should have tool name prefix")
+    assert.is_falsy(lines[2]:find("multiline_tool:"), "second line should not have prefix")
+  end)
+
+  it("indents continuation lines by name_prefix width", function()
+    registry.register("bash", {
+      name = "bash",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("bash", {
+      body = "$ echo hello\necho world\necho done",
+    }, 80)
+    assert.are.equal(3, #lines)
+    local prefix_width = #"bash: "
+    assert.are.equal("bash: $ echo hello", lines[1])
+    assert.are.equal(string.rep(" ", prefix_width) .. "echo world", lines[2])
+    assert.are.equal(string.rep(" ", prefix_width) .. "echo done", lines[3])
+  end)
+
+  it("indents continuation lines proportional to tool name length", function()
+    registry.register("my_long_tool_name", {
+      name = "my_long_tool_name",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("my_long_tool_name", {
+      body = "first\nsecond",
+    }, 80)
+    assert.are.equal(2, #lines)
+    local prefix_width = #"my_long_tool_name: "
+    assert.are.equal("my_long_tool_name: first", lines[1])
+    assert.are.equal(string.rep(" ", prefix_width) .. "second", lines[2])
+  end)
+
+  it("indents the omission indicator line", function()
+    local content_lines = {}
+    for i = 1, 25 do
+      content_lines[i] = "line" .. i
+    end
+
+    registry.register("ind_tool", {
+      name = "ind_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("ind_tool", {}, 80)
+    assert.are.equal(13, #lines)
+    local prefix_width = #"ind_tool: "
+    local indent = string.rep(" ", prefix_width)
+    assert.is_truthy(lines[7]:find("more lines"), "middle line should be truncation indicator")
+    assert.are.equal(indent, lines[7]:sub(1, prefix_width), "omission indicator should be indented")
+  end)
+
+  it("truncates indented continuation lines to available width", function()
+    registry.register("tt", {
+      name = "tt",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local max_length = 20
+    local long_line = string.rep("x", 30)
+    local lines = ui_preview.format_tool_preview_multiline("tt", {
+      body = "short\n" .. long_line,
+    }, max_length)
+    assert.are.equal(2, #lines)
+    local prefix_width = #"tt: "
+    local line2_width = vim.fn.strwidth(lines[2])
+    assert.is_true(line2_width <= max_length, "indented continuation must fit in max_length")
+    assert.are.equal(string.rep(" ", prefix_width), lines[2]:sub(1, prefix_width), "should have indent")
+    assert.is_truthy(lines[2]:find("…"), "truncated content should have ellipsis")
+  end)
+
+  it("does not indent single-line output", function()
+    registry.register("single", {
+      name = "single",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = "one line only" }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("single", {}, 80)
+    assert.are.equal(1, #lines)
+    assert.are.equal("single: one line only", lines[1])
+  end)
+
+  it("indents tail lines in head/tail truncation", function()
+    local content_lines = {}
+    for i = 1, 20 do
+      content_lines[i] = "content_line_" .. i
+    end
+
+    registry.register("ht_tool", {
+      name = "ht_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("ht_tool", {}, 80)
+    local prefix_width = #"ht_tool: "
+    local indent = string.rep(" ", prefix_width)
+    for i = 2, #lines do
+      assert.are.equal(indent, lines[i]:sub(1, prefix_width), "line " .. i .. " should be indented")
+    end
+  end)
+
+  it("caps at 13 lines with head/tail truncation", function()
+    local content_lines = {}
+    for i = 1, 25 do
+      content_lines[i] = "line" .. i
+    end
+
+    registry.register("big_tool", {
+      name = "big_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("big_tool", {}, 80)
+    assert.are.equal(13, #lines)
+    assert.is_truthy(lines[7]:find("more lines"), "middle line should be truncation indicator")
+  end)
+
+  it("shows all lines when content fits in 13 or fewer", function()
+    local content_lines = {}
+    for i = 1, 10 do
+      content_lines[i] = "line" .. i
+    end
+
+    registry.register("medium_tool", {
+      name = "medium_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = table.concat(content_lines, "\n") }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("medium_tool", {}, 80)
+    assert.are.equal(10, #lines)
+  end)
+
+  it("returns label separately from lines", function()
+    registry.register("labeled_tool", {
+      name = "labeled_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { label = input.label, detail = "content" }
+      end,
+    })
+
+    local lines, label = ui_preview.format_tool_preview_multiline("labeled_tool", {
+      label = "greeting",
+    }, 80)
+    assert.are.equal(1, #lines)
+    assert.are.equal("greeting", label)
+  end)
+
+  it("returns label-only line when detail is empty", function()
+    registry.register("label_only_tool", {
+      name = "label_only_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { label = "my label" }
+      end,
+    })
+
+    local lines, label = ui_preview.format_tool_preview_multiline("label_only_tool", {}, 80)
+    assert.are.equal(1, #lines)
+    assert.is_truthy(lines[1]:find("label_only_tool:"), "should have tool name prefix")
+    assert.is_truthy(lines[1]:find("my label"), "should contain label text")
+    assert.is_nil(label)
+  end)
+
+  it("handles trailing newlines without producing empty trailing lines", function()
+    registry.register("trailing_tool", {
+      name = "trailing_tool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { detail = "hello\n\n" }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("trailing_tool", {}, 80)
+    assert.is_true(#lines <= 13)
+    assert.is_truthy(lines[1]:find("trailing_tool:"), "first line should have tool name prefix")
+  end)
+
+  it("uses opts.indent for continuation lines with custom format_preview", function()
+    registry.register("bash", {
+      name = "bash",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(input)
+        return { detail = input.body }
+      end,
+    })
+
+    local lines = ui_preview.format_tool_preview_multiline("bash", {
+      body = "$ echo hello\necho world\necho done",
+    }, 80, { indent = "  " })
+    assert.are.equal(3, #lines)
+    assert.are.equal("bash: $ echo hello", lines[1])
+    assert.are.equal("  echo world", lines[2])
+    assert.are.equal("  echo done", lines[3])
+  end)
+end)
+
 describe("format_tool_preview_body", function()
   it("formats single scalar key", function()
     local result = ui_preview.format_tool_preview_body({ command = "ls -la" })
@@ -668,6 +734,49 @@ describe("format_tool_preview_body", function()
     local name_pos = result:find("name=")
     local options_pos = result:find("options=")
     assert.is_truthy(name_pos < options_pos, "Scalar keys should come before table keys")
+  end)
+
+  it("formats array values as [N items]", function()
+    assert.are.equal("items=[3 items]", ui_preview.format_tool_preview_body({ items = { "a", "b", "c" } }))
+  end)
+
+  it("formats single-element array as [1 item]", function()
+    assert.are.equal("items=[1 item]", ui_preview.format_tool_preview_body({ items = { "only" } }))
+  end)
+
+  it("formats object values with key preview", function()
+    assert.are.equal(
+      "config={host, port}",
+      ui_preview.format_tool_preview_body({ config = { host = "localhost", port = 8080 } })
+    )
+  end)
+
+  it("formats object values with +N more for >2 keys", function()
+    assert.are.equal(
+      "config={a, b, +2 more}",
+      ui_preview.format_tool_preview_body({ config = { a = 1, b = 2, c = 3, d = 4 } })
+    )
+  end)
+
+  it("formats empty table values as {}", function()
+    assert.are.equal("opts={}", ui_preview.format_tool_preview_body({ opts = {} }))
+  end)
+
+  it("escapes quotes in string values", function()
+    assert.are.equal('command="echo \\"hello\\""', ui_preview.format_tool_preview_body({ command = 'echo "hello"' }))
+  end)
+
+  it("collapses newlines in string values", function()
+    assert.are.equal(
+      'command="echo hello↵echo world"',
+      ui_preview.format_tool_preview_body({ command = "echo hello\necho world" })
+    )
+  end)
+
+  it("accounts for multibyte characters in body width", function()
+    local str = require("flemma.utilities.string")
+    local result = ui_preview.format_tool_preview_body({ msg = "你好世界" }, 20)
+    assert.is_truthy(str.strwidth(result) <= 20, "Should fit in 20 display cols")
   end)
 end)
 
@@ -1056,50 +1165,6 @@ describe("format_message_fold_preview", function()
   end)
 end)
 
-describe("format_tool_result_preview", function()
-  local preview_mod
-
-  before_each(function()
-    package.loaded["flemma.ui.preview"] = nil
-    preview_mod = require("flemma.ui.preview")
-  end)
-
-  it("formats result with tool name and content", function()
-    local result = preview_mod.format_tool_result_preview("calculator_async", "4", false)
-    assert.are.equal("calculator_async: 4", result)
-  end)
-
-  it("formats error result with error marker", function()
-    local result = preview_mod.format_tool_result_preview("bash", "command not found", true)
-    assert.are.equal("bash: (error) command not found", result)
-  end)
-
-  it("truncates long content", function()
-    local long_content = string.rep("x", 200)
-    local result = preview_mod.format_tool_result_preview("bash", long_content, false, 40)
-    local width = vim.api.nvim_strwidth(result)
-    assert.is_truthy(width <= 40, "Should fit within max_length, got " .. width)
-    assert.is_truthy(result:match("^bash: "), "Should start with tool name")
-    assert.is_truthy(result:match("…$"), "Should end with truncation marker")
-  end)
-
-  it("shows just tool name when content is empty", function()
-    local result = preview_mod.format_tool_result_preview("bash", "", false)
-    assert.are.equal("bash", result)
-  end)
-
-  it("shows tool name with error marker when content is empty and is_error", function()
-    local result = preview_mod.format_tool_result_preview("bash", "", true)
-    assert.are.equal("bash: (error)", result)
-  end)
-
-  it("collapses multiline content", function()
-    local result = preview_mod.format_tool_result_preview("bash", "line1\nline2\nline3", false)
-    assert.is_truthy(result:match("↵"), "Should collapse newlines")
-    assert.is_truthy(result:match("^bash: "), "Should start with tool name")
-  end)
-end)
-
 describe("format_message_fold_preview with tool results", function()
   local ast = require("flemma.ast")
   local preview_mod
@@ -1319,6 +1384,80 @@ describe("format_message_fold_preview with tool results", function()
     local error_chunk = find_chunk(chunks, "%(error%)")
     assert.is_nil(error_chunk, "Should NOT show error when linked job_result succeeded")
   end)
+
+  it("shows rejected marker for rejected tool_result", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "rm -rf /" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "Tool was rejected.", status = "rejected", start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("%(rejected%)"), "Should contain (rejected) status")
+
+    local rejected_chunk = find_chunk(chunks, "%(rejected%)")
+    assert.is_not_nil(rejected_chunk, "Should have rejected marker chunk")
+    assert.are.equal("FlemmaToolResultRejected", rejected_chunk[2])
+  end)
+
+  it("shows denied marker for denied tool_result", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "rm -rf /" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", {
+        content = "Tool execution was denied.",
+        status = "denied",
+        start_line = 7,
+        end_line = 12,
+      }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("%(denied%)"), "Should contain (denied) status")
+
+    local denied_chunk = find_chunk(chunks, "%(denied%)")
+    assert.is_not_nil(denied_chunk, "Should have denied marker chunk")
+    assert.are.equal("FlemmaToolResultDenied", denied_chunk[2])
+  end)
+
+  it("shows aborted marker for aborted tool_result", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "sleep 999" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "Aborted by user.", status = "aborted", start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("%(aborted%)"), "Should contain (aborted) status")
+
+    local aborted_chunk = find_chunk(chunks, "%(aborted%)")
+    assert.is_not_nil(aborted_chunk, "Should have aborted marker chunk")
+    assert.are.equal("FlemmaToolResultAborted", aborted_chunk[2])
+  end)
+
+  it("shows status marker even when tool_result content is empty", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "rm -rf /" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "", status = "denied", start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local denied_chunk = find_chunk(chunks, "%(denied%)")
+    assert.is_not_nil(denied_chunk, "Should show status marker even with empty content")
+    assert.are.equal("FlemmaToolResultDenied", denied_chunk[2])
+  end)
 end)
 
 describe("multibyte display-width safety", function()
@@ -1351,20 +1490,6 @@ describe("multibyte display-width safety", function()
       local result = preview_mod.format_content_preview("hello 你好 world", 10)
       assert.is_truthy(str.strwidth(result) <= 10, "Should fit in 10 display cols")
       assert.is_truthy(result:match("…$"), "Should end with truncation marker")
-    end)
-  end)
-
-  describe("format_tool_preview", function()
-    it("accounts for multibyte characters in tool body width", function()
-      local result = preview_mod.format_tool_preview("tool", { msg = "你好世界" }, 20)
-      assert.is_truthy(str.strwidth(result) <= 20, "Should fit in 20 display cols")
-    end)
-  end)
-
-  describe("format_tool_result_preview", function()
-    it("accounts for multibyte content in result preview", function()
-      local result = preview_mod.format_tool_result_preview("bash", "你好世界！完成了", false, 20)
-      assert.is_truthy(str.strwidth(result) <= 20, "Should fit in 20 display cols")
     end)
   end)
 

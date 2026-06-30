@@ -1,6 +1,8 @@
 # Sandboxing
 
-Flemma can sandbox tool execution so that shell commands run inside a constrained filesystem. The sandbox mounts the entire rootfs read-only and grants write access only to an explicit allowlist of paths. A misbehaving model cannot `rm -rf /`, overwrite dotfiles, or write outside your project directory.
+Flemma can sandbox tool execution so that shell commands run inside a constrained filesystem. The sandbox is the harness's filesystem boundary — it enables capability-gated auto-approval (`auto_approves_if_sandboxed`) and backs the durable tool result store (`urn:flemma:store`). See [Flemma as a Harness](harness.md#gating-and-coordination-surface) for how sandboxing fits into the broader gating surface.
+
+The sandbox mounts the entire rootfs read-only and grants write access only to an explicit allowlist of paths. A misbehaving model cannot `rm -rf /`, overwrite dotfiles, or write outside your project directory.
 
 > [!IMPORTANT]
 > **The sandbox is damage control, not prevention.** It limits the blast radius when something goes wrong – the model can still do anything within its writable paths, including reading sensitive files and sending them over the network. It will not stop a bash tool from `cat`-ing your `.env` and `curl`-ing it to a remote server. The sandbox protects against the common accidents (a hallucinated `rm`, a stray write to `/etc`), not against a determined adversary. Always review the tools you are using and understand their potential risks, even in a sandboxed environment.
@@ -67,6 +69,7 @@ require("flemma").setup({
       rw_paths = {                          -- Read-write paths (all others are read-only)
         "urn:flemma:cwd",                   --   Vim global working directory (from :cd)
         "urn:flemma:buffer:path",           --   Directory of the current .chat file
+        "urn:flemma:store",                 --   Tool result store directory for the buffer
         "/tmp",                             --   System temp directory
         "${TMPDIR:-/tmp}",                  --   TMPDIR (deduped with /tmp if same)
         "${XDG_CACHE_HOME:-~/.cache}",      --   Package manager caches
@@ -107,11 +110,11 @@ sandbox = {
 
 ### Policy options
 
-| Key                | Default                                                       | Effect                                                                        |
-| ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Everything else is read-only.                   |
-| `network`          | `true`                                                        | Allow network access inside the sandbox.                                      |
-| `allow_privileged` | `false`                                                       | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
+| Key                | Default                                                                           | Effect                                                                        |
+| ------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "urn:flemma:store", "/tmp", ... }` | Paths with read-write access. Everything else is read-only.                   |
+| `network`          | `true`                                                                            | Allow network access inside the sandbox.                                      |
+| `allow_privileged` | `false`                                                                           | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
 
 ### Path variables
 
@@ -125,12 +128,15 @@ Paths in `rw_paths` support three expansion forms:
 
 #### Flemma URN variables
 
-| URN                      | Expansion                                   | Source                                |
-| ------------------------ | ------------------------------------------- | ------------------------------------- |
-| `urn:flemma:cwd`         | Vim's global working directory              | `vim.fn.getcwd()` (set by `:cd`)      |
-| `urn:flemma:buffer:path` | Directory containing the current .chat file | `vim.fn.fnamemodify(bufname, ":p:h")` |
+| URN                      | Expansion                                                   | Source                                                                      |
+| ------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `urn:flemma:cwd`         | Vim's global working directory                              | `vim.fn.getcwd()` (set by `:cd`)                                            |
+| `urn:flemma:buffer:path` | Directory containing the current .chat file                 | `vim.fn.fnamemodify(bufname, ":p:h")`                                       |
+| `urn:flemma:store`       | Tool result store directory for the buffer (created lazily) | `tools.store.path_format` (see [docs/tools.md](tools.md#tool-result-store)) |
 
 After expansion, all paths are normalized to absolute paths with symlinks resolved. Paths subsumed by a parent path are deduplicated (e.g., `/tmp` and `/tmp/foo` collapses to just `/tmp`).
+
+Paths that do not exist on disk at resolution time are then dropped from `rw_paths`. bwrap hard-fails on a `--bind` source it cannot find, so a not-yet-created grant — such as the lazily-created `urn:flemma:store` directory — degrades to read-only rather than breaking every sandboxed command. Both `bash` backends (the 0.11 `jobstart` path and the 0.12+ terminal path) pre-create the store directory before sandbox wrapping so writes there still succeed, but only when the command references `$FLEMMA_TOOLS_STORE_PATH`.
 
 ---
 
@@ -169,9 +175,9 @@ The boolean shorthand (`flemma.opt.sandbox = true`) expands to `{ enabled = true
 
 ## Auto-approval of sandboxed tools
 
-When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"can_auto_approve_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
+When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"auto_approves_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
 
-The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below the unified config resolver (100) and the community default (50). Explicit user preferences — global or per-buffer via frontmatter — always win, because the config resolver reads the merged value from all layers before the sandbox resolver gets a chance to run.
+The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below the unified config resolver (100) and below any third-party resolvers registered at the default priority of 50. Explicit user preferences — global or per-buffer via frontmatter — always win, because the config resolver reads the merged value from all layers before the sandbox resolver gets a chance to run.
 
 ### Opting out
 
@@ -199,7 +205,7 @@ flemma.opt.tools.auto_approve:remove("bash")
 The following conditions must all hold for sandbox auto-approval to activate:
 
 1. **`tools.auto_approve_sandboxed` is not `false`** — the user hasn't globally opted out of sandbox auto-approval.
-2. **The tool declares `can_auto_approve_if_sandboxed`** in its capabilities array. Currently only `bash` ships this capability.
+2. **The tool declares `auto_approves_if_sandboxed`** in its capabilities array. Currently only `bash` ships this capability.
 3. **Frontmatter hasn't excluded the tool.** A `remove` op for the tool (e.g., `flemma.opt.tools.auto_approve:remove("bash")`) opts this buffer out without changing global config.
 4. **Frontmatter hasn't set a full policy** for `tools.auto_approve`. A `set` op signals the user is taking complete ownership of approval for this buffer — sandbox auto-approval steps aside.
 5. **Sandbox is enabled and available** — `sandbox.enabled = true`, no runtime disable override (`:Flemma sandbox:disable`), and a backend (e.g., `bwrap`) validates successfully.
@@ -312,7 +318,7 @@ sandbox.register("my_backend", {
 
 The `wrap()` function receives a fully resolved policy:
 
-- `policy.rw_paths` is guaranteed to contain only absolute, deduplicated, real filesystem paths. No variables, no relative paths.
+- `policy.rw_paths` is guaranteed to contain only absolute, deduplicated paths that exist on disk (non-existent paths are dropped during resolution, so a backend never receives a path that would fail to mount). No variables, no relative paths.
 - `policy.network` is a boolean (`true` = allow, `false` = block).
 - `policy.allow_privileged` is a boolean (`true` = allow sudo, `false` = drop privileges).
 - The function must return a flat `string[]` suitable for `vim.fn.jobstart()`, or `nil` + error string.
@@ -404,7 +410,7 @@ On NixOS and GNU Guix, system packages are exposed via symlinks under `/run/curr
 
 **Signal propagation is best-effort.** When a sandboxed command times out, Flemma kills the `bwrap` parent. Child processes are terminated via `--die-with-parent` and PID namespace teardown. In practice this is reliable, but a process that has deliberately escaped its session may survive briefly before kernel cleanup catches it.
 
-**Lua-level enforcement covers writes, not reads.** The `write` and `edit` tools check `sandbox.is_path_writable()` before modifying files and refuse operations outside `rw_paths`. The `read` tool is **not** sandboxed and cannot be – the sandbox policy has no read-deny list. The entire rootfs is readable by design (mirroring bwrap's `--ro-bind / /`). This is intentional: restricting reads would break tool functionality broadly, and the real risk from unrestricted reads is data exfiltration, which is better addressed by `network = false` (see above). Note that Lua-level write enforcement works independently of the backend – even on platforms without `bwrap`, the `write` and `edit` tools will enforce the policy when `enabled = true`.
+**Lua-level enforcement covers writes, not reads.** The `write` and `edit` tools check `sandbox.is_path_writable()` before modifying files and refuse operations outside `rw_paths`. A `flemma.save_to` redirect is a second write-enforcement point: with the sandbox on, a destination outside `rw_paths` is rejected with `save_to destination <path> is not writable under sandbox policy`. The `read` tool is **not** sandboxed and cannot be – the sandbox policy has no read-deny list. The entire rootfs is readable by design (mirroring bwrap's `--ro-bind / /`). This is intentional: restricting reads would break tool functionality broadly, and the real risk from unrestricted reads is data exfiltration, which is better addressed by `network = false` (see above). Note that Lua-level write enforcement works independently of the backend – even on platforms without `bwrap`, the `write` and `edit` tools will enforce the policy when `enabled = true`.
 
 ---
 

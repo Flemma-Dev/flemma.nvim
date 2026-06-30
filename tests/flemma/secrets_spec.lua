@@ -349,23 +349,152 @@ describe("flemma.secrets", function()
   end)
 end)
 
-describe("secrets config defaults", function()
-  it("provides gcloud.path = 'gcloud' after bare setup", function()
-    local config = require("flemma.config")
-    local schema = require("flemma.config.schema")
-    config.init(schema)
-    local materialized = config.materialize()
-    assert.is_not_nil(materialized.secrets)
-    assert.is_not_nil(materialized.secrets.gcloud)
-    assert.equals("gcloud", materialized.secrets.gcloud.path)
+--- Config tests for secrets resolver schemas composed via DISCOVER.
+---
+--- Each resolver owns its `metadata.config_schema` (mirroring provider adapters
+--- and sandbox backends). The schema is composed into the global `secrets`
+--- namespace via DISCOVER, its defaults materialize when the resolver registers,
+--- and a `secrets.<name>` key only validates once that resolver is registered.
+describe("secrets resolver config schemas", function()
+  local s = require("flemma.schema")
+  --- Scoped reload handles so secrets.context (which captures flemma.config at
+  --- module-load time) binds to the same fresh facade config.init() runs against.
+  local config_facade
+  local config_secrets
+  local config_registry
+
+  before_each(function()
+    -- flemma.config is required first, so context's top-level require resolves
+    -- to the same fresh instance config.init() runs against.
+    for _, mod in ipairs({
+      "flemma.config",
+      "flemma.config.store",
+      "flemma.config.proxy",
+      "flemma.config.schema",
+      "flemma.secrets",
+      "flemma.secrets.registry",
+      "flemma.secrets.context",
+      "flemma.secrets.cache",
+      "flemma.secrets.resolvers.gcloud",
+      "flemma.secrets.resolvers.chatgpt",
+    }) do
+      package.loaded[mod] = nil
+    end
+
+    config_facade = require("flemma.config")
+    config_facade.init(require("flemma.config.schema"))
+
+    config_secrets = require("flemma.secrets")
+    config_registry = require("flemma.secrets.registry")
+    config_registry.clear()
+    config_secrets.setup() -- registers built-in resolvers (incl. gcloud), materializing defaults
   end)
 
-  it("preserves user-supplied gcloud path through config.apply", function()
-    local config = require("flemma.config")
-    local schema = require("flemma.config.schema")
-    config.init(schema)
-    config.apply(config.LAYERS.SETUP, { secrets = { gcloud = { path = "/nix/store/xyz/bin/gcloud" } } })
-    local materialized = config.materialize()
-    assert.equals("/nix/store/xyz/bin/gcloud", materialized.secrets.gcloud.path)
+  describe("built-in resolver (gcloud)", function()
+    it("materializes the gcloud.path default from the resolver schema", function()
+      local cfg = config_facade.materialize()
+      assert.is_not_nil(cfg.secrets.gcloud)
+      assert.equals("gcloud", cfg.secrets.gcloud.path)
+    end)
+
+    it("accepts a user-supplied secrets.gcloud.path", function()
+      config_facade.apply(config_facade.LAYERS.SETUP, { secrets = { gcloud = { path = "/opt/bin/gcloud" } } })
+      assert.equals("/opt/bin/gcloud", config_facade.materialize().secrets.gcloud.path)
+    end)
+
+    it("exposes the schema via secrets.get_config_schema", function()
+      assert.is_not_nil(config_secrets.get_config_schema("gcloud"))
+      -- environment is registered but declares no config_schema.
+      assert.is_nil(config_secrets.get_config_schema("environment"))
+      assert.is_nil(config_secrets.get_config_schema("does_not_exist"))
+    end)
+  end)
+
+  describe("custom resolver", function()
+    --- A user-provided resolver that owns a config schema.
+    local function make_custom()
+      return {
+        name = "my_vault",
+        priority = 60,
+        metadata = {
+          config_schema = s.object({
+            mount = s.string("secret"),
+            address = s.optional(s.string()),
+          }),
+        },
+        supports = function()
+          return false
+        end,
+        resolve_async = function(_, _, _, callback)
+          callback(nil)
+        end,
+      }
+    end
+
+    it("materializes defaults and accepts user config after registration", function()
+      config_secrets.register("my_vault", make_custom())
+
+      -- The schema default is present...
+      local cfg = config_facade.materialize()
+      assert.is_not_nil(cfg.secrets.my_vault)
+      assert.equals("secret", cfg.secrets.my_vault.mount)
+      assert.is_nil(cfg.secrets.my_vault.address)
+
+      -- ...and user-supplied values validate and override it.
+      config_facade.apply(
+        config_facade.LAYERS.SETUP,
+        { secrets = { my_vault = { mount = "kv", address = "https://vault.local" } } }
+      )
+      local applied = config_facade.materialize()
+      assert.equals("kv", applied.secrets.my_vault.mount)
+      assert.equals("https://vault.local", applied.secrets.my_vault.address)
+    end)
+
+    it("rejects sub-keys outside the resolver schema", function()
+      config_secrets.register("my_vault", make_custom())
+      local _, errors = config_facade.apply(config_facade.LAYERS.SETUP, { secrets = { my_vault = { bogus = true } } })
+      assert.is_not_nil(errors)
+    end)
+
+    it("the resolver reads its config through ctx:get_config()", function()
+      config_secrets.register("my_vault", make_custom())
+      config_facade.apply(config_facade.LAYERS.SETUP, { secrets = { my_vault = { mount = "kv" } } })
+
+      local resolver_cfg = require("flemma.secrets.context").new("my_vault"):get_config()
+      assert.is_not_nil(resolver_cfg)
+      assert.equals("kv", resolver_cfg.mount)
+    end)
+  end)
+
+  describe("experimental resolver (chatgpt)", function()
+    -- chatgpt is not a built-in: it self-registers only when the experimental
+    -- Codex adapter loads. Until then its key is unknown (no generated type).
+    it("is absent until its resolver is registered", function()
+      assert.is_nil(config_secrets.get_config_schema("chatgpt"))
+
+      local _, _, deferred = config_facade.apply(
+        config_facade.LAYERS.SETUP,
+        { secrets = { chatgpt = { auth_file = "/x/auth.json" } } },
+        { defer_discover = true }
+      )
+      local failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+      assert.is_not_nil(failures) -- secrets.chatgpt.* could not resolve
+      assert.is_nil(config_facade.materialize().secrets.chatgpt)
+    end)
+
+    it("accepts secrets.chatgpt.auth_file once the resolver is registered", function()
+      config_secrets.register("flemma.secrets.resolvers.chatgpt")
+      assert.is_not_nil(config_secrets.get_config_schema("chatgpt"))
+
+      local _, _, deferred = config_facade.apply(
+        config_facade.LAYERS.SETUP,
+        { secrets = { chatgpt = { auth_file = "/x/auth.json" } } },
+        { defer_discover = true }
+      )
+      local failures, validation_failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+      assert.is_nil(failures)
+      assert.equals(0, #validation_failures)
+      assert.equals("/x/auth.json", config_facade.materialize().secrets.chatgpt.auth_file)
+    end)
   end)
 end)

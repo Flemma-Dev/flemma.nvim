@@ -329,13 +329,13 @@ function M.evaluate(doc, base_context, opts)
       log.trace("processor: compiling @" .. msg.role .. " message (" .. #(msg.segments or {}) .. " segments)")
 
       -- Collapse non-opted-in tool results to their fallback form (empty segments).
-      -- Only tools declaring the `template_tool_result` capability get their
+      -- Only tools declaring the `emits_template` capability get their
       -- inner segments compiled and evaluated through the capture mechanism.
       local prepared = {}
       for _, seg in ipairs(msg.segments or {}) do
         if seg.kind == "tool_result" and seg.segments and #seg.segments > 0 then
           local info = tool_use_index[seg.tool_use_id]
-          if info and tools_registry.has_capability(info.name, "template_tool_result") then
+          if info and tools_registry.has_capability(info.name, "emits_template") then
             table.insert(prepared, seg)
           else
             table.insert(

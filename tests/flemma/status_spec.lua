@@ -1354,7 +1354,7 @@ describe("flemma.status", function()
       tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
-        capabilities = { "can_auto_approve_if_sandboxed" },
+        capabilities = { "auto_approves_if_sandboxed" },
         input_schema = { type = "object" },
       })
 
@@ -1383,7 +1383,7 @@ describe("flemma.status", function()
       tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
-        capabilities = { "can_auto_approve_if_sandboxed" },
+        capabilities = { "auto_approves_if_sandboxed" },
         input_schema = { type = "object" },
       })
 
@@ -1417,7 +1417,7 @@ describe("flemma.status", function()
       tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
-        capabilities = { "can_auto_approve_if_sandboxed" },
+        capabilities = { "auto_approves_if_sandboxed" },
         input_schema = { type = "object" },
       })
 

@@ -68,4 +68,17 @@ function M.relative(path, base_dir)
   return path
 end
 
+---Flatten a path into a single filename-safe component.
+---Normalizes, strips the leading separator, then replaces any character
+---outside `[A-Za-z0-9._-]` with `--` (same escape rule as ID escaping).
+---@param path string
+---@return string
+function M.flatten(path)
+  local normalized = vim.fs.normalize(path)
+  if normalized:sub(1, 1) == "/" then
+    normalized = normalized:sub(2)
+  end
+  return (normalized:gsub("[^A-Za-z0-9._%-]", "--"))
+end
+
 return M

@@ -258,7 +258,7 @@ run_profile() {
 # ── Run all passes ───────────────────────────────────────────────
 # The two core variants — .md baseline (treesitter only) vs .chat
 # with Flemma loaded. To isolate a specific factor, add a variant
-# with a post_setup_cmd that disables it (see SKILL.md Step 3).
+# with a post_setup_cmd that disables it (see GUIDE.md Step 3).
 run_profile "baseline-md" "md" "no"
 run_profile "chat-flemma" "chat" "yes"
 

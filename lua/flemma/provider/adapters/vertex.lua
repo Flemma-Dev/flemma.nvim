@@ -388,7 +388,8 @@ end
 ---@param self flemma.provider.Vertex
 ---@return string[]
 function M.get_request_headers(self)
-  local access_token = self:get_api_key()
+  local credential = self:resolve_credential()
+  local access_token = credential and credential.value
   if not access_token then
     error("No Vertex AI access token available. Please set up a service account or provide an access token.", 0)
   end

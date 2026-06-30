@@ -1,5 +1,5 @@
 --- Tests for processor capability-gated tool result template evaluation.
---- Verifies that tool results from tools with `template_tool_result` capability
+--- Verifies that tool results from tools with `emits_template` capability
 --- get their segments compiled, while tools without the capability use fallback.
 
 local ast = require("flemma.ast")
@@ -48,13 +48,13 @@ describe("Processor: capability-gated tool result evaluation", function()
     return ast.document(nil, { assistant_msg, you_msg }, {}, pos)
   end
 
-  it("compiles segments for a tool WITH template_tool_result capability", function()
+  it("compiles segments for a tool WITH emits_template capability", function()
     -- Register a tool that opts in to template evaluation
     registry.register("capable_tool", {
       name = "capable_tool",
       description = "A tool that opts in",
       input_schema = { type = "object", properties = {} },
-      capabilities = { "template_tool_result" },
+      capabilities = { "emits_template" },
     })
 
     local inner_segments = { ast.text("hello from template", nil) }
@@ -70,7 +70,7 @@ describe("Processor: capability-gated tool result evaluation", function()
     local tr_part = you_parts[1]
     assert.equals("tool_result", tr_part.kind)
     assert.equals("call_001", tr_part.tool_use_id)
-    -- With template_tool_result capability, .parts should be populated from segments
+    -- With emits_template capability, .parts should be populated from segments
     assert.is_not_nil(tr_part.parts, "Expected .parts to be set for opted-in tool")
     assert.equals(1, #tr_part.parts)
     assert.equals("text", tr_part.parts[1].kind)
@@ -110,7 +110,7 @@ describe("Processor: capability-gated tool result evaluation", function()
       name = "capable_tool2",
       description = "Opted-in but empty result",
       input_schema = { type = "object", properties = {} },
-      capabilities = { "template_tool_result" },
+      capabilities = { "emits_template" },
     })
 
     local doc = build_doc("capable_tool2", "call_003", {}, "fallback for empty")

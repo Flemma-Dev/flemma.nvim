@@ -158,16 +158,16 @@ describe("Read Tool", function()
   describe("binary detection", function()
     local png_fixture = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h") .. "/../fixtures/sample.png"
 
-    it("has template_tool_result capability", function()
+    it("has emits_template capability", function()
       assert.is_not_nil(read_def.capabilities)
       local found = false
       for _, cap in ipairs(read_def.capabilities) do
-        if cap == "template_tool_result" then
+        if cap == "emits_template" then
           found = true
           break
         end
       end
-      assert.is_true(found, "expected template_tool_result capability")
+      assert.is_true(found, "expected emits_template capability")
     end)
 
     it("returns file reference for binary PNG file", function()

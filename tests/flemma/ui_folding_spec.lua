@@ -1338,7 +1338,7 @@ describe("UI Folding", function()
       assert.are.equal("FlemmaToolIconError", icon_chunk[2])
     end)
 
-    it("should use FlemmaToolIcon highlight for denied tool_result icon", function()
+    it("should use FlemmaToolIconDenied highlight for denied tool_result icon", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -1376,7 +1376,101 @@ describe("UI Folding", function()
 
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolIcon", icon_chunk[2], "Denied should keep default FlemmaToolIcon")
+      assert.are.equal("FlemmaToolIconDenied", icon_chunk[2], "Denied should use FlemmaToolIconDenied")
+
+      local denied_chunk = find_chunk(chunks, "(denied)")
+      assert.is_not_nil(denied_chunk, "Should have (denied) status text")
+      assert.are.equal("FlemmaToolResultDenied", denied_chunk[2])
+    end)
+
+    it("should use FlemmaToolIconRejected highlight for rejected tool_result icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (rejected)",
+        "",
+        "```",
+        "Tool was rejected by user.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIconRejected", icon_chunk[2], "Rejected should use FlemmaToolIconRejected")
+
+      local rejected_chunk = find_chunk(chunks, "(rejected)")
+      assert.is_not_nil(rejected_chunk, "Should have (rejected) status text")
+      assert.are.equal("FlemmaToolResultRejected", rejected_chunk[2])
+    end)
+
+    it("should use FlemmaToolIconAborted highlight for aborted tool_result icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 999" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (aborted)",
+        "",
+        "```",
+        "Tool execution was aborted.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIconAborted", icon_chunk[2], "Aborted should use FlemmaToolIconAborted")
+
+      local aborted_chunk = find_chunk(chunks, "(aborted)")
+      assert.is_not_nil(aborted_chunk, "Should have (aborted) status text")
+      assert.are.equal("FlemmaToolResultAborted", aborted_chunk[2])
     end)
 
     it("should inherit FlemmaToolIconError from failed job_result", function()
@@ -2749,7 +2843,7 @@ describe("UI Folding", function()
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
-        '{"command":"sleep 10 && df -h","background":true}',
+        '{"command":"sleep 10 && df -h","flemma.background":true}',
         "```",
         "",
         "@You:",
@@ -2770,9 +2864,9 @@ describe("UI Folding", function()
       folding.setup_folding()
       vim.wo.foldlevel = 99
 
-      -- Baseline: tool_use and tool_result are NOT terminal yet (job pending)
+      -- Baseline: tool_use folds (matching result exists), tool_result does NOT (job pending)
       folding.fold_completed_blocks(bufnr)
-      assert.are.equal(-1, vim.fn.foldclosed(4), "Sanity: tool_use should not fold while job is pending")
+      assert.are.equal(4, vim.fn.foldclosed(4), "tool_use should fold when a matching result exists")
       assert.are.equal(-1, vim.fn.foldclosed(11), "Sanity: tool_result should not fold while job is pending")
 
       -- Simulate job completion: inject a job_result block before the user's @You

@@ -1,7 +1,7 @@
 on-unmatched = "info"
 
 [global]
-excludes = [".claude/**", "tests/fixtures/**"]
+excludes = ["tests/fixtures/**"]
 
 [formatter.stylua]
 command = "stylua"

@@ -364,10 +364,16 @@ local function resolve_policy(policy, bufnr)
   -- Expand variables, dropping nils
   local expanded = variables.expand_list(resolved.rw_paths or {}, context)
 
-  -- Normalize to absolute paths
+  -- Normalize to absolute paths. Paths that do not exist (yet) are dropped:
+  -- bwrap hard-fails on --bind sources it cannot find, and a not-yet-created
+  -- grant (e.g. the lazily-created store directory) must degrade to "not
+  -- writable", not break every sandboxed command.
   local normalized = {}
   for _, path in ipairs(expanded) do
-    table.insert(normalized, normalize(path))
+    local absolute = normalize(path)
+    if vim.uv.fs_stat(absolute) then
+      table.insert(normalized, absolute)
+    end
   end
 
   -- Deduplicate: exact matches and prefix subsumption

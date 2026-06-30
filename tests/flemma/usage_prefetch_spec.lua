@@ -202,6 +202,76 @@ describe("flemma.usage.prefetch (debounce + fetch)", function()
   end)
 end)
 
+describe("flemma.usage.prefetch (preset resolution)", function()
+  local prefetch
+  local client = require("flemma.client")
+  local bufnr
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.usage.prefetch"] = nil
+  end)
+
+  after_each(function()
+    prefetch._reset_for_tests()
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("resolves provider through $-prefixed model presets", function()
+    local estimate_called = false
+    local estimate_module_path = "flemma.test.prefetch_preset_estimate_provider"
+    package.preload[estimate_module_path] = function()
+      return {
+        try_estimate_usage = function(_bufnr, on_result)
+          estimate_called = true
+          on_result({ response = { tokens = 9999, cache_key = "preset-test:test-model", model = "test-model" } })
+        end,
+      }
+    end
+
+    require("flemma").setup({
+      parameters = { thinking = false },
+      presets = {
+        ["$test-preset"] = { provider = "preset-estimate", model = "test-model" },
+      },
+    })
+
+    local provider_registry = require("flemma.provider.registry")
+    provider_registry.register("preset-estimate", {
+      module = estimate_module_path,
+      capabilities = {
+        supports_reasoning = false,
+        supports_thinking_budget = false,
+        outputs_thinking = false,
+      },
+      display_name = "Preset Estimate Test",
+      default_model = "test-model",
+      models = { ["test-model"] = {} },
+    })
+
+    local config_mod = require("flemma.config")
+    config_mod.apply(config_mod.LAYERS.RUNTIME, { model = "$test-preset" })
+
+    prefetch = require("flemma.usage.prefetch")
+    prefetch._DEBOUNCE_MS = 10
+
+    bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
+    vim.bo[bufnr].filetype = "chat"
+
+    prefetch.start_tracking(bufnr)
+
+    vim.wait(2000, function()
+      return prefetch.get_tokens(bufnr) ~= nil
+    end, 10)
+
+    assert.is_true(estimate_called, "Expected try_estimate_usage on preset-resolved provider to be called")
+    assert.equals(9999, prefetch.get_tokens(bufnr))
+  end)
+end)
+
 describe("flemma.usage.prefetch (config:updated)", function()
   local prefetch
   local hooks
@@ -254,12 +324,19 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
   local prefetch
   local hooks
   local client = require("flemma.client")
+  local session = require("flemma.session")
   local bufnr
 
   before_each(function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.usage.prefetch"] = nil
-    require("flemma").setup({ parameters = { thinking = false } })
+    -- The usage-bar driver also subscribes to request:finished globally.
+    -- This spec exercises prefetch only — keep the bar disabled so its
+    -- deferred show never runs against this spec's buffers.
+    require("flemma").setup({
+      parameters = { thinking = false },
+      ui = { usage = { enabled = false } },
+    })
     hooks = require("flemma.hooks")
     prefetch = require("flemma.usage.prefetch")
     prefetch._DEBOUNCE_MS = 10
@@ -278,7 +355,9 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
 
   ---@return flemma.session.Request
   local function make_request(input_tokens, model)
-    return {
+    -- A real Request, not a bare table: dispatched payloads reach every
+    -- global request:finished subscriber, and those call Request methods.
+    return session.Request.new({
       provider = "anthropic",
       model = model or "claude-sonnet-4-6",
       input_tokens = input_tokens,
@@ -291,7 +370,7 @@ describe("flemma.usage.prefetch (request lifecycle)", function()
       output_has_thoughts = false,
       cache_read_input_tokens = 0,
       cache_creation_input_tokens = 0,
-    }
+    })
   end
 
   it("request:sending sets request_active", function()

@@ -82,6 +82,52 @@ describe(":Flemma send command", function()
     end
   end)
 
+  it("sends only the redirect stub over the wire, never the saved file content", function()
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    -- The redirect destination holds the full output; the buffer holds the stub.
+    local dest = vim.fn.tempname() .. "-saved.txt"
+    local f = assert(io.open(dest, "w"))
+    f:write("FULL_OUTPUT_MARKER must never reach the provider")
+    f:close()
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      "Run it",
+      "",
+      "@Assistant:",
+      "**Tool Use:** `bash` (`tool_stub_01`)",
+      "",
+      "```json",
+      '{"command": "generate", "flemma.save_to": "' .. dest .. '"}',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `tool_stub_01`",
+      "",
+      "```",
+      "preview line",
+      "",
+      "[Output saved: " .. dest .. " — 49B, 1 lines]",
+      "```",
+    })
+
+    vim.cmd("Flemma send")
+
+    local captured_request_body = core._get_last_request_body()
+    assert.is_not_nil(captured_request_body, "request_body was not captured")
+    local json = require("flemma.utilities.json")
+    local serialized = json.encode(captured_request_body)
+    assert.is_truthy(serialized:find("Output saved:", 1, true), "the stub notice must go over the wire")
+    assert.is_falsy(
+      serialized:find("FULL_OUTPUT_MARKER", 1, true),
+      "the saved file content must not be read back into the request"
+    )
+    os.remove(dest)
+  end)
+
   it("formats the request body correctly for the OpenAI provider", function()
     -- Arrange: Switch to the OpenAI provider for this test
     core.switch_provider("openai", "o3", {})
@@ -164,6 +210,52 @@ describe(":Flemma send command", function()
     assert.is_not_nil(unnamed_request, "Session should have a request after unnamed buffer send")
     assert.is_nil(unnamed_request.filepath, "Unnamed buffer should NOT have a filepath")
     assert.equals(unnamed_bufnr, unnamed_request.bufnr, "Unnamed buffer request should store bufnr")
+  end)
+
+  it("records resolved provider name in session when using a preset", function()
+    -- Regression: config_facade.get(bufnr).provider returns the *default* provider
+    -- (e.g., "anthropic") even when a preset resolves to a different one. Session
+    -- recording must use the resolved provider from the actual provider instance.
+
+    -- Register a preset via the presets module (before_each already ran flemma.setup)
+    local presets = require("flemma.presets")
+    presets.setup({ ["$test-openai"] = { provider = "openai", model = "o3" } })
+
+    local default_config = require("flemma.config").materialize()
+    assert.is_not.equals("openai", default_config.provider, "Test assumes default is not OpenAI")
+
+    -- Reset session so we only see requests from this test
+    local session = state.get_session()
+    session:reset()
+
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_name(bufnr, vim.fn.tempname() .. ".chat")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.model = "$test-openai"',
+      "```",
+      "@You:",
+      "Hello via preset",
+    })
+
+    vim.cmd("Flemma send")
+    vim.wait(2000, function()
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for i, line in ipairs(lines) do
+        if line == "@You:" and i > 6 then
+          return true
+        end
+      end
+      return false
+    end)
+
+    local request = session:get_latest_request()
+    assert.is_not_nil(request, "Session should record a request via preset")
+    assert.equals("openai", request.provider, "Session should record resolved provider, not config default")
+    assert.equals("o3", request.model, "Session should record resolved model from preset")
   end)
 
   it("handles a successful streaming response from a fixture", function()

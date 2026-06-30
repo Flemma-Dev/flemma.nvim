@@ -47,19 +47,59 @@ describe("config.schema.definition", function()
       assert.are.same({ level = "high", foreign = "preserve" }, cfg.parameters.thinking)
     end)
 
-    it("materializes highlight defaults (string)", function()
+    it("materializes tools.store defaults", function()
       local cfg = config_facade.get()
-      assert.equals("Special", cfg.highlights.system)
-      assert.equals("Normal", cfg.highlights.user)
-      assert.equals("Function", cfg.highlights.tool_name)
+      assert.equals("$chat", cfg.tools.store.path_format)
+      assert.is_false(cfg.tools.store.materialize)
+      assert.equals("version", cfg.tools.store.backup)
+      assert.equals(10, cfg.tools.store.preview.lines)
+      assert.equals(2048, cfg.tools.store.preview.bytes)
     end)
 
-    it("materializes highlight defaults (table)", function()
+    it("materializes highlight defaults as HlOp instances", function()
       local cfg = config_facade.get()
-      local tb = cfg.highlights.thinking_block
-      assert.is_table(tb)
-      assert.equals("Comment+bg:#000000-fg:#333333", tb.dark)
-      assert.equals("Comment-bg:#000000+fg:#333333", tb.light)
+      local hl = require("flemma.hl")
+      assert.is_table(cfg.highlights.system)
+      assert.is_function(cfg.highlights.system.get)
+      local system_hl = cfg.highlights.system:get()
+      assert.is_not_nil(system_hl.fg, "system highlight should have fg from Special")
+      assert.is_nil(system_hl.bg, "system highlight should not carry bg")
+      assert.is_nil(system_hl.link, "system highlight should resolve to attrs, not a link")
+      local user_hl = cfg.highlights.user:get()
+      assert.is_not_nil(user_hl.fg, "user highlight should have fg from Normal")
+      assert.is_nil(user_hl.bg, "user highlight should not carry bg")
+      assert.is_nil(user_hl.link, "user highlight should resolve to attrs, not a link")
+      assert.same({ link = "Function" }, cfg.highlights.tool_name:get())
+      -- ThemedOp defaults are also HlOp instances
+      assert.is_table(cfg.highlights.thinking_block)
+      assert.is_function(cfg.highlights.thinking_block.get)
+      -- role_name is an AttrsOp
+      assert.is_table(cfg.highlights.role_name)
+      local rn = cfg.highlights.role_name:get()
+      assert.is_true(rn.bold)
+      -- Verify HlOpNode validation accepts HlOp instances and coercible strings
+      local schema_node = schema:get_child_schema("highlights"):get_child_schema("system")
+      assert.is_true(schema_node:validate_value(hl.link("Foo")))
+      assert.is_true(schema_node:validate_value("Comment"))
+      assert.is_true(schema_node:validate_value("#ff0000"))
+      -- Rejects invalid values
+      assert.is_false(schema_node:validate_value(""))
+      assert.is_false(schema_node:validate_value("#gggggg"))
+      assert.is_false(schema_node:validate_value(42))
+    end)
+
+    it("coerces highlight strings to HlOp instances", function()
+      local L = config_facade.LAYERS
+      local w = config_facade.writer(nil, L.SETUP)
+      w.highlights.system = "Function"
+      local cfg = config_facade.get()
+      assert.is_table(cfg.highlights.system)
+      assert.is_function(cfg.highlights.system.get)
+      assert.same({ link = "Function" }, cfg.highlights.system:get())
+      -- Hex string → h.hex()
+      w.highlights.tool_name = "#ff0000"
+      cfg = config_facade.get()
+      assert.same({ fg = "#ff0000" }, cfg.highlights.tool_name:get())
     end)
 
     it("materializes ruler defaults", function()
@@ -186,14 +226,15 @@ describe("config.schema.definition", function()
       assert.is_true(cfg.sandbox.policy.network)
       assert.is_false(cfg.sandbox.policy.allow_privileged)
       assert.is_table(cfg.sandbox.policy.rw_paths)
-      assert.equals(6, #cfg.sandbox.policy.rw_paths)
+      assert.equals(7, #cfg.sandbox.policy.rw_paths)
       assert.equals("urn:flemma:cwd", cfg.sandbox.policy.rw_paths[1])
       -- backends object is empty at init — bwrap resolves via DISCOVER after registration
     end)
 
     it("materializes secrets defaults", function()
-      local cfg = config_facade.get()
-      assert.equals("gcloud", cfg.secrets.gcloud.path)
+      -- secrets has no static fields: each resolver owns its schema and resolves
+      -- via DISCOVER, so secrets.gcloud materializes only after the resolver registers.
+      assert.same({}, config_facade.materialize().secrets)
     end)
 
     it("materializes lsp defaults", function()
@@ -291,18 +332,43 @@ describe("config.schema.definition", function()
       assert.equals(4096, cfg.parameters.thinking)
     end)
 
-    it("accepts highlight string override for table-default field", function()
+    it("accepts highlight HlOp override for highlight field", function()
+      local hl = require("flemma.hl")
       config_facade.apply(config_facade.LAYERS.SETUP, {
-        highlights = { thinking_block = "MyCustomHighlight" },
+        highlights = { thinking_block = hl.link("MyCustomHighlight") },
       })
       local cfg = config_facade.get()
-      assert.equals("MyCustomHighlight", cfg.highlights.thinking_block)
+      assert.same({ link = "MyCustomHighlight" }, cfg.highlights.thinking_block:get())
     end)
 
     it("accepts text_object = false", function()
       config_facade.apply(config_facade.LAYERS.SETUP, { keymaps = { text_object = false } })
       local cfg = config_facade.get()
       assert.is_false(cfg.keymaps.text_object)
+    end)
+
+    it("accepts tools.store.backup = false (disable)", function()
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { tools = { store = { backup = false } } })
+      assert.is_true(ok)
+      assert.is_nil(errors)
+      local cfg = config_facade.get()
+      assert.is_false(cfg.tools.store.backup)
+    end)
+
+    it("accepts tools.store.backup module path string", function()
+      local ok, errors =
+        config_facade.apply(config_facade.LAYERS.SETUP, { tools = { store = { backup = "my.custom.strategy" } } })
+      assert.is_true(ok)
+      assert.is_nil(errors)
+      local cfg = config_facade.get()
+      assert.equals("my.custom.strategy", cfg.tools.store.backup)
+    end)
+
+    it("rejects tools.store.backup = true", function()
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { tools = { store = { backup = true } } })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("no union branch matched"))
     end)
 
     it("rejects text_object = true", function()

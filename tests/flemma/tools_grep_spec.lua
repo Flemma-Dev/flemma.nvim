@@ -34,9 +34,9 @@ describe("Grep Tool", function()
     assert.is_true(grep_def.async)
   end)
 
-  it("does not declare can_auto_approve_if_sandboxed (approved via $standard preset)", function()
+  it("does not declare auto_approves_if_sandboxed (approved via $standard preset)", function()
     if grep_def.capabilities then
-      assert.is_falsy(vim.tbl_contains(grep_def.capabilities, "can_auto_approve_if_sandboxed"))
+      assert.is_falsy(vim.tbl_contains(grep_def.capabilities, "auto_approves_if_sandboxed"))
     end
   end)
 

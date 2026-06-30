@@ -28,9 +28,9 @@ The display format uses the same Lua template syntax as `.chat` files (`{{ expre
   ```lua
   { "flemma", format = "{{ provider.name }}:{{ model.name }}" }
   ```
-- **Flemma config** (global default, via `statusline.format` in the [configuration reference](configuration.md))
+- **Flemma config** (global default, via `ui.statusline.format` in the [configuration reference](configuration.md))
 
-The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The shipped default shows the model name, optional thinking level, session stats (request count + cost) once a request lands, projected input tokens for the next request as a percentage of the model context window, and a `⧖` indicator while async tool sources are loading. Muted separators (`╱`) are wrapped with `%#FlemmaStatusTextMuted#…%*` so they dim without breaking the statusline background. See [`lua/flemma/config/schema.lua`](../lua/flemma/config/schema.lua) for the literal template.
+The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The shipped default leads with a muted `provider/` prefix and the model name, then optional thinking level, projected input tokens for the next request as a percentage of the model context window, session stats (request count + cost) once a request lands, and a `⧖` indicator while async tool sources are loading. Muted segments — the `provider/` prefix and the `·` separators — are wrapped with `%#FlemmaStatusTextMuted#…%*` so they dim without breaking the statusline background. See [`lua/flemma/config/schema.lua`](../lua/flemma/config/schema.lua) for the literal template.
 
 Leading and trailing ASCII whitespace is trimmed from string formats before rendering. This makes multiline Lua strings convenient:
 
@@ -44,9 +44,9 @@ Use non-breaking spaces (`\u{00a0}`) at the edge if intentional leading or trail
 
 Typical renderings:
 
-- `claude-sonnet-4-6 (high)` — thinking active, no requests yet
-- `claude-sonnet-4-6 (high) ╱ Σ3 $0.12 ╱ 8,670↑` — session history and buffer estimate
-- `claude-sonnet-4-6 ⧖` — async tool sources still loading
+- `anthropic/claude-sonnet-4-6 (high)` — thinking active, no requests yet
+- `anthropic/claude-sonnet-4-6 (high) · 1% · Σ3 $0.12` — buffer estimate and session history
+- `anthropic/claude-sonnet-4-6 ⧖` — async tool sources still loading
 
 #### Variables
 
@@ -87,10 +87,33 @@ Variables are lazy-evaluated — only variables referenced by the format string 
 | --------------------- | ------- | ------------------------------------------- |
 | `buffer.tokens.input` | `8670`  | Projected input tokens for the next request |
 
-The buffer estimate is resolver-driven: referencing `buffer.tokens.input` in the format string is what installs the subsystem. The default statusline format includes it, so default users get debounced estimates automatically; users with custom formats only get estimates if they include the variable. Fetches run 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, OpenAI, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook; other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
+The buffer estimate is resolver-driven: referencing `buffer.tokens.input` in the format string is what installs the subsystem. The default statusline format includes it, so default users get debounced estimates automatically; users with custom formats only get estimates if they include the variable. Fetches run 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, OpenAI, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook, as does the experimental Codex adapter (which estimates locally via a serialized-payload `bytes / 4` heuristic rather than a remote count); other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
 
 > [!NOTE]
 > For OpenAI, Flemma uses `POST /v1/responses/input_tokens`. OpenAI's docs and live probe responses observed during implementation did not expose cost, rate-limit, or quota metadata for that endpoint, so treat each estimate conservatively as a real API request that may count against account limits.
+
+**Subscription rate limits** (from the most recent request — subscription-based providers only):
+
+| Expression                            | Example   | Description                                                    |
+| ------------------------------------- | --------- | -------------------------------------------------------------- |
+| `subscription.plan_name`              | `Plus`    | Plan display name (`nil` for non-subscription providers)       |
+| `subscription.primary.used_percent`   | `2`       | Primary window usage (0-100), e.g., 5-hour window              |
+| `subscription.primary.label`          | `5h`      | Primary window duration as compact label                       |
+| `subscription.secondary.used_percent` | `0`       | Secondary window usage (0-100), e.g., 7-day window             |
+| `subscription.secondary.label`        | `7d`      | Secondary window duration as compact label                     |
+| `subscription.windows`                | _(table)_ | Raw ordered array of `{ used_percent, window_seconds }` tables |
+
+Subscription data arrives via HTTP response headers from providers like Codex (ChatGPT subscriptions). The resolvers return `nil` for non-subscription providers, so conditionals collapse cleanly:
+
+```lua
+format = [[
+  %#FlemmaStatusTextMuted#{{ provider.name }}/%*{{ model.name }}
+  {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
+  {%- if subscription.primary.used_percent then %} %#FlemmaStatusTextMuted#·%* %#FlemmaStatusTextMuted#{{ subscription.primary.label }}:%*{{ subscription.primary.used_percent }}%% %#FlemmaStatusTextMuted#{{ subscription.secondary.label }}:%*{{ subscription.secondary.used_percent }}%%{% end %}
+  {%- if session.cost then %} %#FlemmaStatusTextMuted#·%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
+]]
+-- Renders: codex/gpt-5.5 · 5h:2% 7d:0% · Σ3 $0.000
+```
 
 Session/request numeric values return `nil` when no requests have been made, so they work naturally with Lua conditionals.
 
@@ -179,7 +202,7 @@ get_element_icon = require("flemma.integrations.bufferline").get_element_icon({ 
 
 ### How it works
 
-The module listens to four Flemma hooks via User autocmds:
+The module subscribes to four Flemma lifecycle hooks via the `hooks.on` API (the same events also fire as the correspondingly-named `User` autocmds):
 
 | Event                   | Effect                 |
 | ----------------------- | ---------------------- |
@@ -197,7 +220,7 @@ The `FlemmaBusy` highlight group is configurable via `highlights.busy` in your F
 ```lua
 require("flemma").setup({
   highlights = {
-    busy = "DiagnosticWarn",  -- default; any highlight group, hex color, or expression
+    busy = "DiagnosticWarn",  -- default; a highlight group name or "#RRGGBB" hex string works as shorthand, or pass an HlOp from require("flemma.hl") (e.g. h.link/h.hex) for richer composition
   },
 })
 ```

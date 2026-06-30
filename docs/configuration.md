@@ -3,6 +3,8 @@
 Flemma works without arguments – `require("flemma").setup({})` uses sensible defaults (Anthropic provider, `thinking = "high"`, prompt caching enabled). Every option is documented with inline comments below.
 
 ```lua
+local h = require("flemma.hl")
+
 require("flemma").setup({
   provider = "anthropic",                    -- "anthropic" | "openai" | "vertex" | "moonshot"
   model = nil,                               -- nil = provider default
@@ -15,6 +17,7 @@ require("flemma").setup({
     cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
       thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
+      effort = nil,                          -- Explicit reasoning effort on adaptive-thinking models: "low" | "medium" | "high" | "xhigh" | "max"
     },
     vertex = {
       project_id = nil,                      -- Google Cloud project ID (required for Vertex)
@@ -23,6 +26,7 @@ require("flemma").setup({
     },
     openai = {
       reasoning = nil,                       -- Override thinking with explicit effort level
+      reasoning_summary = "auto",            -- Reasoning summary verbosity for the Responses API
       experimental = {
         phase = true,                        -- Label assistant message phases for Responses API fidelity
       },
@@ -32,6 +36,9 @@ require("flemma").setup({
     },
   },
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
+  providers = {
+    modules = {},                            -- Lua module paths for non-built-in provider adapters (e.g. "flemma.provider.adapters.experimental.codex"); see docs/providers.md
+  },
   tools = {
     require_approval = true,                 -- When false, auto-approves all tools
     auto_approve = { "$standard" },          -- List, glob patterns, presets ($name), or a function — see docs/tools.md#configuring-approval
@@ -61,8 +68,15 @@ require("flemma").setup({
     ls = {
       cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
     },
-    truncate = {
-      output_path_format = "${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt",  -- Where overflow files are written
+    store = {                                -- Tool result store (see docs/tools.md#tool-result-store)
+      path_format = "$chat",                 -- Where results are written: "$chat", "$state", or a template string
+      unnamed_path_format = "${TMPDIR:-/tmp}/flemma/unnamed/{{ flemma.pid }}/{{ bufnr }}/{{ source }}_{{ name }}_{{ id }}.txt",  -- Store path for unsaved buffers
+      materialize = false,                   -- Write every result to the store (not just truncation overflow and redirects)
+      preview = {
+        lines = 10,                          -- Preview lines kept in the buffer for flemma.save_to redirects
+        bytes = 2048,                        -- Preview size cap (bytes)
+      },
+      backup = "version",                    -- Backup strategy before overwriting store files (false to disable)
     },
     mcporter = {
       enabled = false,                       -- Discover MCP servers via mcporter CLI (see docs/mcp.md)
@@ -79,45 +93,52 @@ require("flemma").setup({
   templating = {
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
-  highlights = {
-    defaults = {
-      dark = { bg = "#000000", fg = "#ffffff" },
-      light = { bg = "#ffffff", fg = "#000000" },
-    },
-    system = "Special",
-    user = "Normal",
-    assistant = "Normal",
-    lua_expression = "PreProc",
-    lua_code_block = "PreProc",              -- {% code %} block content
-    lua_delimiter = "FlemmaLuaExpression",   -- {{ }} and {% %} delimiters
-    user_file_reference = "Include",
-    thinking_tag = "Comment",
-    thinking_block = { dark = "Comment+bg:#000000-fg:#333333",
-                       light = "Comment-bg:#000000+fg:#333333" },
-    tool_icon = "FlemmaToolUseTitle",
-    tool_name = "Function",
-    tool_use_title = "Function",
-    tool_result_title = "Function",
-    tool_result_error    = "DiagnosticError", -- concise `(error)` suffix on tool_result headers
-    tool_result_pending  = "DiagnosticInfo",  -- concise `(pending)` suffix
-    tool_result_approved = "DiagnosticOk",    -- concise `(approved)` suffix
-    tool_result_rejected = "DiagnosticWarn",  -- concise `(rejected)` suffix
-    tool_result_denied   = "DiagnosticError", -- concise `(denied)` suffix
-    tool_result_aborted  = "DiagnosticError", -- concise `(aborted)` suffix
-    tool_preview = "Comment",
-    tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
-    fence_label = { dark = "Comment-fg:#303030",    -- Fence code block language label
-                    light = "Comment+fg:#303030" },
-    fence_bar = "FlemmaFenceLabel",                 -- Fence code block delimiter bar
-    fold_preview = "Comment",
-    fold_meta = "Comment",
-    busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
-    role_style = "bold",                     -- Comma-separated GUI attributes for role names
+  highlights = {                             -- HlOp builders OR strings (group name → link, "#RRGGBB" → hex)
+    system = h.from("Special"):omit("bg"),
+    user = h.from("Normal"):omit("bg"),
+    assistant = h.from("Normal"):omit("bg"),
+    lua_expression = h.link("PreProc"),
+    lua_code_block = h.link("PreProc"),               -- {% code %} block content
+    lua_delimiter = h.link("FlemmaLuaExpression"),    -- {{ }} and {% %} delimiters
+    user_file_reference = h.link("Include"),
+    thinking_tag = h.link("Comment"),
+    thinking_block = h.from("Comment"):mute("fg", "#333333"),
+    tool_icon = h.link("FlemmaToolUseTitle"),
+    tool_name = h.link("Function"),
+    tool_use_title = h.link("Function"),
+    tool_result_title = h.link("Function"),
+    tool_result_error    = h.link("DiagnosticError"), -- concise `(error)` suffix on tool_result headers
+    tool_result_pending  = h.link("DiagnosticInfo"),  -- concise `(pending)` suffix
+    tool_result_approved = h.link("DiagnosticOk"),    -- concise `(approved)` suffix
+    tool_result_rejected = h.link("DiagnosticWarn"),  -- concise `(rejected)` suffix
+    tool_result_denied   = h.link("DiagnosticError"), -- concise `(denied)` suffix
+    tool_result_aborted  = h.link("DiagnosticError"), -- concise `(aborted)` suffix
+    tool_preview = h.link("Comment"),
+    tool_label = h.attrs({ italic = true }),          -- Tool intent label in fold previews
+    tool_detail = h.link("Comment"),                  -- Raw technical detail in structured tool previews
+    fence_label = h.from("Comment"):mute("fg", "#303030"),  -- Fence code block language label
+    fence_bar = h.link("FlemmaFenceLabel"),           -- Fence code block delimiter bar
+    fold_preview = h.link("Comment"),
+    fold_meta = h.link("Comment"),
+    approval_indicator = h.from("Comment"):omit("bg"),        -- Status text on approval prompts
+    approval_label = h.coalesce(                       -- Icon, label, and separator on approval prompts
+      h.from("Folded"):pick("fg"):contrast("fg", h.coalesce(h.from("FlemmaLineUser"):pick("bg"), h.default("bg")), 4.5),
+      h.from("Comment"):pick("fg")
+    ),
+    approval_key = h.link("MoreMsg"),                 -- Keybinding hints on approval prompts
+    approval_action = h.from("ModeMsg"):tint("fg", "#202122"), -- Action text on approval prompts
+    rejection_input = h.from("MsgArea"),              -- Rejection popup input area
+    rejection_border = h.coalesce(                    -- Rejection popup border
+      h.from("MsgArea"):pick("bg"), h.from("Normal")
+    ):merge(h.from("FloatBorder"):pick("fg"), "force"),
+    busy = h.link("DiagnosticWarn"),                  -- Busy indicator icon in integrations (e.g., bufferline)
+    progress_accent = h.attrs({ bold = true }),       -- Bold accent for tool name in the progress bar
+    role_name = h.attrs({ bold = true }),             -- GUI attributes for role names
   },
   ruler = {
     enabled = true,
     char = "─",
-    hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
+    hl = h.from("Comment"):mute("fg", "#303030"),
   },
   turns = {
     enabled = true,
@@ -126,10 +147,10 @@ require("flemma").setup({
   },
   line_highlights = {
     enabled = true,
-    frontmatter = { dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" },
-    system = { dark = "Normal+bg:#101112", light = "Normal-bg:#101112" },
-    user = { dark = "Normal+bg:#202122", light = "Normal-bg:#202122" },
-    assistant = { dark = "Normal", light = "Normal" },
+    frontmatter = h.from("Normal"):tint("bg", "#18111a"),
+    system = h.from("Normal"):tint("bg", "#101112"),
+    user = h.from("Normal"):tint("bg", "#202122"),
+    assistant = h.link("Normal"),
   },
   ui = {
     usage = {
@@ -150,13 +171,24 @@ require("flemma").setup({
       high_cost_threshold = 30,                -- Cents — requests above this get a high-cost highlight
     },
     statusline = {
-      format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
+      format = "{{ provider.name }}/{{ model.name }} ...", -- Abbreviated placeholder; the shipped default also shows thinking level, input-token %, and session cost. Lua template string or function — see docs/integrations.md for the full default, variables, and syntax
+    },
+    approval = {
+      enabled = true,                          -- Show inline approval prompts on pending tool results
+      syntax_highlighting = true,              -- Treesitter-powered syntax highlighting in tool previews
+      preview_lines = { head = 6, tail = 6 },  -- Lines of tool input shown in the preview
+    },
+    rejection = {
+      enabled = true,                          -- Inline rejection popup for tool calls
+      completion = false,                      -- Buffer-local completion in the rejection popup
+      winblend = 15,                           -- Window transparency for the rejection popup
     },
   },
   editing = {
     auto_prompt = true,                      -- Prepend @You: to empty .chat buffers on open
     disable_textwidth = true,
     auto_write = false,                      -- Write buffer after each request
+    compact_headers = true,                  -- Omit blank line between tool headers and fences
     manage_updatetime = true,                -- Lower updatetime in chat buffers
     fold = {
       level = 1,                             -- 0=all closed, 1=thinking collapsed, 99=all open
@@ -192,6 +224,9 @@ require("flemma").setup({
     gcloud = {
       path = "gcloud",                       -- Path to gcloud binary (override for NixOS, Guix, etc.)
     },
+    chatgpt = {                              -- Only valid when the experimental Codex adapter is loaded (it self-registers this resolver)
+      auth_file = nil,                       -- Path to the Codex/ChatGPT auth.json (falls back to $CODEX_HOME/auth.json, then ~/.codex/auth.json)
+    },
   },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing
@@ -200,6 +235,7 @@ require("flemma").setup({
       rw_paths = {                              -- Read-write paths (all others read-only)
         "urn:flemma:cwd",                       --   Vim working directory
         "urn:flemma:buffer:path",               --   Directory of the .chat file
+        "urn:flemma:store",                     --   Tool result store directory for the buffer
         "/tmp",                                 --   System temp directory
         "${TMPDIR:-/tmp}",                      --   TMPDIR (deduped with /tmp if same)
         "${XDG_CACHE_HOME:-~/.cache}",          --   Package manager caches
@@ -222,6 +258,9 @@ require("flemma").setup({
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
       tool_background = "<M-b>",             -- Move executing tool to background
+      tool_approve = "<M-a>",                -- Approve tool at cursor
+      tool_reject = "<M-r>",                 -- Open rejection popup for tool at cursor
+      tool_approve_all = "<M-A>",            -- Approve all pending tools
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
@@ -260,16 +299,16 @@ The `thinking` parameter maps to each provider's native format:
 | number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       | enabled\*\*       |
 | `false` or `0`         | disabled           | disabled             | disabled           | disabled\*\*      |
 
-_\*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent -- see the per-provider files under `lua/flemma/models/` for the full per-model catalogue._
+_\*Anthropic models with adaptive thinking (Opus 4.6 and newer, plus Sonnet 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent -- see the per-provider files under `lua/flemma/models/` for the full per-model catalogue._
 
-_\*\*Moonshot thinking is binary (on/off) with no budget control. kimi-k2-thinking models always think regardless of the `thinking` setting. `moonshot-v1-*` models do not support thinking._
+_\*\*Moonshot thinking is binary (on/off) with no budget control. `moonshot-v1-*` models do not support thinking._
 
 ### Thinking parameter priority
 
 Provider-specific parameters take priority over the unified `thinking` value when both are set:
 
 1. `parameters.anthropic.thinking_budget` overrides `thinking` for Anthropic (clamped to min 1,024 tokens).
-2. `parameters.openai.reasoning` overrides `thinking` for OpenAI (accepts `"low"`, `"medium"`, `"high"`).
+2. `parameters.openai.reasoning` overrides `thinking` for OpenAI (accepts `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"`).
 3. `parameters.vertex.thinking_budget` overrides `thinking` for Vertex AI (min 1 token).
 4. Moonshot has no provider-specific override — the unified `thinking` parameter controls the binary toggle directly.
 
@@ -325,6 +364,7 @@ Phase labeling is enabled by default. Set `false` to omit phase labels from the 
 | `editing.auto_prompt`       | `true`  | Prepend `@You:` to empty `.chat` buffers when opened, so new users have a clear starting point.                                                                                                                       |
 | `editing.disable_textwidth` | `true`  | Sets `textwidth = 0` in chat buffers to prevent hard wrapping.                                                                                                                                                        |
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
+| `editing.compact_headers`   | `true`  | When `true`, omit the blank line between `**Tool Use:**`/`**Tool Result:**` headers and their fenced code blocks. Produces a more compact buffer layout.                                                              |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
 | `editing.fold.level`        | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
 | `editing.fold.gap`          | `false` | Leave one blank line visible between consecutive folded messages for visual separation. Only applies to message-level folds; tool block folds always collapse fully.                                                  |
@@ -366,7 +406,7 @@ Old `.chat` files that use the previous inline role marker format (e.g., `@You: 
 
 ### Autopilot
 
-Autopilot turns Flemma into an autonomous agent. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
+Autopilot turns Flemma into an autonomous agent — it is the harness's [coordination loop](harness.md#gating-and-coordination-surface) that chains tool execution, result delivery, and re-sending into an autonomous cycle. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
 
 | Key                            | Default | Effect                                                                                                                                                                |
 | ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -437,7 +477,7 @@ Preset names must begin with `$`. Switch using `:Flemma switch $fast` and overri
 
 ### Sandbox
 
-Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
+Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. The sandbox is the harness's filesystem boundary — see [sandbox.md](sandbox.md) and the [gating surface](harness.md#gating-and-coordination-surface) overview. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
 
 | Key                               | Default                                                       | Effect                                                                                |
 | --------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |

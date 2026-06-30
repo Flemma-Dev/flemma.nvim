@@ -4,6 +4,7 @@
 local M = {}
 
 local ast = require("flemma.ast")
+local config_facade = require("flemma.config")
 local ctxutil = require("flemma.context")
 local cursor = require("flemma.cursor")
 local diagnostic_format = require("flemma.utilities.diagnostic")
@@ -49,6 +50,50 @@ function M.find_prev_message()
     end
   end
   return false
+end
+
+---Advance cursor to the next pending tool result after an approval/rejection.
+---Finds remaining pending tool_result segments, picks the next one after
+---the just-resolved tool by buffer position, wrapping to the first if at the end.
+---Respects tools.cursor_after_result: "stay" suppresses the advance.
+---@param bufnr integer
+---@param just_resolved_tool_id string
+function M.advance_to_next_pending(bufnr, just_resolved_tool_id)
+  local config = config_facade.get(bufnr)
+  if config.tools and config.tools.cursor_after_result == "stay" then
+    return
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+  local resolved_line = 0
+  local pending_positions = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" then
+        if seg.tool_use_id == just_resolved_tool_id then
+          resolved_line = seg.position.start_line
+        elseif seg.status == "pending" then
+          pending_positions[#pending_positions + 1] = seg.position.start_line
+        end
+      end
+    end
+  end
+
+  if #pending_positions == 0 then
+    return
+  end
+
+  table.sort(pending_positions)
+
+  local target = pending_positions[1]
+  for _, pos in ipairs(pending_positions) do
+    if pos > resolved_line then
+      target = pos
+      break
+    end
+  end
+
+  cursor.request_move(bufnr, { line = target, reason = "approval/advance", force = true })
 end
 
 ---Resolve the file path for an include expression at a given position.

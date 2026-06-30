@@ -1,3 +1,36 @@
+describe("format_duration", function()
+  local str
+
+  before_each(function()
+    package.loaded["flemma.utilities.string"] = nil
+    str = require("flemma.utilities.string")
+  end)
+
+  it("formats hours", function()
+    assert.equals("5h", str.format_duration(18000))
+  end)
+
+  it("formats days", function()
+    assert.equals("7d", str.format_duration(604800))
+  end)
+
+  it("formats minutes for sub-hour windows", function()
+    assert.equals("30m", str.format_duration(1800))
+  end)
+
+  it("formats fractional hours as minutes", function()
+    assert.equals("90m", str.format_duration(5400))
+  end)
+
+  it("formats single day", function()
+    assert.equals("1d", str.format_duration(86400))
+  end)
+
+  it("formats fractional days as hours", function()
+    assert.equals("36h", str.format_duration(129600))
+  end)
+end)
+
 describe("flemma.usage", function()
   local usage
   local config_facade
@@ -154,7 +187,7 @@ describe("flemma.usage", function()
       end
 
       assert.is_not_nil(model_item)
-      assert.are.equal("gpt-4o", model_item.text)
+      assert.are.equal("openai/gpt-4o", model_item.text)
       assert.are.equal(110, model_item.priority)
     end)
 
@@ -303,6 +336,134 @@ describe("flemma.usage", function()
       assert.has_match("25\xE2\x81\x82", thinking_item.text)
       assert.are.equal(50, thinking_item.priority)
     end)
+
+    describe("subscription segment", function()
+      it("adds subscription segment when request has rate_limits", function()
+        local request = session_module.Request.new({
+          provider = "codex",
+          model = "gpt-5.5",
+          input_tokens = 1000,
+          output_tokens = 200,
+          input_price = 0,
+          output_price = 0,
+          rate_limits = {
+            plan_name = "Plus",
+            windows = {
+              { used_percent = 2, window_seconds = 18000, resets_at = 1782333276 },
+              { used_percent = 0, window_seconds = 604800, resets_at = 1782920076 },
+            },
+          },
+        })
+        local segments = usage.build_segments(request, nil)
+        local sub_segment = nil
+        for _, seg in ipairs(segments) do
+          if seg.key == "subscription" then
+            sub_segment = seg
+          end
+        end
+        assert.is_not_nil(sub_segment)
+        -- plan_name + 2 windows = 3 items
+        assert.equals(3, #sub_segment.items)
+        assert.equals("quota_plan_name", sub_segment.items[1].key)
+        assert.equals("quota_window_1", sub_segment.items[2].key)
+        assert.equals("quota_window_2", sub_segment.items[3].key)
+        assert.truthy(sub_segment.items[2].text:find("5h"))
+        assert.truthy(sub_segment.items[2].text:find("2%%"))
+        assert.truthy(sub_segment.items[3].text:find("7d"))
+        assert.truthy(sub_segment.items[3].text:find("0%%"))
+      end)
+
+      it("does not add subscription segment when no rate_limits", function()
+        local request = session_module.Request.new({
+          provider = "anthropic",
+          model = "claude-sonnet-4-6",
+          input_tokens = 1000,
+          output_tokens = 200,
+          input_price = 3.0,
+          output_price = 15.0,
+        })
+        local segments = usage.build_segments(request, nil)
+        for _, seg in ipairs(segments) do
+          assert.is_not_equal("subscription", seg.key)
+        end
+      end)
+
+      it("uses warning highlight at 80%", function()
+        local request = session_module.Request.new({
+          provider = "codex",
+          model = "gpt-5.5",
+          input_tokens = 100,
+          output_tokens = 50,
+          input_price = 0,
+          output_price = 0,
+          rate_limits = {
+            windows = {
+              { used_percent = 85, window_seconds = 18000 },
+            },
+          },
+        })
+        local segments = usage.build_segments(request, nil)
+        local sub_segment = nil
+        for _, seg in ipairs(segments) do
+          if seg.key == "subscription" then
+            sub_segment = seg
+          end
+        end
+        assert.is_not_nil(sub_segment)
+        assert.equals("FlemmaUsageBarQuotaWarn", sub_segment.items[1].highlight.group)
+      end)
+
+      it("uses error highlight at 90%", function()
+        local request = session_module.Request.new({
+          provider = "codex",
+          model = "gpt-5.5",
+          input_tokens = 100,
+          output_tokens = 50,
+          input_price = 0,
+          output_price = 0,
+          rate_limits = {
+            windows = {
+              { used_percent = 95, window_seconds = 18000 },
+            },
+          },
+        })
+        local segments = usage.build_segments(request, nil)
+        local sub_segment = nil
+        for _, seg in ipairs(segments) do
+          if seg.key == "subscription" then
+            sub_segment = seg
+          end
+        end
+        assert.is_not_nil(sub_segment)
+        assert.equals("FlemmaUsageBarQuotaError", sub_segment.items[1].highlight.group)
+      end)
+
+      it("omits plan_name item when plan_name is nil", function()
+        local request = session_module.Request.new({
+          provider = "codex",
+          model = "gpt-5.5",
+          input_tokens = 100,
+          output_tokens = 50,
+          input_price = 0,
+          output_price = 0,
+          rate_limits = {
+            windows = {
+              { used_percent = 10, window_seconds = 18000 },
+            },
+          },
+        })
+        local segments = usage.build_segments(request, nil)
+        local sub_segment = nil
+        for _, seg in ipairs(segments) do
+          if seg.key == "subscription" then
+            sub_segment = seg
+          end
+        end
+        assert.is_not_nil(sub_segment)
+        assert.equals(1, #sub_segment.items)
+        assert.equals("quota_window_1", sub_segment.items[1].key)
+      end)
+    end)
   end)
 end)
 
@@ -416,6 +577,38 @@ describe("flemma.usage driver", function()
       hooks.dispatch("request:finished", { bufnr = bufnr, status = "errored" })
       vim.wait(50)
       assert.equals(0, #bar_mock._handles)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("re-running setup replaces subscribers instead of stacking them", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "x" })
+      vim.api.nvim_set_current_buf(bufnr)
+      -- A second setup() (config re-source, repeated before_each in specs)
+      -- must not leave the old request:finished subscriber behind.
+      usage.setup()
+      local fake_request = {
+        model = "test-model",
+        provider = "test",
+        thoughts_tokens = 0,
+        cache_read_input_tokens = 0,
+        get_total_input_tokens = function()
+          return 100
+        end,
+        get_total_output_tokens = function()
+          return 50
+        end,
+        get_total_cost = function()
+          return 0.01
+        end,
+      }
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = fake_request })
+      assert.is_true(vim.wait(200, function()
+        return #bar_mock._handles > 0
+      end))
+      -- Settle so a duplicate subscriber's deferred show would have landed.
+      vim.wait(50)
+      assert.equals(1, #bar_mock._handles)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)

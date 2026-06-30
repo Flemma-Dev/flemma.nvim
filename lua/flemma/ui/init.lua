@@ -8,6 +8,7 @@ local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local preview = require("flemma.ui.preview")
+local highlighter = require("flemma.ui.highlighter")
 local folding = require("flemma.ui.folding")
 local roles = require("flemma.utilities.roles")
 local bridge = require("flemma.bridge")
@@ -20,6 +21,7 @@ local activity = require("flemma.ui.activity")
 local indicators = require("flemma.ui.indicators")
 local highlight = require("flemma.highlight")
 local str = require("flemma.utilities.string")
+local buffer_utils = require("flemma.utilities.buffer")
 
 local PRIORITY = {
   LINE_HIGHLIGHT = 50,
@@ -33,10 +35,24 @@ local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
 local cursorline_ns = vim.api.nvim_create_namespace("flemma_cursorline")
 local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
+local tool_approval_ns = vim.api.nvim_create_namespace("flemma_tool_approval")
+local BASE_TOOL_PREVIEW_HL = "FlemmaToolPreview"
+
+-- Approval-prompt keybind hints, keyed by bufnr. Built lazily on first render
+-- from the buffer's keymaps config and reused across cursor moves. It is only
+-- cleared on buffer teardown (see the BufWipeout/BufUnload/BufDelete autocmd in
+-- M.setup), NOT on a runtime keymaps config change — acceptable because keymaps
+-- are resolved when the buffer is set up, not per request. A user who rebinds
+-- approval keys mid-session sees the new hints after reopening the buffer.
+---@type table<integer, {key_display: string, label: string, min_pending: integer|nil}[]>
+local keybind_hints_cache = {}
 local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
 
 ---@type string
 local FENCE_BAR_CHAR = "╌"
+local APPROVAL_ICON_PENDING = "⏸"
+local APPROVAL_ICON_APPROVED = "✓"
+local APPROVAL_ICON_SETTLED = "⧖"
 
 ---Build the virt_text chunks for a fence overlay on the given line.
 ---Returns nil when the line is not a fence delimiter.
@@ -698,6 +714,14 @@ function M.setup_chat_filetype_autocmds()
     })
   end
 
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    group = augroup,
+    pattern = "*.chat",
+    callback = function(ev)
+      M.update_approval_prompt(ev.buf)
+    end,
+  })
+
   -- CursorLine overlay: swap line highlight to blended CursorLine variant under cursor
   local current_config = config_facade.get()
   if current_config.line_highlights and current_config.line_highlights.enabled then
@@ -760,6 +784,90 @@ function M.setup_chat_filetype_autocmds()
   end
 end
 
+---Compute the 0-indexed buffer row where a tool_result's preview and approval
+---virt_lines anchor: the block's opening fence (one line above the closing
+---fence at seg.position.end_line). virt_lines on that row render below it,
+---inside the empty fence. May be negative for malformed blocks; callers guard.
+---@param seg flemma.ast.ToolResultSegment
+---@return integer row 0-indexed anchor row
+local function tool_result_anchor_row(seg)
+  local opening_fence_line = seg.position.end_line - 1 -- 1-indexed opening fence
+  return opening_fence_line - 1 -- 0-indexed row for the extmark anchor
+end
+
+---@class flemma.ui.HighlightedVirtLinesOpts
+---@field lines_chunks {[1]: string, [2]: string}[][] Content-only highlighted chunks
+---@field ctx flemma.ui.HighlightContext Highlight context with prefix/indent/lang
+---@field role_hl string Role line highlight group
+---@field max_length integer Text area width (content truncation)
+---@field pad_target integer Padding width (background fill)
+---@field head integer Head line budget
+---@field tail integer Tail line budget
+
+---Build virt_lines from highlighted chunk arrays with prefix, truncation, and trimming.
+---@param opts flemma.ui.HighlightedVirtLinesOpts
+---@return {[1]:string, [2]:string|string[]}[][] virt_lines
+local function build_highlighted_virt_lines(opts)
+  local ctx = opts.ctx
+  local role_hl = opts.role_hl
+  local max_length = opts.max_length
+  local pad_target = opts.pad_target
+
+  ---@type {[1]: string, [2]: string|string[]}[][]
+  local prefixed = {}
+  for i, content_chunks in ipairs(opts.lines_chunks) do
+    local prefix = i == 1 and ctx.name_prefix or ctx.indent
+    local prefix_width = str.strwidth(prefix)
+    local content_budget = max_length - prefix_width
+
+    local truncated = preview.truncate_chunks(content_chunks, content_budget)
+
+    ---@type {[1]: string, [2]: string|string[]}[]
+    local line_chunks = { { prefix, { BASE_TOOL_PREVIEW_HL, role_hl } } }
+    for _, chunk in ipairs(truncated) do
+      line_chunks[#line_chunks + 1] = { chunk[1], { chunk[2], role_hl } }
+    end
+
+    local used = prefix_width
+    for _, chunk in ipairs(truncated) do
+      used = used + str.strwidth(chunk[1])
+    end
+    local pad = math.max(0, pad_target - used)
+    if pad > 0 then
+      line_chunks[#line_chunks + 1] = { string.rep(" ", pad), role_hl }
+    end
+
+    prefixed[i] = line_chunks
+  end
+
+  local trimmed = preview.trim_chunks(prefixed, opts.head, opts.tail)
+
+  if #trimmed > opts.head and #prefixed > #trimmed then
+    local indicator = trimmed[opts.head + 1]
+    for ci, chunk in ipairs(indicator) do
+      if type(chunk[2]) == "string" then
+        indicator[ci] = {
+          chunk[1],
+          {
+            chunk[2] --[[@as string]],
+            role_hl,
+          },
+        }
+      end
+    end
+    local used = 0
+    for _, chunk in ipairs(indicator) do
+      used = used + str.strwidth(chunk[1])
+    end
+    local pad = math.max(0, pad_target - used)
+    if pad > 0 then
+      indicator[#indicator + 1] = { string.rep(" ", pad), role_hl }
+    end
+  end
+
+  return trimmed
+end
+
 ---Add virtual line previews inside empty tool_result fences that carry a
 ---lifecycle (status) suffix in the header. Shows a compact summary of the
 ---tool call (name + input) so users can see what they're approving/rejecting
@@ -771,16 +879,17 @@ function M.add_tool_previews(bufnr, doc)
 
   local siblings = ast.build_tool_sibling_table(doc)
 
-  -- Compute available text width from the buffer's window
   local winid = vim.fn.bufwinid(bufnr)
   local max_length = preview.get_text_area_width(winid)
+  local pad_target = math.max(max_length, vim.o.columns)
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
-  -- Show previews for tool_result blocks with empty content that are either
-  -- pending/approved (have a lifecycle status suffix) or currently executing (have active indicator).
-  -- Without the indicator check, the preview disappears when the executor
-  -- clears the header status suffix at execution start.
+  local approval_config = config_facade.get(bufnr).ui.approval
+  local indent = buffer_utils.get_indent_string(bufnr)
+  local preview_opts =
+    { head = approval_config.preview_lines.head, tail = approval_config.preview_lines.tail, indent = indent }
+
   for _, msg in ipairs(doc.messages) do
     if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
@@ -792,30 +901,231 @@ function M.add_tool_previews(bufnr, doc)
           local sibling = siblings[seg.tool_use_id]
           local tool_use = sibling and sibling.use or nil
           if tool_use then
-            local opening_fence_line = seg.position.end_line - 1
-            local line_idx = opening_fence_line - 1 -- 0-indexed: opening fence line
+            local line_idx = tool_result_anchor_row(seg)
 
             if line_idx >= 0 and line_idx < line_count then
-              local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input, max_length)
-              -- `line_hl_group` on the covering range extmark does not propagate to
-              -- virt_lines, so the role's line bg would stop at the virt_line and
-              -- reappear on the next buffer line — a visible stripe against tinted
-              -- backgrounds. Paint the bg manually: combine FlemmaToolPreview fg
-              -- with the role's line bg on the text chunk, then pad to the text
-              -- area width so the bg extends like a real line_hl_group would.
               local role_hl = roles.highlight_group("FlemmaLine", msg.role)
-              local pad_width = math.max(0, max_length - str.strwidth(preview_text))
-              ---@type {[1]:string, [2]:string|string[]}[]
-              local chunks = { { preview_text, { "FlemmaToolPreview", role_hl } } }
-              if pad_width > 0 then
-                table.insert(chunks, { string.rep(" ", pad_width), role_hl })
+              local preview_lines, _, highlight_context =
+                preview.format_tool_preview_multiline(tool_use.name, tool_use.input, max_length, preview_opts)
+
+              ---@type {[1]:string, [2]:string|string[]}[][]
+              local virt_lines
+
+              local used_highlighted = false
+              if highlight_context and approval_config.syntax_highlighting then
+                local in_sync_scope = true
+                highlighter.highlight(highlight_context.text, highlight_context.lang, function(lines_chunks)
+                  if lines_chunks then
+                    if in_sync_scope then
+                      virt_lines = build_highlighted_virt_lines({
+                        lines_chunks = lines_chunks,
+                        ctx = highlight_context,
+                        role_hl = role_hl,
+                        max_length = max_length,
+                        pad_target = pad_target,
+                        head = preview_opts.head or 6,
+                        tail = preview_opts.tail or 6,
+                      })
+                      used_highlighted = true
+                    else
+                      bridge.update_ui(bufnr)
+                    end
+                  end
+                end)
+                in_sync_scope = false
               end
+
+              if not used_highlighted then
+                virt_lines = {}
+                for _, line_text in ipairs(preview_lines) do
+                  local pad_width = math.max(0, pad_target - str.strwidth(line_text))
+                  ---@type {[1]:string, [2]:string|string[]}[]
+                  local chunks = { { line_text, { BASE_TOOL_PREVIEW_HL, role_hl } } }
+                  if pad_width > 0 then
+                    table.insert(chunks, { string.rep(" ", pad_width), role_hl })
+                  end
+                  virt_lines[#virt_lines + 1] = chunks
+                end
+              end
+
               vim.api.nvim_buf_set_extmark(bufnr, tool_preview_ns, line_idx, 0, {
-                virt_lines = { chunks },
+                virt_lines = virt_lines,
               })
             end
           end
         end
+      end
+    end
+  end
+
+  -- Reuse the sibling table already built above instead of rebuilding it.
+  M.update_approval_prompt(bufnr, doc, siblings)
+end
+
+---Render the approval widget as inline virt_text on the closing fence line
+---for each pending tool_result.
+---Layout: `  ⏸ [label · ] <hints|Awaiting approval…> (N/M)`
+---When the cursor is within a pending tool_result's range, that tool gets
+---full keybind hints; others get "Awaiting approval…".
+---@param bufnr integer
+---@param doc? flemma.ast.DocumentNode
+---@param siblings? table<string, flemma.ast.ToolSibling> Prebuilt sibling table; built from doc when omitted (lets add_tool_previews share its table)
+function M.update_approval_prompt(bufnr, doc, siblings)
+  vim.api.nvim_buf_clear_namespace(bufnr, tool_approval_ns, 0, -1)
+
+  local approval_config = config_facade.get(bufnr).ui.approval
+  if not approval_config.enabled then
+    return
+  end
+
+  doc = doc or parser.get_parsed_document(bufnr)
+
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+
+  local cursor_line = vim.api.nvim_win_get_cursor(winid)[1]
+
+  siblings = siblings or ast.build_tool_sibling_table(doc)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+
+  local pending_tools = {}
+  local approved_tools = {}
+  local labeled_tools = {}
+  local queue_total = 0
+  for _, msg in ipairs(doc.messages) do
+    if roles.is_user(msg.role) then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.content == "" then
+          local sibling = siblings[seg.tool_use_id]
+          if sibling and sibling.use then
+            queue_total = queue_total + 1
+            if seg.status == "pending" then
+              pending_tools[#pending_tools + 1] = { seg = seg, queue_index = queue_total }
+            elseif seg.status == "approved" then
+              approved_tools[#approved_tools + 1] = { seg = seg, use = sibling.use }
+            elseif seg.status or indicators.has_indicator(bufnr, seg.tool_use_id) then
+              labeled_tools[#labeled_tools + 1] = { seg = seg, use = sibling.use }
+            end
+          end
+        end
+      end
+    end
+  end
+
+  if #pending_tools == 0 and #approved_tools == 0 and #labeled_tools == 0 then
+    return
+  end
+
+  if not keybind_hints_cache[bufnr] then
+    ---@type {key_display: string, label: string, min_pending: integer|nil}[]
+    local hints = {}
+    local keymaps_config = config_facade.get(bufnr).keymaps
+    if keymaps_config.enabled then
+      local bindings = {
+        { key = keymaps_config.normal.tool_approve, label = "Approve" },
+        { key = keymaps_config.normal.tool_reject, label = "Reject" },
+        { key = keymaps_config.normal.tool_approve_all, label = "All", min_pending = 2 },
+      }
+      for _, b in ipairs(bindings) do
+        if type(b.key) == "string" and b.key ~= "" then
+          hints[#hints + 1] = {
+            key_display = b.key,
+            label = b.label,
+            min_pending = b.min_pending,
+          }
+        end
+      end
+    end
+    keybind_hints_cache[bufnr] = hints
+  end
+  local keybind_hints = keybind_hints_cache[bufnr]
+
+  for _, entry in ipairs(pending_tools) do
+    local seg = entry.seg
+    local closing_fence_row = seg.position.end_line - 1
+
+    if closing_fence_row >= 0 and closing_fence_row < line_count then
+      local cursor_on_this = cursor_line >= seg.position.start_line and cursor_line <= seg.position.end_line
+
+      local sibling = siblings[seg.tool_use_id]
+      local tool_use = sibling and sibling.use
+      local label = tool_use and preview.format_tool_label(tool_use.name, tool_use.input) or nil
+
+      ---@type {[1]:string, [2]:string}[]
+      local virt_text = {}
+
+      table.insert(virt_text, { " " .. APPROVAL_ICON_PENDING .. " ", "FlemmaApprovalLabel" })
+
+      if label then
+        table.insert(virt_text, { label, "FlemmaApprovalLabel" })
+        table.insert(virt_text, { " · ", "FlemmaApprovalLabel" })
+      end
+
+      if cursor_on_this and #keybind_hints > 0 then
+        local rendered = 0
+        for _, hint in ipairs(keybind_hints) do
+          if not hint.min_pending or #pending_tools >= hint.min_pending then
+            if rendered > 0 then
+              table.insert(virt_text, { "  ", "FlemmaApprovalIndicator" })
+            end
+            table.insert(virt_text, { hint.key_display, "FlemmaApprovalKey" })
+            table.insert(virt_text, { " ", "FlemmaApprovalIndicator" })
+            table.insert(virt_text, { hint.label, "FlemmaApprovalAction" })
+            rendered = rendered + 1
+          end
+        end
+      else
+        local status = "Awaiting approval…"
+        if queue_total > 1 then
+          status = string.format("%s (%d/%d)", status, entry.queue_index, queue_total)
+        end
+        table.insert(virt_text, { status, "FlemmaApprovalIndicator" })
+      end
+
+      vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
+        virt_text = virt_text,
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+      })
+    end
+  end
+
+  for _, entry in ipairs(approved_tools) do
+    local seg = entry.seg
+    local closing_fence_row = seg.position.end_line - 1
+    if closing_fence_row >= 0 and closing_fence_row < line_count then
+      local label = preview.format_tool_label(entry.use.name, entry.use.input)
+
+      ---@type {[1]:string, [2]:string}[]
+      local virt_text = { { " " .. APPROVAL_ICON_APPROVED .. " ", "FlemmaToolResultApproved" } }
+      if label then
+        table.insert(virt_text, { label, "FlemmaApprovalLabel" })
+      end
+
+      vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
+        virt_text = virt_text,
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+      })
+    end
+  end
+
+  for _, entry in ipairs(labeled_tools) do
+    local seg = entry.seg
+    local closing_fence_row = seg.position.end_line - 1
+    if closing_fence_row >= 0 and closing_fence_row < line_count then
+      local label = preview.format_tool_label(entry.use.name, entry.use.input)
+      if label then
+        vim.api.nvim_buf_set_extmark(bufnr, tool_approval_ns, closing_fence_row, 0, {
+          virt_text = {
+            { " " .. APPROVAL_ICON_SETTLED .. " ", "FlemmaApprovalLabel" },
+            { label, "FlemmaApprovalLabel" },
+          },
+          virt_text_pos = "eol",
+          hl_mode = "combine",
+        })
       end
     end
   end
@@ -912,6 +1222,17 @@ function M.setup()
     end,
   })
 
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup,
+    pattern = "shiftwidth,tabstop,expandtab",
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "chat" then
+        bridge.update_ui(bufnr)
+      end
+    end,
+  })
+
   -- Ensure buffer-local state gets cleaned up when chat buffers are removed.
   -- This prevents leaking timers or jobs if a buffer is deleted while a request/progress indicator is active.
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload", "BufDelete" }, {
@@ -921,6 +1242,7 @@ function M.setup()
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
         activity.cleanup_progress(ev.buf, M.update_ui)
         indicators.clear_all_tool_indicators(ev.buf)
+        keybind_hints_cache[ev.buf] = nil
         -- state.cleanup_buffer_state handles executor.cleanup_buffer internally
         state.cleanup_buffer_state(ev.buf)
       end

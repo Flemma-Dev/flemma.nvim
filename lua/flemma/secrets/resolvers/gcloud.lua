@@ -5,10 +5,18 @@
 local M = {}
 
 local log = require("flemma.logging")
+local s = require("flemma.schema")
 local secrets = require("flemma.secrets")
 
 M.name = "gcloud"
 M.priority = 25
+
+---@type flemma.secrets.ResolverMetadata
+M.metadata = {
+  config_schema = s.object({
+    path = s.string("gcloud"),
+  }),
+}
 
 --- Token TTL reported by Google (1 hour).
 local TOKEN_TTL_SECONDS = 3600
@@ -43,7 +51,12 @@ local function run_gcloud_async(path, env, ctx, callback)
   vim.system({ path, "auth", "print-access-token" }, opts, function(result)
     vim.schedule(function()
       if result.code ~= 0 then
-        ctx:diagnostic("auth failed (exit code " .. tostring(result.code) .. ")")
+        local stderr = (result.stderr or ""):gsub("%s+$", "")
+        if stderr:find("Reauthentication") or stderr:find("refresh") then
+          ctx:diagnostic("credentials expired (run `gcloud auth login` to re-authenticate)")
+        else
+          ctx:diagnostic("auth failed (exit code " .. tostring(result.code) .. "): " .. (stderr:match("[^\n]+") or ""))
+        end
         callback(nil)
         return
       end

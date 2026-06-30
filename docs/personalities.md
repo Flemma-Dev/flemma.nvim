@@ -1,6 +1,6 @@
 # Personalities
 
-Personalities are dynamic system prompt generators for `.chat` buffers. Each personality is a Lua module that assembles a markdown prompt from pre-built data — available tools, environment context, and project-specific files.
+Personalities are dynamic system prompt generators for `.chat` buffers. Each personality is a Lua module that assembles a markdown prompt from pre-built data — available tools, environment context, and project-specific files. Personalities are the most direct [environment-shaping surface](harness.md#environment-shaping-surface) of the harness — they determine what the model knows about its identity, capabilities, and surroundings before it reads the conversation.
 
 ## Usage
 
@@ -18,14 +18,14 @@ The personality generates a complete system prompt section with tool listings, b
 Generates a prompt for LLM-powered coding assistance. Includes:
 
 - **Core persona** — identifies the assistant as a coding-focused agent in Neovim
-- **Available tools** — lists all enabled tools with short descriptions
+- **Available tools** — lists the tools resolved for the buffer with short descriptions (enabled tools by default, plus any disabled tools explicitly listed in frontmatter)
 - **Guidelines** — behavioral rules contributed by tool definitions
 - **Environment** — working directory, current file, git branch, date/time
 - **Project context** — auto-discovered files like `AGENTS.md`, `CLAUDE.md`, `.cursorrules`
 
 #### Project Context Discovery
 
-The personality scans the current directory for these files (in order):
+The personality scans the directory containing the `.chat` file for these files (in order). For unnamed buffers with no file on disk, it falls back to the current working directory:
 
 1. `AGENTS.md`
 2. `CLAUDE.md`
@@ -36,7 +36,7 @@ The personality scans the current directory for these files (in order):
 Files with identical content (e.g., symlinks) are deduplicated — only the first match is included.
 
 > [!NOTE]
-> **Prompt caching:** The date and time in the environment section are captured once per buffer session and reused for all subsequent requests. This keeps the system prompt identical across requests, enabling LLM provider prompt caching. Other environment fields (working directory, current file, git branch) are always fresh. The cached date/time is cleared automatically when the buffer is wiped.
+> **Prompt caching:** The date and time in the environment section are captured once per buffer session and reused for all subsequent requests. This keeps the system prompt identical across requests, enabling LLM provider prompt caching. Other environment fields (working directory, current file, git branch) are always fresh. The cached date/time is cleared automatically when the buffer is wiped. The tool list is also sorted alphabetically by name so its ordering stays stable across requests for the same reason.
 
 ## Creating a Personality
 
@@ -101,7 +101,7 @@ The tools resolved for the current buffer's prompt, sorted alphabetically. By de
 
 ```lua
 ---@class flemma.personalities.ProjectContextFile
----@field path string   -- relative path
+---@field path string   -- relative to the chat-file's directory (cwd for unnamed buffers)
 ---@field content string
 ```
 

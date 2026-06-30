@@ -1,6 +1,9 @@
 # UI Customisation
 
-Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable.
+Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable. Several UI components are the visible face of the [harness](harness.md): the approval prompt surfaces the gating decision, the rejection popup captures human-in-the-loop feedback that becomes the model's error string, and the jobs bar provides background-job lifecycle observability.
+
+> [!TIP]
+> Switching colorschemes mid-session (`:colorscheme gruvbox`, etc.) automatically refreshes all Flemma highlight groups — no buffer switch or restart required.
 
 > For the full configuration block including all UI-related keys, see [docs/configuration.md](configuration.md).
 
@@ -8,36 +11,60 @@ Flemma adapts to your colour scheme with theme-aware highlights, line background
 
 Configuration keys map to dedicated highlight groups:
 
-| Key                               | Applies to                                                               |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `highlights.system`               | System messages (`FlemmaSystem`)                                         |
-| `highlights.user`                 | User messages (`FlemmaUser`)                                             |
-| `highlights.assistant`            | Assistant messages (`FlemmaAssistant`)                                   |
-| `highlights.lua_expression`       | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
-| `highlights.lua_code_block`       | `{% code %}` block content (in `@You` and `@System` messages)            |
-| `highlights.lua_delimiter`        | `{{ }}` and `{% %}` delimiters including trim markers                    |
-| `highlights.user_file_reference`  | `@./path` fragments                                                      |
-| `highlights.thinking_tag`         | `<thinking>` / `</thinking>` tags                                        |
-| `highlights.thinking_block`       | Content inside thinking blocks                                           |
-| `highlights.tool_icon`            | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                     |
-| `highlights.tool_name`            | Tool name in tool fold text (`FlemmaToolName`)                           |
-| `highlights.tool_use_title`       | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
-| `highlights.tool_result_title`    | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
-| `highlights.tool_result_error`    | `(error)` suffix on tool result headers (`FlemmaToolResultError`)        |
-| `highlights.tool_result_pending`  | `(pending)` suffix on tool result headers (`FlemmaToolResultPending`)    |
-| `highlights.tool_result_approved` | `(approved)` suffix on tool result headers (`FlemmaToolResultApproved`)  |
-| `highlights.tool_result_rejected` | `(rejected)` suffix on tool result headers (`FlemmaToolResultRejected`)  |
-| `highlights.tool_result_denied`   | `(denied)` suffix on tool result headers (`FlemmaToolResultDenied`)      |
-| `highlights.tool_result_aborted`  | `(aborted)` suffix on tool result headers (`FlemmaToolResultAborted`)    |
-| `highlights.tool_preview`         | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
-| `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
-| `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
-| `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
-| `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)        |
-| `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)           |
-| `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
+| Key                               | Applies to                                                                |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `highlights.system`               | System messages (`FlemmaSystem`)                                          |
+| `highlights.user`                 | User messages (`FlemmaUser`)                                              |
+| `highlights.assistant`            | Assistant messages (`FlemmaAssistant`)                                    |
+| `highlights.lua_expression`       | `{{ expression }}` fragments (in `@You` and `@System` messages)           |
+| `highlights.lua_code_block`       | `{% code %}` block content (in `@You` and `@System` messages)             |
+| `highlights.lua_delimiter`        | `{{ }}` and `{% %}` delimiters including trim markers                     |
+| `highlights.user_file_reference`  | `@./path` fragments                                                       |
+| `highlights.thinking_tag`         | `<thinking>` / `</thinking>` tags                                         |
+| `highlights.thinking_block`       | Content inside thinking blocks                                            |
+| `highlights.tool_icon`            | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                      |
+| `highlights.tool_name`            | Tool name in tool fold text (`FlemmaToolName`)                            |
+| `highlights.tool_use_title`       | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                         |
+| `highlights.tool_result_title`    | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                   |
+| `highlights.tool_result_error`    | `(error)` suffix on tool result headers (`FlemmaToolResultError`)         |
+| `highlights.tool_result_pending`  | `(pending)` suffix on tool result headers (`FlemmaToolResultPending`)     |
+| `highlights.tool_result_approved` | `(approved)` suffix on tool result headers (`FlemmaToolResultApproved`)   |
+| `highlights.tool_result_rejected` | `(rejected)` suffix on tool result headers (`FlemmaToolResultRejected`)   |
+| `highlights.tool_result_denied`   | `(denied)` suffix on tool result headers (`FlemmaToolResultDenied`)       |
+| `highlights.tool_result_aborted`  | `(aborted)` suffix on tool result headers (`FlemmaToolResultAborted`)     |
+| `highlights.tool_preview`         | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`)  |
+| `highlights.tool_label`           | Tool intent label in fold previews, italic by default (`FlemmaToolLabel`) |
+| `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)     |
+| `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                  |
+| `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                   |
+| `highlights.fence_label`          | Language label on fenced code block overlays (`FlemmaFenceLabel`)         |
+| `highlights.fence_bar`            | Delimiter bar on fenced code block overlays (`FlemmaFenceBar`)            |
+| `highlights.approval_indicator`   | Status indicator on approval prompts (`FlemmaApprovalIndicator`)          |
+| `highlights.approval_label`       | Tool name label on approval prompts (`FlemmaApprovalLabel`)               |
+| `highlights.approval_key`         | Keybinding hints on approval prompts (`FlemmaApprovalKey`)                |
+| `highlights.approval_action`      | Action text on approval prompts (`FlemmaApprovalAction`)                  |
+| `highlights.rejection_input`      | Rejection popup input area (`FlemmaRejection`)                            |
+| `highlights.rejection_border`     | Rejection popup border (`FlemmaRejectionBorder`)                          |
+| `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)        |
+| `highlights.progress_accent`      | Bold accent for tool name in the progress bar (`FlemmaProgressBarAccent`) |
+| `highlights.role_name`            | GUI attributes for role name text, e.g., bold (`FlemmaRole*Name`)         |
 
-Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
+Each value is either a **string shorthand** or a **highlight builder** from `require("flemma.hl")`:
+
+- **String (group name)** — `"Comment"` is equivalent to `h.link("Comment")`
+- **String (hex colour)** — `"#ff0000"` is equivalent to `h.hex("#ff0000")`
+- **HlOp builder** — for anything more complex, use the full API: `h.from()`, `h.attrs()`, `:blend()`, `:omit()`, `:pick()`, etc.
+
+The string shorthand means most overrides don't need `require("flemma.hl")` at all:
+
+```lua
+require("flemma").setup({
+  highlights = {
+    tool_name = "Keyword",        -- link to an existing group
+    thinking_tag = "#6a6a6a",     -- direct hex colour (applied as fg)
+  },
+})
+```
 
 ### Job result highlights
 
@@ -60,95 +87,144 @@ Override any group to style job results independently from tool results.
 
 ## Theme-aware values
 
-Any highlight value can be theme-aware using `{ dark = ..., light = ... }`. Flemma detects `vim.o.background` and picks the matching branch:
+Most theme-aware highlights use `:tint()` or `:mute()` — theme-aware blends that automatically flip direction based on `vim.o.background`:
+
+- **`:tint(attr, mod, ratio?)`** — offset away from the theme's background. Adds in dark mode (toward white), subtracts in light mode (toward black). Use for backgrounds that need to stand out from the base.
+- **`:mute(attr, mod, ratio?)`** — offset toward the theme's background. Subtracts in dark mode (toward black), adds in light mode (toward white). Use for foregrounds that need to be more subdued.
+
+Both accept a hex string or an HlOp as the `mod` colour source. When `ratio` is provided (0.0–1.0), the colour is scaled by that factor before blending — useful for borrowing a fraction of another group's colour.
 
 ```lua
-ruler = { hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" } }
+local h = require("flemma.hl")
+
+-- Mute Comment's fg (darker in dark mode, lighter in light mode)
+ruler = { hl = h.from("Comment"):mute("fg", "#303030") }
+
+-- Tint Normal's bg (lighter in dark mode, darker in light mode)
+line_highlights = { user = h.from("Normal"):tint("bg", "#202122") }
+
+-- Tint bg using 10% of DiagnosticWarn's fg colour
+highlights = { assistant = h.from("Normal"):tint("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10) }
 ```
 
-### Highlight expressions
-
-Derive colours from existing highlight groups with blend operations. The syntax is:
-
-```
-"HighlightGroup±attr:#hexvalue"
-```
-
-Where `+` adds (brightens) and `-` subtracts (darkens) the hex value from the group's attribute. Valid attributes are `fg`, `bg`, and `sp`. Each RGB channel is clamped to 0–255 after the operation.
+For cases requiring truly different ops per theme (not just flipped blend direction), `h.themed()` is available:
 
 ```lua
--- Lighten Normal's bg by #101010
-line_highlights = { user = { dark = "Normal+bg:#101010" } }
-
--- Darken with -
-ruler = { hl = { light = "Normal-fg:#303030" } }
-
--- Multiple operations on the same group
-"Normal+bg:#101010-fg:#202020"
+highlights = { example = h.themed({
+  dark = h.link("Special"),
+  light = h.from("Comment"):pick("fg"),
+}) }
 ```
 
-### Contrast enforcement
+### Highlight builder operations
 
-The `^` operator ensures a minimum WCAG 2.1 contrast ratio between a colour attribute and a background context:
+Colours are derived from existing highlight groups using chainable operations. Operations can be combined freely — each returns a new builder, so chains never mutate the original.
 
-```
-"HighlightGroup^attr:ratio"
-```
+**Constructors** — starting points for a highlight chain:
 
-Where `ratio` is a decimal contrast target (e.g., `4.5` for WCAG AA). The operator auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black.
+| Constructor                             | What it does                                                                       |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `h.link("Group")`                       | Link to an existing group (no copy, follows changes)                               |
+| `h.from("Group")`                       | Resolve a group's concrete attributes as a starting point                          |
+| `h.attrs({ ... })`                      | Literal attributes (`{ bold = true }`, `{ fg = "#ff0000" }`)                       |
+| `h.hex("#aabbcc")`                      | Literal colour, defaults to `fg`; pass `"bg"` as second arg for background         |
+| `h.themed({ dark = ..., light = ... })` | Branch on `vim.o.background` (see [Theme-aware values](#theme-aware-values))       |
+| `h.coalesce(a, b, c)`                   | Try each operation in order, use the first that resolves                           |
+| `h.default(attr)`                       | The terminal default for an attribute — black or white based on `vim.o.background` |
+| `h.none()`                              | A no-op: resolves to nothing and sets no group — leaves it unmanaged               |
 
-Composes with blend operations – blends are applied first, then contrast is enforced:
+**Chain operations** — transform the result of the constructor or a previous chain step:
+
+**`:tint(attr, mod, ratio?)` / `:mute(attr, mod, ratio?)`** — theme-aware blends described in [Theme-aware values](#theme-aware-values) above.
+
+**`:blend(attr, mod, ratio?)`** — add or subtract a colour with an explicit direction. When `mod` is a prefixed hex string, `+` brightens and `-` darkens. When `mod` is an HlOp and `ratio` is provided, the sign of the ratio controls direction and its magnitude scales the colour. Each RGB channel is clamped to 0-255. Prefer `:tint()` / `:mute()` when the only difference between dark and light mode is the blend direction:
 
 ```lua
--- Dim DiffChange fg, then ensure result meets 4.5:1 against the bar bg
-"DiffChange-fg:#222222^fg:4.5"
+h.from("Normal"):blend("bg", "+#101010")
+h.from("Normal"):blend("bg", "+#101010"):blend("fg", "-#202020")
+
+-- Blend 10% of DiagnosticWarn's fg into the bg (positive = add)
+h.from("Normal"):blend("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10)
 ```
 
-> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the usage bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
-
-**Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
+**`:omit(attr, ...)`** — strip attributes from the result. Valid targets are colour attributes (`fg`, `bg`, `sp`) and style attributes (`bold`, `italic`, `underline`, `undercurl`, `strikethrough`, `reverse`, `standout`, etc.):
 
 ```lua
--- Try FooBar first; if it lacks `bg`, fall back to Normal
-"FooBar+bg:#201020,Normal+bg:#101010"
+-- Keep fg and styles from Folded, but drop its bg
+h.from("Folded"):omit("bg")
+
+-- Drop both bg and italic
+h.from("Folded"):omit("bg", "italic")
 ```
 
-The `highlights.defaults` table provides the ultimate fallback values:
+**`:pick(attr, ...)`** — the inverse of `:omit()` — keep only the named attributes, discarding everything else:
 
 ```lua
-highlights = {
-  defaults = {
-    dark = { bg = "#000000", fg = "#ffffff" },
-    light = { bg = "#ffffff", fg = "#000000" },
-  },
-}
+-- Extract just the fg colour from Comment
+h.from("Comment"):pick("fg")
 ```
+
+**`:style({ ... })`** — merge in style attributes without changing colours:
+
+```lua
+h.from("Comment"):style({ italic = true, bold = true })
+```
+
+**`:contrast(attr, against, ratio)`** — adjust an attribute's colour to ensure a minimum WCAG contrast ratio against a reference colour. `attr` is the colour to adjust (`"fg"` or `"bg"`), `against` is an HlOp providing the reference, and `ratio` is the minimum contrast ratio (e.g., `4.5` for WCAG AA). If the current colour already meets the ratio, it passes through unchanged:
+
+```lua
+-- Ensure approval label fg has at least 4.5:1 contrast against the line background
+h.from("Folded"):pick("fg"):contrast("fg", h.from("FlemmaLineUser"):pick("bg"), 4.5)
+```
+
+**`:merge(other, strategy?)`** — combine the resolved attributes of two operations. `other` is an HlOp whose attributes are merged into the result. `strategy` is `"keep"` (default, parent wins on conflict) or `"force"` (other wins):
+
+```lua
+-- Take MsgArea's bg, force FloatBorder's fg on top
+h.from("MsgArea"):pick("bg"):merge(h.from("FloatBorder"):pick("fg"), "force")
+```
+
+**Coalesce** — `h.coalesce()` is particularly useful for fallback chains:
+
+```lua
+-- Try FlemmaLineUser first; if it has no bg, fall back to Normal
+h.coalesce(
+  h.from("FlemmaLineUser"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1),
+  h.from("Normal"):tint("bg", h.from("DiagnosticInfo"):pick("fg"), 0.1)
+)
+```
+
+When an operation resolves to nothing (e.g., a group doesn't exist, or `:pick("sp")` on a group with no `sp`), it returns `nil` and the coalesce moves to the next candidate. Missing colours fall back to your `Normal` group, or to black/white based on `vim.o.background`.
 
 ## Line highlights
 
 Full-line background colours distinguish message roles. Applied via line-level extmarks on every line of each message block. Disable with `line_highlights.enabled = false` (default: `true`):
 
 ```lua
+local h = require("flemma.hl")
+
 line_highlights = {
   enabled = true,
-  frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
-  system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
-  user = { dark = "Normal", light = "Normal" },
-  assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
+  frontmatter = h.from("Normal"):tint("bg", "#18111a"),
+  system = h.from("Normal"):tint("bg", "#101112"),
+  user = h.from("Normal"):tint("bg", "#202122"),
+  assistant = h.link("Normal"),
 }
 ```
 
-Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `highlights.role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
+Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line -- content starts on the next line. The `highlights.role_name` option (default: `h.attrs({ bold = true })`) applies styling to the role name text only (not the ruler).
 
 ## Rulers
 
 Rulers are drawn directly on each role marker line (`@System:`, `@You:`, `@Assistant:`) using overlay extmarks. The ruler character replaces the `@` symbol and extends across the remaining window width, producing a visual separator that doesn't consume extra vertical space. Rulers resize automatically when the window is resized.
 
 ```lua
+local h = require("flemma.hl")
+
 ruler = {
   enabled = true,       -- default: true
   char = "─",           -- drawn over the role marker and repeated to fill the line
-  hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
+  hl = h.from("Comment"):mute("fg", "#303030"),
 }
 ```
 
@@ -174,13 +250,58 @@ Three visual states indicate turn progress:
 
 When `padding.right > 0`, the top arc (`╭`) connects to the ruler for a seamless visual join.
 
+## Approval prompt
+
+When a tool call requires manual approval, Flemma renders an inline widget at the end of the tool result's closing fence line. The cursor-focused tool shows a pause indicator (`⏸`), the tool label, and keybind hints; other pending tools instead show `Awaiting approval… (N/M)` when more than one tool is queued. Approved-but-not-yet-executing tools show a check icon (`✓`), and executing or already-settled tools show an hourglass (`⧖`) with just the tool label.
+
+```lua
+ui = {
+  approval = {
+    enabled = true,               -- Show approval prompts (default: true)
+    syntax_highlighting = true,   -- Treesitter-powered syntax highlighting in tool previews
+    preview_lines = { head = 6, tail = 6 },
+  },
+}
+```
+
+When `syntax_highlighting` is enabled (the default), tool preview content inside the approval widget uses treesitter highlighting for the detected language — JSON tool inputs get proper syntax colours instead of a flat `FlemmaToolPreview` tint.
+
+## Rejection popup
+
+When you reject a tool call, Flemma opens an inline floating input overlaid on the tool result fence. The input opens in insert mode pre-filled with `User feedback: ` and supports multi-line editing with Vim motions; type your reason and press <kbd>Enter</kbd> to confirm, or <kbd>Ctrl-C</kbd> (or <kbd>Esc</kbd>/<kbd>q</kbd> in normal mode) to cancel. The reason you type becomes the `User feedback: {{ reason }}` line written into the tool result fence, and that text is delivered to the model verbatim as the `tool_result` error string it reads.
+
+```lua
+ui = {
+  rejection = {
+    enabled = true,        -- Show inline rejection popup (default: true)
+    completion = false,    -- Buffer-local completion in the popup (default: false)
+    winblend = 15,         -- Window transparency (default: 15)
+  },
+}
+```
+
+While the popup is open, a `(rejected)` overlay replaces the `(pending)` suffix on the tool result header so you can see the state change in real time.
+
+Two highlight groups control the popup appearance:
+
+| Group                   | Default                          | Applies to           |
+| ----------------------- | -------------------------------- | -------------------- |
+| `FlemmaRejection`       | `MsgArea`                        | The popup input area |
+| `FlemmaRejectionBorder` | `FloatBorder` fg on `MsgArea` bg | The popup border     |
+
+Customise via `highlights.rejection_input` and `highlights.rejection_border` in your config. Set `ui.rejection.enabled = false` to fall back to `vim.ui.input` for rejection messages.
+
 ## Spinner behaviour
 
-While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner. The animation uses phase-specific frame sequences so the visual rhythm reflects what is happening.
+While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Waiting…" as end-of-line virtual text with an animated braille spinner, followed by the elapsed time – e.g., `⠋ Waiting… · 3s`. The animation uses phase-specific frame sequences so the visual rhythm reflects what is happening.
 
 The spinner transitions between phases automatically and is removed once streaming starts.
 
-When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
+Once content begins arriving, the label is replaced with a live character count alongside the elapsed time – e.g., `3.2K characters · 12s` – so you can gauge progress at a glance.
+
+### Auto-scroll during streaming
+
+While a response is streaming, Flemma automatically scrolls the viewport to keep new content visible — the buffer follows the growing response to the bottom. If you scroll away (e.g., to review an earlier message), auto-scroll disengages and the viewport stays where you put it. Auto-scroll re-engages when the next request starts, and also re-engages mid-stream if you move the cursor back to the last line.
 
 ### Booting indicator
 
@@ -188,22 +309,25 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 ### Tool execution indicators
 
-During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
+During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✔ Complete` or `⚠ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
-Eight highlight groups control indicator colours — four for the inline `⬢` icon and four for the EOL status text:
+Eleven highlight groups control indicator colours — seven for the inline `⬢` icon and four for the EOL status text:
 
-| Group                     | Default link            | When it's used                           |
-| ------------------------- | ----------------------- | ---------------------------------------- |
-| `FlemmaToolIconPending`   | `FlemmaToolResultTitle` | Inline `⬢` on pending tools              |
-| `FlemmaToolIconExecuting` | `FlemmaToolResultTitle` | _(not shown — no prefix when executing)_ |
-| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle` | Inline `⬢` + fold icon on success        |
-| `FlemmaToolIconError`     | `DiagnosticError`       | Inline `⬢` + fold icon on error          |
-| `FlemmaToolPending`       | `DiagnosticHint`        | EOL `⏸ Pending` text                    |
-| `FlemmaToolExecuting`     | `DiagnosticInfo`        | EOL spinner + `Executing…` text          |
-| `FlemmaToolSuccess`       | `DiagnosticOk`          | EOL `✔ Complete` text                   |
-| `FlemmaToolError`         | `DiagnosticError`       | EOL `⚠ Failed` text                     |
+| Group                     | Default link               | When it's used                           |
+| ------------------------- | -------------------------- | ---------------------------------------- |
+| `FlemmaToolIconPending`   | `DiagnosticInfo`           | Inline `⬢` on pending tools              |
+| `FlemmaToolIconExecuting` | `FlemmaToolResultTitle`    | _(not shown — no prefix when executing)_ |
+| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle`    | Inline `⬢` + fold icon on success        |
+| `FlemmaToolIconError`     | `DiagnosticError`          | Inline `⬢` + fold icon on error          |
+| `FlemmaToolIconRejected`  | `FlemmaToolResultRejected` | Inline `⬢` on rejected tools             |
+| `FlemmaToolIconDenied`    | `FlemmaToolResultDenied`   | Inline `⬢` on denied tools               |
+| `FlemmaToolIconAborted`   | `FlemmaToolResultAborted`  | Inline `⬢` on aborted tools              |
+| `FlemmaToolPending`       | `DiagnosticHint`           | EOL `⏸ Pending` text                    |
+| `FlemmaToolExecuting`     | `DiagnosticInfo`           | EOL spinner + `Executing…` text          |
+| `FlemmaToolSuccess`       | `DiagnosticOk`             | EOL `✔ Complete` text                   |
+| `FlemmaToolError`         | `DiagnosticError`          | EOL `⚠ Failed` text                     |
 
-By default, icon colours match the `Tool Result:` header while status text uses semantic Diagnostic colours. Override any group to customise:
+By default, the executing and success icons match the `Tool Result:` header, while the pending, error, rejected, denied, and aborted icons carry their own semantic colours; status text uses semantic Diagnostic colours throughout. Override any group to customise:
 
 ```lua
 -- Make icons match status colours instead of the header
@@ -215,7 +339,7 @@ vim.api.nvim_set_hl(0, "FlemmaToolIconError",   { link = "DiagnosticError" })
 
 When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
 
-Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **detail** (the raw command or path) and a **label** (the LLM's stated intent), separated by an em-dash and rendered detail-first: `bash: $ make test — running tests`. When width is limited, detail truncates first to preserve the label. The italic-label/dim-detail split is only visible in folded message previews, where each chunk gets its own highlight; the virt-line preview shown over pending placeholders uses a single combined `FlemmaToolPreview` highlight. Custom tools can provide their own previews via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
+Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **detail** (the raw command or path) and a **label** (the LLM's stated intent), separated by an em-dash and rendered detail-first: `bash: $ make test — running tests`. When width is limited, detail truncates first to preserve the label. The italic-label/dim-detail split is only visible in folded message previews, where each chunk gets its own highlight; the virt-line preview shown over pending placeholders uses a single combined `FlemmaToolPreview` highlight. Custom tools can provide their own previews via `format_preview` on the tool definition. Tools without a custom formatter get a YAML-style generic preview — scalar values as `key: value` pairs, compound values JSON-encoded — with treesitter syntax highlighting when `ui.approval.syntax_highlighting` is enabled.
 
 Preview lines use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). See [docs/tools.md](tools.md#tool-previews) for the full reference on built-in formatters, the generic fallback, and writing custom preview functions.
 
@@ -302,8 +426,6 @@ Before sending, preview the cost of the next request with `:Flemma usage:estimat
 
 For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they reference `buffer.tokens.input`. Estimates are deduped and suppressed while a chat request is already in flight.
 
-See `lua/flemma/usage/` for the driver and prefetch logic, and `lua/flemma/ui/bar/` for the shared Bar rendering class.
-
 ## Extmark priority
 
 Flemma uses a priority hierarchy to layer visual elements correctly when they overlap. Higher-priority extmarks take precedence:
@@ -317,7 +439,7 @@ Flemma uses a priority hierarchy to layer visual elements correctly when they ov
 | 250      | Tool indicators | Execution spinners and status                 |
 | 300      | Spinner         | Highest priority; suppresses spell checking   |
 
-This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurable, but understanding it explains why certain elements visually override others. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
+These priorities are not user-configurable, but understanding them explains why certain elements visually override others. The base layers (50, 100, 125, 200) are defined in `lua/flemma/ui/init.lua`; the tool indicator priority (250) lives in `lua/flemma/ui/indicators.lua` and the spinner priority (300) in `lua/flemma/ui/activity.lua`. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
 
 ## Progress bar
 
@@ -358,6 +480,7 @@ When `lsp.enabled` is set (the default whenever `vim.lsp` is available), hoverin
 
 Press `gd` (or use your LSP go-to-definition keymap) on:
 
+- A `**Tool Use:**` or `**Tool Result:**` placeholder → jumps to its sibling (the matching result or use block).
 - A `tool_result` carrying a `job=` modeline → jumps to the matching `**Job Result:**` block.
 - A `**Job Result:**` header → jumps back to the originating `tool_result` placeholder.
 - An `include("...")` expression → opens the included file.

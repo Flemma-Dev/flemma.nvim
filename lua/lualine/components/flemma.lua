@@ -4,12 +4,14 @@
 --- format string trigger data lookups.  Variables are cached per render cycle.
 local lualine_component = require("lualine.component")
 local config_facade = require("flemma.config")
+local h = require("flemma.hl")
 local normalize = require("flemma.provider.normalize")
 local prefetch = require("flemma.usage.prefetch")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.provider.registry")
 local renderer = require("flemma.templating.renderer")
 local session = require("flemma.session")
+local str = require("flemma.utilities.string")
 local templating = require("flemma.templating")
 local tools = require("flemma.tools")
 
@@ -199,6 +201,55 @@ local function make_resolvers(config)
         end,
       },
     },
+
+    subscription = {
+      plan_name = function()
+        local request = session.get():get_latest_request()
+        if not request or not request.rate_limits then
+          return nil
+        end
+        return request.rate_limits.plan_name
+      end,
+      windows = function()
+        local request = session.get():get_latest_request()
+        if not request or not request.rate_limits then
+          return nil
+        end
+        return request.rate_limits.windows
+      end,
+      primary = {
+        used_percent = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 1 then
+            return nil
+          end
+          return request.rate_limits.windows[1].used_percent
+        end,
+        label = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 1 then
+            return nil
+          end
+          return str.format_duration(request.rate_limits.windows[1].window_seconds)
+        end,
+      },
+      secondary = {
+        used_percent = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 2 then
+            return nil
+          end
+          return request.rate_limits.windows[2].used_percent
+        end,
+        label = function()
+          local request = session.get():get_latest_request()
+          if not request or not request.rate_limits or #request.rate_limits.windows < 2 then
+            return nil
+          end
+          return str.format_duration(request.rate_limits.windows[2].window_seconds)
+        end,
+      },
+    },
   }
 end
 
@@ -256,6 +307,7 @@ local function build_env(config)
   env.session = vars.session
   env.last = vars.last
   env.buffer = vars.buffer
+  env.subscription = vars.subscription
   env.__expr_transform = escape_statusline_percent
 
   return env
@@ -331,28 +383,29 @@ function flemma_component:_do_update_status()
       end)
 
       -- The FlemmaStatusTextMuted → FlemmaStatusTextMuted2 rewrite is the only
-      -- reason we parse default_hl and touch the hl API here. Short-circuit
-      -- when the escape isn't in the format so redraws pay nothing for it.
+      -- reason we parse default_hl here. Short-circuit when the escape isn't
+      -- in the format so redraws pay nothing for it.
       if status:find("%#FlemmaStatusTextMuted#", 1, true) then
         -- default_hl is always a lualine section escape — "%#lualine_c_normal#",
         -- "%#lualine_x_insert#", etc. Anchoring to the lualine_ prefix both
         -- self-documents the intent and lets unexpected shapes fall through to
-        -- the no-op path instead of feeding a garbage name to nvim_get_hl.
+        -- the no-op path instead of feeding a garbage name to h.from().
         local section_group = default_hl:match("^%%#(lualine_[%w_]+)#$")
         if section_group then
-          local section_hl = vim.api.nvim_get_hl(0, { name = section_group, link = false })
-          local muted_hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
-          if section_hl and section_hl.bg and muted_hl and muted_hl.fg then
+          local section_bg = h.from(section_group):pick("bg"):get()
+          local muted_fg = h.from("FlemmaStatusTextMuted"):pick("fg"):get()
+          if section_bg and section_bg.bg and muted_fg and muted_fg.fg then
             -- Lualine redraws the statusline on every CursorMoved / ModeChanged
-            -- etc., so update_status runs frequently. Skip nvim_set_hl unless the
+            -- etc., so update_status runs frequently. Skip :set() unless the
             -- inputs have actually changed (only on mode switch or colorscheme).
-            if self._muted_section_bg ~= section_hl.bg or self._muted_fg ~= muted_hl.fg then
-              vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", {
-                bg = section_hl.bg,
-                fg = muted_hl.fg,
-              })
-              self._muted_section_bg = section_hl.bg
-              self._muted_fg = muted_hl.fg
+            if self._muted_section_bg ~= section_bg.bg or self._muted_fg ~= muted_fg.fg then
+              h.from("FlemmaStatusTextMuted")
+                :pick("fg")
+                :merge(h.hex(section_bg.bg --[[@as string]], "bg"), "force")
+                :style({ nocombine = true })
+                :set("FlemmaStatusTextMuted2", { default = false })
+              self._muted_section_bg = section_bg.bg
+              self._muted_fg = muted_fg.fg
             end
             status = status:gsub("%%#FlemmaStatusTextMuted#", function()
               return "%#FlemmaStatusTextMuted2#"
