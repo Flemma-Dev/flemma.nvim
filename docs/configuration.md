@@ -406,7 +406,7 @@ Old `.chat` files that use the previous inline role marker format (e.g., `@You: 
 
 ### Autopilot
 
-Autopilot turns Flemma into an autonomous agent. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
+Autopilot turns Flemma into an autonomous agent — it is the harness's [coordination loop](harness.md#gating-and-coordination-surface) that chains tool execution, result delivery, and re-sending into an autonomous cycle. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
 
 | Key                            | Default | Effect                                                                                                                                                                |
 | ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -477,7 +477,7 @@ Preset names must begin with `$`. Switch using `:Flemma switch $fast` and overri
 
 ### Sandbox
 
-Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
+Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. The sandbox is the harness's filesystem boundary — see [sandbox.md](sandbox.md) and the [gating surface](harness.md#gating-and-coordination-surface) overview. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
 
 | Key                               | Default                                                       | Effect                                                                                |
 | --------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |

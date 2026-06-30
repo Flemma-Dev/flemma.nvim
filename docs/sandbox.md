@@ -1,6 +1,8 @@
 # Sandboxing
 
-Flemma can sandbox tool execution so that shell commands run inside a constrained filesystem. The sandbox mounts the entire rootfs read-only and grants write access only to an explicit allowlist of paths. A misbehaving model cannot `rm -rf /`, overwrite dotfiles, or write outside your project directory.
+Flemma can sandbox tool execution so that shell commands run inside a constrained filesystem. The sandbox is the harness's filesystem boundary — it enables capability-gated auto-approval (`auto_approves_if_sandboxed`) and backs the durable tool result store (`urn:flemma:store`). See [Flemma as a Harness](harness.md#gating-and-coordination-surface) for how sandboxing fits into the broader gating surface.
+
+The sandbox mounts the entire rootfs read-only and grants write access only to an explicit allowlist of paths. A misbehaving model cannot `rm -rf /`, overwrite dotfiles, or write outside your project directory.
 
 > [!IMPORTANT]
 > **The sandbox is damage control, not prevention.** It limits the blast radius when something goes wrong – the model can still do anything within its writable paths, including reading sensitive files and sending them over the network. It will not stop a bash tool from `cat`-ing your `.env` and `curl`-ing it to a remote server. The sandbox protects against the common accidents (a hallucinated `rm`, a stray write to `/etc`), not against a determined adversary. Always review the tools you are using and understand their potential risks, even in a sandboxed environment.

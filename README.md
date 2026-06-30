@@ -11,7 +11,7 @@ https://github.com/user-attachments/assets/edd51ecd-a3e8-4e84-9341-123fa5a76c5d
 
 ## What Is Flemma?
 
-Flemma is an AI plugin for Neovim. You write in `.chat` files -- plain text with simple role markers -- and Flemma handles everything else: streaming responses, running tools, managing providers, and keeping the conversation clean and navigable.
+Flemma is an AI plugin for Neovim. You write in `.chat` files -- plain text with simple role markers -- and Flemma handles everything else: streaming responses, running tools, managing providers, and keeping the conversation clean and navigable. Between the human and the model, Flemma acts as a [harness](docs/harness.md) -- it shapes what the model sees, gates what it can do, and manages the coordination that makes autonomous tool use safe and practical.
 
 ```markdown
 @You:
@@ -158,7 +158,7 @@ Flemma can work autonomously. When the model needs to read a file, edit code, or
 3. Flemma executes approved tools and sends the results back.
 4. The model decides what to do next. Repeat until the task is done.
 
-Long-running tools can run in the background while the conversation continues -- results are delivered when the model is ready for them. Read more in [tools.md](docs/tools.md#background-jobs).
+The harness manages the details that make this loop practical: oversized tool output is [truncated](docs/tools.md#tool-result-store) to protect the context window (the full result is saved to a durable store next to the `.chat` file, and the model is told where to find it); the model can [redirect output](docs/tools.md#flemmesave_to--redirecting-output-to-a-file) to a file via the injected `flemma.save_to` parameter; and background jobs let long-running tools run without blocking the conversation -- the model polls their state through `flemma.jobs.status`. Read more in [tools.md](docs/tools.md#background-jobs).
 
 You can watch the whole thing happen in the buffer. Every tool call, every result, every decision is visible text that you can read, edit, or undo.
 
@@ -176,6 +176,8 @@ You can watch the whole thing happen in the buffer. Every tool call, every resul
 | `flemma.jobs.status` | Queries background job status           |
 
 ### Safety
+
+Safety in Flemma is the harness's [gating and coordination surface](docs/harness.md#gating-and-coordination-surface) -- approval, sandboxing, and capability tags work together to control what the model can do.
 
 - **Approval.** By default, file tools (`read`, `edit`, `write`, `grep`, `find`, `ls`) are auto-approved. `bash` is auto-approved when the sandbox is available, or requires your review otherwise. You see a preview of what the tool will do before approving: `bash: $ make test — running tests`. Customize approval with presets (`$standard`, `$readonly`) or write your own logic.
 - **Sandbox.** On Linux, shell commands run inside a Bubblewrap container with a read-only root filesystem. Only your project directory and `/tmp` are writable. Enabled by default. The sandbox is damage control, not a security boundary -- it limits the blast radius of common accidents, not deliberate attacks.
@@ -292,7 +294,7 @@ Individual `.chat` files can override any of these settings. Detailed references
 
 Flemma is designed to be extended. Everything plugs in through clean registries:
 
-- **Custom tools** -- define your own with `require("flemma.tools").register()`. Read more in [tools.md](docs/tools.md#registering-custom-tools).
+- **Custom tools** -- define your own with `require("flemma.tools").register()`. Custom tools can declare [capability tags](docs/tools.md#capability-tags) that modify how the harness treats them. Read more in [tools.md](docs/tools.md#registering-custom-tools).
 - **Approval policies** -- control which tools run automatically, which need your review, and which are blocked entirely. Read more in [tools.md](docs/tools.md#approval-resolvers).
 - **Hooks** -- react to lifecycle events (`FlemmaRequestSending`, `FlemmaToolCompleted`, etc.) using standard Neovim autocmds. Read more in [extending.md](docs/extending.md).
 - **Custom providers** -- add your own API providers for compatible services. Read more in [extending.md](docs/extending.md).

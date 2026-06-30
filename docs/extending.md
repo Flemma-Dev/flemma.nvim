@@ -1,6 +1,6 @@
 # Extending Flemma
 
-Flemma uses registry patterns throughout – tools, providers, approval resolvers, sandbox backends, credential resolvers, and personalities are all pluggable. This guide covers the extension points that don't have a dedicated document, and links to those that do.
+Flemma uses registry patterns throughout – tools, providers, approval resolvers, sandbox backends, credential resolvers, and personalities are all pluggable. This guide covers the extension points that don't have a dedicated document, and links to those that do. These registries are the seams into Flemma as a [harness](harness.md): lifecycle hooks (`FlemmaJobCompleted`, `FlemmaToolApprovalRequired`, `FlemmaAutopilotResuming`), programmatic approval, and credential resolution are where external code plugs into the harness's gating and coordination surfaces.
 
 ---
 

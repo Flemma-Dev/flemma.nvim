@@ -1,6 +1,6 @@
 # Personalities
 
-Personalities are dynamic system prompt generators for `.chat` buffers. Each personality is a Lua module that assembles a markdown prompt from pre-built data — available tools, environment context, and project-specific files.
+Personalities are dynamic system prompt generators for `.chat` buffers. Each personality is a Lua module that assembles a markdown prompt from pre-built data — available tools, environment context, and project-specific files. Personalities are the most direct [environment-shaping surface](harness.md#environment-shaping-surface) of the harness — they determine what the model knows about its identity, capabilities, and surroundings before it reads the conversation.
 
 ## Usage
 

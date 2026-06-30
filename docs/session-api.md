@@ -1,6 +1,6 @@
 # Session API
 
-Flemma tracks token usage and costs for every API request in a global session object. The session lives in memory for the lifetime of the Neovim instance and is accessible through the `flemma.session` module.
+Flemma tracks token usage and costs for every API request in a global session object. The session lives in memory for the lifetime of the Neovim instance and is accessible through the `flemma.session` module. Session cost tracking and subscription rate-limit windows are the harness's [economics and budget observability](harness.md).
 
 ## Module functions
 

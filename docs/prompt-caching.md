@@ -1,6 +1,6 @@
 # Prompt Caching
 
-Flemma supports prompt caching across all supported providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use.
+Flemma supports prompt caching across all supported providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use. Prompt caching is a model-invisible economics optimization that follows from the _(conversation, environment)_ principle — the [environment-shaping surface](harness.md#environment-shaping-surface) must be deterministic for caching to work.
 
 Prefix stability is a core design discipline for Flemma. Provider caches only pay off when the request prefix is byte-identical to the previous request, so Flemma actively engineers for that — sorting tools alphabetically, canonicalizing JSON key order, freezing date/time per buffer, gating async tool discovery before the first send, and placing cache breakpoints deliberately. The next section documents what Flemma keeps stable; the per-provider sections describe what each provider does with the stable prefix.
 

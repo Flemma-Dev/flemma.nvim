@@ -1,6 +1,6 @@
 # Providers
 
-Flemma talks to LLMs through **providers**. Four are built in; a fifth — the experimental Codex / ChatGPT-subscription adapter — is opt-in. The active provider is part of the _(conversation, environment)_ pair: it can be set globally in `setup()`, per-buffer in frontmatter, or switched at any time with `:Flemma switch`.
+Flemma talks to LLMs through **providers**. Four are built in; a fifth — the experimental Codex / ChatGPT-subscription adapter — is opt-in. The active provider is part of the _(conversation, environment)_ pair: it can be set globally in `setup()`, per-buffer in frontmatter, or switched at any time with `:Flemma switch`. Switching providers changes only how the request is delivered — the [harness](harness.md) surfaces (tools, approval gating, sandbox, background jobs) remain identical across all providers.
 
 ## Built-in providers
 

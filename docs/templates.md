@@ -1,6 +1,6 @@
 # Template System and Automation
 
-Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
+Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor. Template expressions and `include()` are part of the harness's [environment-shaping surface](harness.md#environment-shaping-surface) — they let the harness inject context into what the model sees before the request leaves the editor.
 
 > For an overview of the `.chat` buffer format (role markers, frontmatter placement, thinking blocks), see [Why Conversations as Files?](../README.md#why-conversations-as-files) in the README.
 

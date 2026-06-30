@@ -1,6 +1,6 @@
 # UI Customisation
 
-Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable.
+Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable. Several UI components are the visible face of the [harness](harness.md): the approval prompt surfaces the gating decision, the rejection popup captures human-in-the-loop feedback that becomes the model's error string, and the jobs bar provides background-job lifecycle observability.
 
 > [!TIP]
 > Switching colorschemes mid-session (`:colorscheme gruvbox`, etc.) automatically refreshes all Flemma highlight groups — no buffer switch or restart required.

@@ -2,6 +2,8 @@
 
 Flemma's tool system lets models request actions – run a calculation, execute a shell command, read or modify files – and receive structured results, all within the `.chat` buffer. This document covers approval, per-buffer configuration, custom tool registration, and the resolver API.
 
+Tools are the primary [model-facing surface](harness.md#model-facing-surface) of the harness: auto-injected parameters (`flemma.background`, `flemma.save_to`), the `flemma.jobs.status` polling tool, status suffixes, output truncation, and strict-schema rewriting are all documented in this file. The [gating surface](harness.md#gating-and-coordination-surface) — approval resolvers, capability tags, and sandbox auto-approval — is also covered here and in [sandbox.md](sandbox.md).
+
 For a quick overview of built-in tools and the basic workflow, see [The Agent](../README.md#the-agent) section in the README.
 
 ---
