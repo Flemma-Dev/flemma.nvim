@@ -231,6 +231,7 @@ Fixed parser edge case with nested thinking blocks
 - **Never edit `package.json` version or `CHANGELOG.md` manually** — `pnpm changeset version` manages both
 - When the user asks to release, run `pnpm changeset version` to consume pending changesets, then commit the result
 - A GitHub Actions workflow (`.github/workflows/release.yml`) automatically creates a "Version Packages" PR when changesets accumulate on `main`
+- **Naming a minor release?** Each minor version gets a single-word typographic codename — invoke the `release-naming` skill (`.claude/skills/release-naming/`), which logs picks in the `Incipit` ledger so names are never reused
 
 ## Knowledge Management
 
