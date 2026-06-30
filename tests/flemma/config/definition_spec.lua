@@ -232,8 +232,9 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes secrets defaults", function()
-      local cfg = config_facade.get()
-      assert.equals("gcloud", cfg.secrets.gcloud.path)
+      -- secrets has no static fields: each resolver owns its schema and resolves
+      -- via DISCOVER, so secrets.gcloud materializes only after the resolver registers.
+      assert.same({}, config_facade.materialize().secrets)
     end)
 
     it("materializes lsp defaults", function()

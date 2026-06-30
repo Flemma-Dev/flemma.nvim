@@ -5,10 +5,18 @@
 local M = {}
 
 local log = require("flemma.logging")
+local s = require("flemma.schema")
 local secrets = require("flemma.secrets")
 
 M.name = "gcloud"
 M.priority = 25
+
+---@type flemma.secrets.ResolverMetadata
+M.metadata = {
+  config_schema = s.object({
+    path = s.string("gcloud"),
+  }),
+}
 
 --- Token TTL reported by Google (1 hour).
 local TOKEN_TTL_SECONDS = 3600

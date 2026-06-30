@@ -132,7 +132,8 @@
 ---@field policy flemma.config.SandboxPolicy
 
 ---@class flemma.config.Secrets
----@field gcloud flemma.config.SecretsGcloud
+---@field gcloud? flemma.config.SecretsGcloud
+---@field [string] table|nil
 
 ---@class flemma.config.Templating
 ---@field modules string[]

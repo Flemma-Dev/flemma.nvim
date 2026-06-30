@@ -224,7 +224,7 @@ require("flemma").setup({
     gcloud = {
       path = "gcloud",                       -- Path to gcloud binary (override for NixOS, Guix, etc.)
     },
-    chatgpt = {
+    chatgpt = {                              -- Only valid when the experimental Codex adapter is loaded (it self-registers this resolver)
       auth_file = nil,                       -- Path to the Codex/ChatGPT auth.json (falls back to $CODEX_HOME/auth.json, then ~/.codex/auth.json)
     },
   },

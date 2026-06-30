@@ -438,9 +438,10 @@ return s.object({
   }),
 
   secrets = s.object({
-    gcloud = s.object({
-      path = s.string("gcloud"),
-    }),
+    -- Resolver-specific config schemas resolved lazily via the secrets registry
+    [symbols.DISCOVER] = function(key)
+      return require("flemma.secrets").get_config_schema(key)
+    end,
   }),
 
   logging = s.object({

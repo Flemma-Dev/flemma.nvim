@@ -6,9 +6,18 @@ local M = {}
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local s = require("flemma.schema")
 
 M.name = "chatgpt"
 M.priority = 50
+
+-- Experimental resolver: no generated type; resolves at runtime when Codex loads it.
+---@type flemma.secrets.ResolverMetadata
+M.metadata = {
+  config_schema = s.object({
+    auth_file = s.optional(s.string()),
+  }),
+}
 
 local CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 local TOKEN_ENDPOINT = "https://auth.openai.com/oauth/token"

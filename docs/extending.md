@@ -198,16 +198,28 @@ require("flemma").setup({
 
 The `gcloud.path` override is useful on NixOS, Guix, or systems where the gcloud CLI is not on `$PATH`. The `chatgpt.auth_file` override points the ChatGPT subscription resolver at a non-default Codex auth file; when unset it falls back to `$CODEX_HOME/auth.json`, then `~/.codex/auth.json`. Each resolver reads its own subtree (`secrets.gcloud`, `secrets.chatgpt`) via `ctx:get_config()`.
 
+Each resolver **owns its config schema** (`metadata.config_schema`), composed into the `secrets` namespace via DISCOVER — the same pattern provider adapters and sandbox backends use — so a `secrets.<name>` key only validates once its resolver is registered. `secrets.gcloud` is always available (a built-in resolver); `secrets.chatgpt` only validates when the experimental Codex adapter is loaded, since that adapter self-registers the ChatGPT resolver.
+
 ### Registering a custom resolver
 
 Credential resolution runs on the send pipeline, so resolvers must be **non-blocking**. Implement `resolve_async(self, credential, ctx, callback)` and drive subprocesses through `vim.system(cmd, opts, on_exit)` — never `vim.fn.system` and never `vim.system(cmd):wait()`. The walker prefers `resolve_async` when both forms are present.
 
 ```lua
+local s = require("flemma.schema")
 local secrets = require("flemma.secrets")
 
 secrets.register("my_vault", {
   name = "my_vault",
   priority = 60,  -- between environment (100) and keyring (50)
+
+  -- Optional: own a config schema so `secrets.my_vault.*` is a valid setup() key.
+  -- Defaults materialize on registration; read the subtree via ctx:get_config().
+  metadata = {
+    config_schema = s.object({
+      mount = s.string("secret"),
+      address = s.optional(s.string()),
+    }),
+  },
 
   supports = function(self, credential)
     return credential.service == "my-service"
@@ -241,6 +253,7 @@ The resolver contract:
 - **`supports(self, credential, ctx)`** → `boolean` – whether this resolver can attempt this credential. `ctx` is a `SecretsContext` (see below).
 - **`resolve_async(self, credential, ctx, callback)`** – the preferred form. Call `callback(result_or_nil)` exactly once when done. The walker awaits it via `flemma.readiness`, so the send pipeline doesn't block while you fetch a token.
 - **`resolve(self, credential, ctx)`** → `{ value: string, ttl?: integer } | nil` – sync fallback, used only when `resolve_async` isn't defined. A sync `resolve` that does its own blocking I/O (`vim.fn.system`, `:wait()`, etc.) freezes the editor — don't do this.
+- **`metadata.config_schema`** (optional) – a schema DSL object describing the resolver's `secrets.<name>` config. Defaults materialize when the resolver registers, and `ctx:get_config()` returns the resolved subtree. Mirrors how provider adapters and sandbox backends own their schema; without it, `secrets.<name>` accepts no keys.
 
 Resolvers receive a `SecretsContext` that provides:
 
