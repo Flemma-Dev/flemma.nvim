@@ -72,21 +72,49 @@ jq '
         max_output: .value.limit.output,
         reasoning: .value.reasoning
       }
+  ],
+  moonshotai: [.moonshotai.models | to_entries[]
+    | select(.value.tool_call == true)
+    | {
+        id: .key,
+        name: .value.name,
+        input: .value.cost.input,
+        output: .value.cost.output,
+        cache_read: .value.cost.cache_read,
+        cache_write: .value.cost.cache_write,
+        context: .value.limit.context,
+        max_input: .value.limit.input,
+        max_output: .value.limit.output,
+        reasoning: .value.reasoning
+      }
   ]
 }' /tmp/models-dev.json
 ```
 
 Review the extracted data before proceeding.
 
+**models.dev caveats (learned the hard way):**
+
+- **Provider keys:** Anthropic is `anthropic`, Gemini is `google`, OpenAI is `openai`, Moonshot is `moonshotai` (the `moonshotai-cn` variant mirrors the global catalog). Moonshot was previously omitted from this extraction even though `moonshot.lua` is a target file — don't drop it.
+- **models.dev lags on retirements.** It keeps listing models with `tool_call == true` for weeks after they retire (it still listed `claude-opus-4-0` / `claude-sonnet-4-0` after their 2026-06-15 retirement). Never treat a models.dev listing as proof a model is still active — confirm against the provider's deprecation page in Phase 2.
+- **Absent from models.dev ≠ retired.** Some legacy/provider-specific lines are simply not tracked (the `moonshot-v1-*` models are entirely absent yet still sold). Confirm against the provider's own docs before removing, and keep them if the docs still list them.
+
 ## Phase 2: Cross-reference provider documentation
 
-Fetch provider docs to verify freshness, find deprecation dates, and catch models not in models.dev. Use WebFetch first, then `links -dump` as fallback, then ask the user.
+Fetch provider docs to verify freshness, find deprecation dates, and catch models not in models.dev. Fetch order: WebFetch → `links -dump` → the site's `llms.txt` index → ask the user.
+
+**Fetching tips (learned this session):**
+
+- **Follow host redirects.** `docs.claude.com/*` 302-redirects to `platform.claude.com/*`, and `platform.moonshot.ai/*` 301-redirects to `platform.kimi.ai/*`. WebFetch reports the redirect target instead of following it — re-fetch the target URL. Prefer the canonical host directly, and append `.md` to any docs page for clean markdown (e.g. `…/models/overview.md`).
+- **When a page is JS-rendered and the table won't extract** (WebFetch returns "links only, can't read the table", or `links -dump` comes back empty), fetch the site's **`llms.txt`** index — e.g. `https://platform.kimi.ai/docs/llms.txt`. It lists the `.md` URL for every doc page; fetch those `.md` pages directly to get the raw pricing tables. This is how the Kimi pricing tables were recovered when the rendered pages were unreadable.
 
 ### Anthropic Claude
 
-- https://docs.claude.com/en/docs/about-claude/models/overview
-- https://docs.claude.com/en/docs/about-claude/pricing
-- https://docs.claude.com/en/docs/about-claude/model-deprecations
+(Canonical host is `platform.claude.com`; the `docs.claude.com` URLs redirect there. The `.md` suffix returns clean markdown.)
+
+- https://platform.claude.com/docs/en/about-claude/models/overview.md
+- https://platform.claude.com/docs/en/pricing.md
+- https://platform.claude.com/docs/en/about-claude/model-deprecations.md — the **authoritative** retirement source. Its "Model status" table marks each model Active / Deprecated / Retired; drop anything marked Retired (or past its retirement date) even if models.dev still lists it.
 
 ### Google Gemini (via Vertex AI)
 
@@ -99,6 +127,16 @@ Fetch provider docs to verify freshness, find deprecation dates, and catch model
 - https://platform.openai.com/docs/pricing?latest-pricing=standard
 - https://platform.openai.com/docs/deprecations
 - https://platform.openai.com/docs/models — scan "Frontier models" section and follow links for the full list.
+
+### Moonshot AI (Kimi)
+
+Docs live at `platform.kimi.ai` (the old `platform.moonshot.ai` redirects there). The pages are JS-rendered, so go through the `llms.txt` index and fetch the `.md` URLs it lists:
+
+- https://platform.kimi.ai/docs/llms.txt — index; the current pricing/model `.md` URLs are here (they change as the lineup evolves, e.g. `pricing/chat-k27-code.md`, `pricing/chat-k26.md`, `pricing/chat-v1.md`)
+- https://platform.kimi.ai/docs/models.md — current chat model list (context window, thinking toggle)
+- https://platform.kimi.ai/docs/pricing/chat.md — pricing index linking the per-tier pages
+
+Mapping notes: pricing tables read **"Input (Cache Hit)" → `cache_read`** and **"Input (Cache Miss)" → `input`**; Moonshot uses automatic caching with **no `cache_write`**. The K2 family (`kimi-k2.5` / `k2.6` / `k2.7*`) takes `meta = { thinking_mode = "optional" }` (toggleable thinking — see `lua/flemma/provider/adapters/moonshot.lua` for the accepted modes); legacy `moonshot-v1-*` models have no thinking and uniform pricing (`cache_read == input`). Exclude `*-vision-preview` variants (non-text).
 
 **IMPORTANT!** Some providers (notably OpenAI) block AI-agent web fetchers. If WebFetch returns a 403, a bot-detection challenge, or empty content — fall back to the `links` text-mode browser:
 
@@ -182,6 +220,7 @@ Update each file under `lua/flemma/models/` with the merged data. Follow the exi
 - Preserve the file header comment block unchanged
 - Group models by family with comments
 - Include deprecation/retirement comments where applicable
+- **Mirror the prior version for same-surface successors.** When the provider's migration guide says a new model keeps the previous version's request surface (e.g. "Opus 4.8 keeps the same request surface as 4.7 — no new breaking changes"), copy the previous model's entry and change only the id, pricing, and limits. Don't re-derive `thinking_budgets` / `thinking_effort_map` / `min_cache_tokens` / `meta` from scratch.
 - Today's date is !`date +%Y-%m-%d` — use this for assessing retirement dates
 - **Reassess `high_cost_threshold`**: Check whether the combined (input + output) price boundary still sits in a natural gap. The threshold lives in `lua/flemma/config/schema.lua` under `pricing.high_cost_threshold` (currently `30`), with strict `>` so Claude Opus itself doesn't warn. If Opus pricing changes or the gap shifts, update the default value in the schema.
 
@@ -193,7 +232,8 @@ Update each file under `lua/flemma/models/` with the merged data. Follow the exi
 - If a model appears on these sources, it goes in. If it doesn't, it stays out.
 - If a model is retired or past its deprecation date, drop it.
 - If a model is deprecated but not yet retired, keep it with a retirement date comment.
-- If a model is in the local file but absent from all sources, ask the user before removing it.
+- If a model is absent from models.dev but still listed on the provider's own docs, keep it — models.dev does not track every legacy line (e.g. `moonshot-v1-*`). Only when a model is absent from **all** sources should you ask the user before removing it.
+- **A models.dev listing is not proof a model is live.** Confirm retirement against the provider's deprecation page, not models.dev (which lags). Conversely, confirm a models.dev *absence* against the provider docs before removing.
 - If any model names imply non-text capabilities (vision, image, video, audio, tts, embedding, moderation), exclude them.
 
 ## Special Handling for New Sonnet Versions
