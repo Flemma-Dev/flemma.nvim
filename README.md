@@ -1,8 +1,16 @@
-<h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" align="left" valign="bottom" alt="Flemma's logo"> Flemma</h1>
+<h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" align="left" valign="bottom" alt="Flemma's logo"> Flemma — AI knowledge workbench for Neovim</h1>
 
-**An AI workspace inside Neovim where every conversation is a document you own.**
+**Draft, refine, and ship the documents your work runs on — in plain-text files you own.**
 
-https://github.com/user-attachments/assets/edd51ecd-a3e8-4e84-9341-123fa5a76c5d
+<!-- HERO DEMO PLACEHOLDER — re-record before publishing (see docs/plans/growth-2026.md §6).
+     Re-recording the hero as the knowledge-work story: a meeting transcript → a polished status update.
+     To publish: render assets/flemma_cast.mp4 (`make screencast`), drag-drop the file into a GitHub
+     issue/PR/release comment to mint a https://github.com/user-attachments/... URL, then replace this
+     comment AND the line below with that URL on its own line.
+     Previous (coding-flavored) demo — kept for recovery only:
+     https://github.com/user-attachments/assets/edd51ecd-a3e8-4e84-9341-123fa5a76c5d -->
+
+> 🎬 **Demo video — coming this release.** A knowledge-work walkthrough: a messy meeting transcript turned into a polished weekly status update, without leaving Neovim.
 
 > [!IMPORTANT]
 > **Actively Evolving.** [See the roadmap](ROADMAP.md) for what's coming next. Pin a tag if you need a stable target.
@@ -11,17 +19,12 @@ https://github.com/user-attachments/assets/edd51ecd-a3e8-4e84-9341-123fa5a76c5d
 
 ## What Is Flemma?
 
-Flemma is an AI plugin for Neovim. You write in `.chat` files -- plain text with simple role markers -- and Flemma handles everything else: streaming responses, running tools, managing providers, and keeping the conversation clean and navigable. Between the human and the model, Flemma acts as a [harness](docs/harness.md) -- it shapes what the model sees, gates what it can do, and manages the coordination that makes autonomous tool use safe and practical.
+Flemma is a plain-text, model-agnostic LLM client for real knowledge work: statements of work, solution designs, specs, proposals, status updates. Turn messy inputs — meeting transcripts, briefs, PDFs, email threads — into polished documents; iterate over many turns; and get a second opinion from a different model on the same draft. Every conversation is a `.chat` file you can edit, `grep`, and `git commit` — and it's just as happy writing song lyrics as a project plan.
 
 ```markdown
 @You:
-Turn my rough notes into a project update for the team.
-
-- Auth module now validates JWTs server-side.
-- Migrated billing webhook to v2 API.
-- Fixed the flaky CI timeout on integration tests.
-
-Use `git log` for commit details.
+Read @./standup-2026-07-01.txt and turn it into a status update: what shipped, what's blocked,
+and the action items with owners.
 
 @Assistant:
 (response streams here)
@@ -104,11 +107,11 @@ Most AI tools treat conversations as disposable. Some let you resume a session o
 
 Flemma is more than a chatbot. Here are some of the things people use it for:
 
-- **Code with an AI agent.** Give it a task -- "add error handling to the payment module" -- and let autopilot do the work. Flemma explores the codebase, reads files, writes code, runs tests, reads the output, fixes failures, and repeats. You approve each step or let it run fully autonomously, _YOLO_.
-- **Write and create.** Technical documents, project updates, architecture decisions, client proposals. Feed it rough notes and context files, get polished output.
+- **Draft and refine the documents your work runs on.** Statements of work, solution designs, specs, proposals, status updates -- and turn messy inputs like meeting transcripts, briefs, and email threads into clean, structured output. Iterate to a polished draft over many turns.
 - **Research and explore.** Attach files with `@./path/to/file`, ask questions, iterate. Switch between Claude and GPT to compare perspectives on the same problem.
 - **Build reusable prompts.** A `.chat` file with a system prompt and variables becomes a template. Share it with your team. Each person fills in their details and gets consistent results.
 - **Work across providers.** Start a conversation with Anthropic, switch to OpenAI for a second opinion, try Vertex for the final draft. All in the same file, all without leaving Neovim.
+- **Code with an AI agent.** Give it a task -- "add error handling to the payment module" -- and let autopilot do the work. Flemma explores the codebase, reads files, writes code, runs tests, reads the output, fixes failures, and repeats. You approve each step or let it run fully autonomously, _YOLO_.
 
 ---
 
@@ -206,14 +209,14 @@ Read the full setup and configuration guide in [mcp.md](docs/mcp.md).
 
 ## Where Flemma Fits
 
-Flemma is a **document-based AI workspace**. There are broadly two kinds of AI coding tools: inline assistants that suggest and apply diffs to your source files, and agent-style tools where you give a task and watch it work. Flemma is the second kind -- closest to the terminal agent pattern, but embedded in your editor.
+Flemma is an **AI knowledge workbench** -- a place to draft, refine, and version the documents your work runs on, with the model as a collaborator. It's model-agnostic and lives in your editor, and because every conversation is a plain-text `.chat` file, your work is portable, greppable, and yours. It's also a capable agent when a task needs one -- reading files, running commands, editing code -- but that's one use, not the whole point.
 
 What it does well:
 
+- **Document-heavy knowledge work.** Drafting and refining SoWs, specs, proposals, and status updates; turning transcripts, briefs, and email threads into structured output.
 - **Long-lived conversations.** Your `.chat` files stick around. Reopen them, share them, version them. Build a library of reusable prompts and templates.
 - **Multi-provider flexibility.** Switch between Claude, GPT, Gemini, and Kimi mid-conversation. Compare models on the same problem without starting over.
-- **Autonomous multi-step tasks.** Point it at a codebase, describe what you want, and let it iterate -- reading, writing, testing, fixing.
-- **Non-coding work.** Technical writing, research, brainstorming, project planning. Flemma is not just a code tool.
+- **Autonomous multi-step tasks.** Point it at a codebase or a folder of documents, describe what you want, and let it iterate -- reading, writing, testing, fixing.
 
 What it doesn't try to do:
 
