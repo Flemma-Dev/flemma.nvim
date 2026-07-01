@@ -280,5 +280,26 @@ describe("Read Tool", function()
       -- and skips the ./ prefix. We test this by checking the code path exists
       -- (full integration with real ~/path requires writing to home directory).
     end)
+
+    it("expands $FLEMMA_TOOLS_STORE_PATH in path resolution", function()
+      local store_module = require("flemma.tools.store")
+      local exec_ctx = executor.build_execution_context({
+        bufnr = bufnr,
+        cwd = test_dir,
+        timeout = 30,
+        tool_name = "read",
+        __dirname = test_dir,
+      })
+
+      local store_dir = store_module.ensure_buffer_store_path(bufnr)
+      vim.fn.writefile({ "stored transcript line" }, store_dir .. "/transcript.txt")
+
+      local resolved = exec_ctx.path.resolve("$FLEMMA_TOOLS_STORE_PATH/transcript.txt")
+      assert.equals(store_dir .. "/transcript.txt", resolved)
+
+      local result = read_def.execute({ label = "t", path = "$FLEMMA_TOOLS_STORE_PATH/transcript.txt" }, exec_ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:match("stored transcript line"))
+    end)
   end)
 end)
