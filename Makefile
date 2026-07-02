@@ -150,11 +150,11 @@ develop:
 # Create a VHS screencast demonstrating Flemma's capabilities, with a poster frame prepended
 screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 	@rm -Rf \
-		.vapor/cache/ .vapor/state/ .vapor/release.chat \
+		.vapor/cache/ .vapor/state/ .vapor/northwind/ \
 		.vapor/poster.jpg .vapor/poster.mp4 .vapor/concat_list.txt \
-		.vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
-	@mkdir -p .vapor/ .vapor/cache/ .vapor/state/
-	@contrib/vhs/setup-aurora.sh
+		.vapor/flemma_cast_with_poster.mp4 .vapor/flemma_cast_with_poster.gif \
+		assets/flemma_cast.mp4 assets/flemma_cast.gif
+	@mkdir -p .vapor/ .vapor/cache/ .vapor/state/ .vapor/northwind/
 	@export PS1='$$ ' ;\
 	 export XDG_CONFIG_HOME=`pwd`/contrib/vhs ;\
 	 export XDG_DATA_HOME=`pwd`/.vapor ;\

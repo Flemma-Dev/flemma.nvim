@@ -1,4 +1,5 @@
 Output assets/flemma_cast.mp4
+Output assets/flemma_cast.gif
 
 Set Shell bash
 Set Width 1920
@@ -11,26 +12,13 @@ Set FontSize 32
 Set LetterSpacing 0
 Set LineHeight 1
 Set PlaybackSpeed 1.0
+Set WaitTimeout 120s
 
 Hide
-Type@0ms "cd .vapor/aurora/"
+Type@0ms "cd .vapor/northwind/"
 Enter
-Type@0ms "cat > release.chat"
+Type@0ms "cat > weekly-status.chat"
 Enter
-Type@0ms "```lua"
-Enter
-Type@0ms `version = "v0.4.0"`
-Enter
-Type@0ms "```"
-Enter
-Type@0ms "@System:"
-Enter
-Type@0ms `You are a release engineer for the Aurora project. Today is {{ os.date("%B %d, %Y") }}.`
-Enter
-Type@0ms "The current version being released is {{ version }}."
-Enter
-Type@0ms "Be very concise in your responses - answer the question in as few words as possible."
-Enter 2
 Type@0ms "@You:"
 Enter 2
 Ctrl+D
@@ -39,40 +27,41 @@ Enter
 Show
 
 Sleep 1000ms
-Type "nvim release.chat"
+Type "nvim weekly-status.chat"
 Sleep 1000ms
 Enter
 Type "G"
-Sleep 1000ms
+Sleep 800ms
 Type "i"
-Type "We're cutting a new version today."
+Type "Write a crisp weekly status update for the leadership channel."
 Enter
-Sleep 200ms
-Type "Can you draft a short tagline announcement for the GitHub release page - just one sentence?"
+Sleep 250ms
+Type "Pull last Friday's standup with your tools, and cover what shipped, what's blocked,"
 Enter
-Sleep 200ms
-Type "Check the recent Git history for what changed."
+Sleep 50ms
+Type "and the action items with owners."
+Sleep 250ms
+Type " Keep it tight."
 Ctrl+[
-Sleep 2000ms
+Sleep 1200ms
 Ctrl+]
-Wait+Screen /⏸/
-Sleep 5000ms
-Alt+a
-Wait+Screen /╰/
+Wait+Screen /Engineering Sync/
+Sleep 2000ms
+Wait+Screen /FlemmaBeacon1/
 Sleep 2500ms
-Type "GA"
-Type "Nice. One thing - we replaced the old thread-per-request model this cycle."
-Enter
-Sleep 200ms
-Type "Can you check @./docs/architecture.pdf and confirm it no longer references the old approach?"
-Ctrl+[
-Sleep 2000ms
-Ctrl+]
-Wait+Screen /managed goroutine/
-Sleep 3000ms
-Type "GA"
-Type "All done! Let's fold and review the conversation at a glance."
-Ctrl+[
-Sleep 3000ms
+
 Type "zm"
-Sleep 5000ms
+Sleep 2500ms
+
+Type ":Flemma switch $haiku"
+Sleep 1000ms
+Enter
+Sleep 1800ms
+
+Type "GA"
+Type "Now pick out just the things that are on me, Stan."
+Ctrl+[
+Sleep 1200ms
+Ctrl+]
+Wait+Screen /FlemmaBeacon2/
+Sleep 4000ms

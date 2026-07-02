@@ -2,15 +2,7 @@
 
 **Draft, refine, and ship the documents your work runs on — in plain-text files you own.**
 
-<!-- HERO DEMO PLACEHOLDER — re-record before publishing (see docs/plans/growth-2026.md §6).
-     Re-recording the hero as the knowledge-work story: a meeting transcript → a polished status update.
-     To publish: render assets/flemma_cast.mp4 (`make screencast`), drag-drop the file into a GitHub
-     issue/PR/release comment to mint a https://github.com/user-attachments/... URL, then replace this
-     comment AND the line below with that URL on its own line.
-     Previous (coding-flavored) demo — kept for recovery only:
-     https://github.com/user-attachments/assets/edd51ecd-a3e8-4e84-9341-123fa5a76c5d -->
-
-> 🎬 **Demo video — coming this release.** A knowledge-work walkthrough: a messy meeting transcript turned into a polished weekly status update, without leaving Neovim.
+https://github.com/user-attachments/assets/ad24fc21-dc55-443a-8dcc-f49d9a305779
 
 > [!IMPORTANT]
 > **Actively Evolving.** [See the roadmap](ROADMAP.md) for what's coming next. Pin a tag if you need a stable target.

@@ -48,6 +48,12 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- Keep nvim-treesitter-context disabled during recording — it rides in on the dev-shell runtimepath
+-- and its sticky context header is clutter on a clean screencast.
+require("treesitter-context").setup({
+  enable = false,
+})
+
 require("screenkey").setup({
   disable = {
     modes = { "i", "c" },
@@ -60,18 +66,35 @@ require("screenkey").setup({
 require("screenkey").toggle_statusline_component()
 
 require("flemma").setup({
-  provider = "anthropic",
-  model = "claude-haiku-4-5",
+  provider = "moonshot",
+  model = "kimi-k2.6",
   parameters = {
-    thinking = "medium",
+    -- Kimi's thinking is binary on/off (no budget knob), and "on" spends ~43s
+    -- reasoning per turn — dead air on a screencast. Keep it off for Kimi
+    -- (temperature drops to 0.6); Kimi still runs the tool dance and streams the
+    -- status update, just without the reasoning phase. The $haiku switch restores
+    -- a small thinking budget for the snappy Anthropic follow-up.
+    thinking = false,
+  },
+  -- Named preset the tape switches to mid-conversation to demo model switching.
+  -- The switch carries a `thinking=minimal` modeline arg
+  -- (`:Flemma switch $haiku thinking=minimal`) so the fast Anthropic model gets a
+  -- small thinking budget back for the quick "just my items" follow-up, while
+  -- Kimi wrote the heavy first answer with thinking off.
+  presets = {
+    ["$haiku"] = {
+      provider = "anthropic",
+      model = "claude-haiku-4-5",
+      thinking = "minimal",
+    },
   },
   tools = {
     modules = {
-      "extras.flemma.tools.calculator",
+      "demo.meetings",
     },
     auto_approve = {
       "$standard",
-      "calculator",
+      "meetings.get_transcript",
     },
     auto_approve_sandboxed = false,
   },
@@ -104,3 +127,7 @@ require("lualine").setup({
     lualine_z = {},
   },
 })
+
+-- Demo-only: send up an invisible, numbered beacon on each settled exchange
+-- so the VHS tape can wait on a real event instead of a blind Sleep.
+require("demo.beacon").setup()

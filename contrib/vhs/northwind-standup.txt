@@ -1,0 +1,116 @@
+Northwind — Weekly Engineering Sync
+2026-06-09 07:20 | 28m
+
+[0:00] Stan: For the destination we're just literally taking the URL as we see it, the listing on the CSV, but that's never going to work in PartsHub. We need to inject the macros — transaction ID, affiliate ID, product ID — so I'm going to hijack your PR and add them into it. And there's another thing, Ian, if you haven't seen it let me know so I can pick it up instead of you taking it.
+
+[0:30] Ian: I made a point to solve that this morning, you can have a look.
+
+[0:37] Stan: Is it to be merged into this one or separate?
+
+[0:40] Ian: I targeted the develop branch.
+
+[0:45] Stan: Okay, I'll look at it. Did you manage to test it on staging?
+
+[0:55] Ian: I tested locally against staging and the image seems not to work on the listing — we don't show it. I don't know why you saw it.
+
+[1:11] Stan: Yeah, it's broken. Test it again against the PartsHub staging instance, update one of the many fake listings. There's paused ones you can just pick up. Don't label it with anything, call it something else. There's one on the test project, so if you update it it'll be fine. Anyway, on staging it doesn't work.
+
+[2:05] Ian: Yeah, doesn't show any image. Oh — that's on the admin.
+
+[2:12] Stan: Yeah. So I'll add my commit to create the destination links so they always include the macros. This morning I also did a sync from develop to main, so Howard — your chatbot's live on Revline. It's in there, it works. But I want us to wrap up a follow-up I created: pre-populate the contact form. If we hand off from chat to support, let's not ask the user to type everything again. We also don't pass the email and name and we have them — so pass them on, even on instances where the AI chat isn't enabled, from the contact button, just name and email. Howard, I also got your leads PR merged, I've seen them show up on Revline too. Haven't tested it. Ian's got the staging instance bootstrapped, so that's where to test the leads. So the aim: I do my bit, merge it, we merge Ian's stuff, import today's Revline listings, see how they look in the app.
+
+[4:10] Stan: I haven't done the euro switch yet. Plan is download the whole database, search for GBP, swap it to euro, sync it back. That's pretty much it. We also need to finish testing the PartsHub integration into Revline — had some hiccups yesterday, should be fine, I'll test it today. Ian, you finished your task — what else did you pick from the pile, is there even anything to pick? ...Can't hear you, you've got a fan blowing straight into your mic.
+
+[5:37] Gennady: Sorry guys, just realised I was on mute. Ian, if you don't have anything, I have something. Our designer's built out the landing page as far as she can — I've added the HTML files she produced from the AI design tool. What she can't do is the back-end pieces. Anyway, the main focus is Revline. I've got a call at three with their contact, so I need to be able to confirm a go with him.
+
+[6:36] Stan: Yeah. Ian's finished the catalogue import, I'm adding one piece to it, we'll test today. The bit I'm most concerned about is we haven't tested this end to end ourselves — new users going through, registering, first order coming in, the confirmation, "order placed," everything. I want to see that in action, tested by us.
+
+[7:07] Gennady: Can I get a couple of the success team to test as well?
+
+[7:17] Stan: I suppose. We don't have any real listings yet, I've added one to their staging so they can go test. The AI bot's in there too, under settings then support, and right now it's very eager to hand you off to a human, because most of what it can answer is app-related, so the moment you ask about a car part it just says nope, can't help you with that.
+
+[8:41] Ian: So I'll test the thumbnail thing on Revline, then I'll work with the designer on the landing pages.
+
+[9:10] Howard: For my part, the HubSpot integration's merged, we can test it on staging now. I'm continuing with the notifications, trying to work out which cases to handle. And that question for you from a few days ago, Stan, it's on 612 — I think it's a bug, I'll show you how we want to handle it.
+
+[9:46] Stan: "An order can be submitted twice from the returns screen" — yeah, we don't handle returns for any of these clients yet, so it's fine, let's postpone. And before you jump on it, do some more QA on Revline. We're launching tomorrow, so let's make sure we're happy before it goes to the customer. Register a couple of times as a new user, fake emails, click through, make sure it works.
+
+[10:51] Gennady: Is that for Revline?
+
+[10:57] Stan: Yes.
+
+[10:58] Gennady: The team are putting promotions on today but pushing the dates out, so if you want to add a fake one, fine.
+
+[11:22] Stan: Howard — so, on the pre-fill, you already have something there, you just need to change the instructions to "generate a summary in first person on behalf of the user," that should be enough to nudge the model. It'd be really powerful later — not today — if before the human handoff we equipped the bot with a few more tools: check stock, check the order status. If someone's asking "why hasn't my order shipped," it'd be nice if it could call a tool and say, well, it's on backorder. Once we see what people actually ask it, we can build more tools.
+
+[12:45] Howard: Especially we could set up a rule to point certain queries straight at the database.
+
+[12:56] Stan: Yeah, okay. So — log any findings on the channel as you go through QA. There's going to be four of us on this, so if you hit something, log it, so we don't all end up debugging the same missing notification four times. That's just 4x wasted. Maybe Howard's got his hands full first, so three of us QA.
+
+[13:50] Gennady: Do we need another touch point today? I've got the three o'clock with Revline, so it'd be very good to know before then if we're good to go.
+
+[14:08] Stan: We only need to put the listings in, and that's just visual, so unless we uncover something major today that's a blocker, I don't think so.
+
+[14:20] Stan: Yeah, well — it's been a lot going on. I don't remember anything we've missed, so hopefully we haven't.
+
+[14:32] Gennady: No, I don't think there is, as long as the listings are in their feed and we've got some mechanism for what displays in the carousel on the homepage. That's the only thing I'm unsure of.
+
+[14:50] Stan: How will we pick the featured listings on the homepage? Ian — manual, or the top ones when it comes from CSV?
+
+[14:59] Ian: We add the featured label to the listing, and the homepage filters on that label.
+
+[15:12] Stan: And when it's the API? What do we do when it comes from the API — we don't have labels on the API, do we?
+
+[15:19] Ian: The featured label auto-rotates, so it doesn't need explicit input from the API. When we add a batch it'll add the label automatically.
+
+[15:49] Stan: But there are no labels in the Revline API. So the batch gets synced up to PartsHub — do we have a mechanism to decide from that batch what goes on the homepage?
+
+[17:06] Ian: Let me check. Not sure.
+
+[17:12] Stan: If we don't, that's fine, we just need to figure it out.
+
+[17:15] Gennady: I think the answer is no, Stan. But let Ian check the code. They'll need to send admin a manual list each week of what it is.
+
+[17:38] Stan: They are doing that, aren't they — featured parts of the week. So it'll be a manual intervention. Let's not dwell on it and hold it back — simplest route: email comes in, admin presses sync, listings arrive, you pick the ones you want in that cohort this week. There's featured and recommended on the homepage, and that's configurable in the CMS. Does that config still drive the featured listings on the homepage?
+
+[18:54] Ian: Yeah, it's a fallback — if we don't have any featured ones we read from that.
+
+[19:00] Stan: Okay, got it. So we have a workaround. Back to QA, then.
+
+[19:15] Ian: One question — if we don't have any label from the API, what do we do with categories? We categorize the listing like on their website, but that works off the label, and we don't have that.
+
+[19:36] Stan: Well — how did you build it? When the API comes in, what fields does it return, and how do you map them to what we have internally? Because it's not just make the call, it's: I've got the data, what do I do with it now? Do they send us categories, anything usable?
+
+[20:04] Ian: Last time I worked on it I didn't see anything about the category, I couldn't map it back to the listing we store on staging.
+
+[20:25] Stan: So we make a request to get listings, it returns an array — you've got the main category, the sub-category, you can map those to labels. You've got the destination URL, the brand, the part number, the vehicle fitment — make, model, year — the country, map that to location, the image URL, download it, map it to thumbnail, the manufacturer, the OEM reference. All the data's here. So what are we doing with it?
+
+[21:10] Ian: I think we missed the categories, I need to double-check, I didn't test it a lot.
+
+[21:39] Stan: Ian, that's a very, very big chunk of information. Basically what we've built doesn't work for Revline, because the feed they're sending will never appear anywhere filterable in the app, because we don't map anything. If you're telling me "maybe I didn't do the categories" — it's not a maybe, let's map them properly so the filters Howard built actually drive this thing. There's a reason there's a main category and a sub-category — brakes, brake pads. The image URL — do we pull it, download it, upload it back to PartsHub? Do we do this now as a new PR?
+
+[22:30] Ian: Yeah, we did that, but we need to check.
+
+[22:36] Stan: Preserve all of it — the brand, the manufacturer, the fitment, the part number — even if we don't use it today. Think how useful it'll be tomorrow. Every field they return has a purpose. So this is top priority now — drop everything else, don't do QA, remap all these fields to our own data. And going forward: whenever we work with an API it's not "I've got five columns in my CSV, I've got five here." If our columns carry extra meaning — the label encodes location, categorization — it's not one to one. One thing I used to do: paste the response into a markdown doc and work through it field by field, and until I've decided what to do with a field I don't move on. For every field — do I need it, do I not — it's a conscious decision. If I've got nowhere to store it but it'd be great to query by it later, I invent a label for it. Work down the list one by one until there's nothing left.
+
+[24:43] Gennady: The vehicle fitment is massively important — people need to know the part actually fits their car.
+
+[24:50] Stan: We normally put that somewhere else, I don't know if we display it yet anywhere.
+
+[24:55] Gennady: From a label perspective — a lot of people only ever buy for the one car they own, so as a searchable item that's pretty useful.
+
+[25:10] Stan: Yeah, we don't have that built yet. And once you've made the decision on every field, do a run start to finish, pull the listings into your local CMS, see what they look like. I think what we'll find is a lot of them are duplicated — five, ten of the same part, differing by pack size or seller — and that's a problem we'll have to solve, because right now they'll show up as five, six, seven cards. So: go back, decide on every field, map it, and write down why it's mapped or why it's dropped.
+
+[26:24] Ian: Okay.
+
+[26:31] Gennady: ...sorry — chairs collapsing here. Question.
+
+[26:45] Stan: We've got work to do, it has to be done, but the narrative doesn't change. We are where we are.
+
+[26:52] Gennady: Okay — once I've got the green light to go, unless I hear different before, let's say 1 o'clock our time today. If anything's a stopper I need to know by then, so we can jump on a call and work out when we can unblock. If I hear nothing, in the nicest possible way — because I do love talking to you — everything's green.
+
+[27:22] Stan: Yep.
+
+[27:26] Gennady: And Ian, if you need support, sing out. Don't sit spinning in a wheel — stick your hand in the channel and someone'll come running. Teamwork, guys.
+
+[27:52] Stan: All right. Let's get in.
