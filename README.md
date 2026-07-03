@@ -34,6 +34,8 @@ What makes Flemma different from other AI tools is a simple design choice: **the
 require("flemma").setup({})
 ```
 
+Running [LazyVim](https://www.lazyvim.org/)? There is a dedicated setup guide in [lazyvim.md](docs/lazyvim.md).
+
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY, MOONSHOT_API_KEY
 ```
