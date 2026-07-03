@@ -1834,10 +1834,9 @@ function M.collect(bufnr)
     end
   end
 
-  -- Materialize after frontmatter evaluation so all layers are included.
-  -- materialize() is needed because merge_parameters uses pairs().
-  -- resolve_preset() expands $-prefixed model references to concrete values.
-  local config = normalize.resolve_preset(config_facade.materialize(bufnr))
+  -- Materialize after frontmatter evaluation so all layers are included;
+  -- materialize() also expands $-prefixed model presets to concrete values.
+  local config = config_facade.materialize(bufnr)
 
   local tools_data = collect_tools(bufnr)
 

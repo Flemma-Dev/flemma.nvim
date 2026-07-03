@@ -351,11 +351,11 @@ end
 
 ---@return string
 function flemma_component:_do_update_status()
-  -- materialize(bufnr) returns a plain table with per-buffer resolution —
-  -- required because merge_parameters uses pairs() and make_resolvers
-  -- accesses dynamic keys. bufnr ensures frontmatter overrides are visible.
+  -- materialize(bufnr) returns a plain table with per-buffer resolution
+  -- (frontmatter overrides included) and expands any $-prefixed model preset
+  -- to a concrete provider/model.
   local bufnr = vim.api.nvim_get_current_buf()
-  local config = normalize.resolve_preset(config_facade.materialize(bufnr))
+  local config = config_facade.materialize(bufnr)
   if not config or not config.model or config.model == "" then
     return ""
   end

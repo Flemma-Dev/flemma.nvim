@@ -347,7 +347,7 @@ describe("merge_parameters with facade", function()
   end)
 end)
 
-describe("resolve_preset", function()
+describe("config.materialize — preset expansion", function()
   local config_facade = require("flemma.config")
   local schema_definition = require("flemma.config.schema")
 
@@ -355,11 +355,12 @@ describe("resolve_preset", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.presets"] = nil
     config_facade = require("flemma.config")
     registry = require("flemma.provider.registry")
-    normalize = require("flemma.provider.normalize")
+    -- Load presets so the bridge get_preset handler is registered; individual
+    -- tests populate the registry via presets.setup().
+    require("flemma.presets")
 
     config_facade.init(schema_definition)
     registry.setup()
@@ -367,15 +368,13 @@ describe("resolve_preset", function()
 
   it("returns config unchanged when model is not a preset reference", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
-    local config = config_facade.materialize()
-    local resolved = normalize.resolve_preset(config)
+    local resolved = config_facade.materialize()
     assert.equals("claude-sonnet-4-5", resolved.model)
     assert.equals("anthropic", resolved.provider)
   end)
 
   it("returns config unchanged when model is nil", function()
-    local config = config_facade.materialize()
-    local resolved = normalize.resolve_preset(config)
+    local resolved = config_facade.materialize()
     assert.is_nil(resolved.model)
   end)
 
@@ -385,8 +384,7 @@ describe("resolve_preset", function()
       ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
-    local config = config_facade.materialize()
-    local resolved = normalize.resolve_preset(config)
+    local resolved = config_facade.materialize()
     assert.equals("anthropic", resolved.provider)
     assert.equals("claude-haiku-4-5-20250514", resolved.model)
   end)
@@ -397,8 +395,7 @@ describe("resolve_preset", function()
       ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = "low" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
-    local config = config_facade.materialize()
-    local resolved = normalize.resolve_preset(config)
+    local resolved = config_facade.materialize()
     assert.equals("claude-haiku-4-5-20250514", resolved.model)
     assert.are.same({ level = "low", foreign = "preserve" }, resolved.parameters.thinking)
   end)
@@ -409,26 +406,27 @@ describe("resolve_preset", function()
       ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = false },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
-    local config = config_facade.materialize()
-    local resolved = normalize.resolve_preset(config)
+    local resolved = config_facade.materialize()
     assert.are.same({ level = false, foreign = "preserve" }, resolved.parameters.thinking)
   end)
 
-  it("does not mutate the original config table", function()
+  it("expands on every materialize without mutating the store", function()
     local presets_mod = require("flemma.presets")
     presets_mod.setup({
       ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
-    local config = config_facade.materialize()
-    normalize.resolve_preset(config)
-    assert.equals("$haiku", config.model)
+    -- Expansion runs per-materialize on a fresh deep copy; the store keeps the
+    -- raw alias, so repeated materialize() calls resolve identically. (That raw
+    -- alias is what setup's resolve_default reads — see the "$test" setup case
+    -- in flemma_spec for the end-to-end raw-preservation coverage.)
+    assert.equals("claude-haiku-4-5-20250514", config_facade.materialize().model)
+    assert.equals("claude-haiku-4-5-20250514", config_facade.materialize().model)
   end)
 
   it("returns config unchanged when preset is not found", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$nonexistent" })
-    local config = config_facade.materialize()
-    local resolved = normalize.resolve_preset(config)
+    local resolved = config_facade.materialize()
     assert.equals("$nonexistent", resolved.model)
   end)
 end)

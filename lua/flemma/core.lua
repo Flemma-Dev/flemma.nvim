@@ -1004,7 +1004,7 @@ function M.build_prompt_and_provider(bufnr, opts)
   end
 
   local effective_bufnr = prompt.bufnr
-  local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
+  local cfg = config_facade.materialize(effective_bufnr)
   local provider_key = cfg.provider
   local flat_params = normalize.merge_parameters(provider_key, cfg)
   normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
