@@ -1,7 +1,9 @@
 ---@class flemma.secrets.resolvers.Gcloud : flemma.secrets.Resolver
 --- Derives access tokens using the gcloud CLI.
---- Tries to resolve a service_account credential first, then uses it with
---- gcloud auth print-access-token. Falls back to default gcloud credentials.
+--- Tries to resolve a service_account credential first; if found, mints a token
+--- from the key via `gcloud auth application-default print-access-token` (which
+--- honours GOOGLE_APPLICATION_CREDENTIALS). Otherwise falls back to the active
+--- CLI account via `gcloud auth print-access-token`.
 local M = {}
 
 local log = require("flemma.logging")
@@ -20,6 +22,10 @@ M.metadata = {
 
 --- Token TTL reported by Google (1 hour).
 local TOKEN_TTL_SECONDS = 3600
+
+--- Vertex AI (and Google Cloud APIs generally) require the cloud-platform scope.
+--- ADC mints service-account tokens with no default scope, so we request it explicitly.
+local CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 ---@param _self flemma.secrets.resolvers.Gcloud
 ---@param credential flemma.secrets.Credential
@@ -40,15 +46,18 @@ function M.supports(_self, credential, ctx)
 end
 
 ---@param path string
+---@param args string[] gcloud subcommand arguments (after `path`)
 ---@param env table<string, string>|nil
 ---@param ctx flemma.secrets.Context
 ---@param callback fun(result: flemma.secrets.Result|nil)
-local function run_gcloud_async(path, env, ctx, callback)
+local function run_gcloud_async(path, args, env, ctx, callback)
   local opts = { text = true }
   if env then
     opts.env = env
   end
-  vim.system({ path, "auth", "print-access-token" }, opts, function(result)
+  local cmd = { path }
+  vim.list_extend(cmd, args)
+  vim.system(cmd, opts, function(result)
     vim.schedule(function()
       if result.code ~= 0 then
         local stderr = (result.stderr or ""):gsub("%s+$", "")
@@ -92,18 +101,28 @@ function M.resolve_async(_self, credential, ctx, callback)
       file:write(service_account.value)
       file:close()
 
-      run_gcloud_async(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp }, ctx, function(result)
-        os.remove(tmp)
-        if result then
-          log.debug("gcloud: generated access token from service account (async)")
+      -- A service-account key is an Application Default Credential. `gcloud auth
+      -- print-access-token` reads only the CLI account store (`gcloud auth login`)
+      -- and ignores GOOGLE_APPLICATION_CREDENTIALS, so we must use the
+      -- `application-default` subcommand to mint a token from the key file.
+      run_gcloud_async(
+        path,
+        { "auth", "application-default", "print-access-token", "--scopes=" .. CLOUD_PLATFORM_SCOPE },
+        { GOOGLE_APPLICATION_CREDENTIALS = tmp },
+        ctx,
+        function(result)
+          os.remove(tmp)
+          if result then
+            log.debug("gcloud: generated access token from service account (async)")
+          end
+          callback(result)
         end
-        callback(result)
-      end)
+      )
       return
     end
 
     log.debug("gcloud: trying default credentials (async)")
-    run_gcloud_async(path, nil, ctx, callback)
+    run_gcloud_async(path, { "auth", "print-access-token" }, nil, ctx, callback)
   end)
 end
 
