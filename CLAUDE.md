@@ -193,7 +193,8 @@ Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-expl
 ## Testing Guidelines
 
 - Follow the existing Plenary+Busted style: files end with `_spec.lua` and use `describe`/`it` blocks.
-- Add fresh specs for every new feature **and every bug fix**. Write the failing test first (TDD) when the reproduction is automatable. Place supporting data in `tests/fixtures/` with scenario-driven names.
+- Add test coverage for every new feature **and every bug fix**. Write the failing test first (TDD) when the reproduction is automatable. Place supporting data in `tests/fixtures/` with scenario-driven names.
+- **Prefer the existing spec that owns the module — don't add a spec file per feature or fix.** Every `_spec.lua` runs in its own Neovim process (`make qa` caps concurrency, but each file still costs a process startup + `flemma.setup`), so a file-per-change habit bloats the suite. Land new tests in the module's spec inside a focused `describe` block; add a new spec file only for a genuinely new module or subsystem, named after it (mirroring `lua/flemma/…`). Keep each block self-isolating (clear only its own `package.loaded` entries) so grouped specs stay independent.
 - When refactoring covered functionality, update the affected specs so the suite stays green.
 - Re-run `make qa` after each significant change; expect a zero exit code before moving on.
 
