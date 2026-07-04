@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+### Patch Changes
+
+- e4a907d: Fixed `read`/`write`/`edit` so `$FLEMMA_TOOLS_STORE_PATH/<file>` resolves to the buffer's store directory — the same place `flemma.save_to` writes. Previously a tool could save a file with `flemma.save_to: "$FLEMMA_TOOLS_STORE_PATH/…"` and then get "File not found" reading it back.
+- 801b63f: `config.materialize()` now expands a `$preset` model reference into its concrete provider, model, and merged parameters as part of materialization. Previously every call site that needed the effective config had to wrap materialize in `normalize.resolve_preset(...)` — a two-step dance that was easy to forget, leaving `$preset` aliases unexpanded and reaching model logic as literal strings. Preset expansion now lives with the config facade (the other config-domain expansion, e.g. `$preset` list references, already did); `normalize.resolve_preset` is removed. `config.get()`/`config.inspect()` continue to return the raw alias, which is what setup's one-time `presets.resolve_default` reads.
+
 ## 0.13.0
 
 ### Minor Changes
