@@ -12,7 +12,6 @@
   Enable via `providers.modules = { "flemma.provider.adapters.experimental.codex" }` in your Flemma setup config.
 
   Also includes:
-
   - `providers.modules` config key for registering non-built-in provider adapters
   - `provider/model` slash syntax (`codex/gpt-5.5`) for `:Flemma switch`, presets, and frontmatter
   - `openai_responses.lua` intermediate base for Responses API wire format reuse
@@ -26,11 +25,9 @@
 - 8157711: HlOps `tint`, `mute`, and `blend` now accept an optional ratio parameter and an HlOp color source, enabling expressions like `h.from("Normal"):tint("bg", h.from("DiagnosticWarn"):pick("fg"), 0.10)`
 - 8bf2cee: Added inline rejection popup that replaces `vim.ui.input` for tool rejection feedback. The floating window overlays the tool result fence block with `╌` borders, supports multi-line editing via Vim motions, and is fully configurable (`ui.rejection.enabled`, `ui.rejection.winblend`, `highlights.rejection_input`, `highlights.rejection_border`). Set `ui.rejection.enabled = false` to revert to the original command-line prompt.
 - cc80506: Updated model definitions and pricing:
-
   - **Anthropic** — added Claude Sonnet 5 (`claude-sonnet-5`): adaptive thinking, $3/$15 per MTok standard (introductory $2/$10 through August 31, 2026), 1M context, 128K max output (mirrors Sonnet 4.6's request surface). Added alongside Claude Sonnet 4.6, which remains the default Anthropic model.
 
 - 9dbd329: Updated model definitions and pricing:
-
   - **Anthropic** — added Claude Opus 4.8 (`claude-opus-4-8`): adaptive-thinking-only, $5/$25 per MTok, 1M context, 128K max output (mirrors Opus 4.7's request surface). Removed Claude Opus 4 (`claude-opus-4-0` / `claude-opus-4-20250514`) and Claude Sonnet 4 (`claude-sonnet-4-0` / `claude-sonnet-4-20250514`), which retired on June 15, 2026 and now return errors. Noted Claude Opus 4.1's deprecation (retiring August 5, 2026).
   - **Moonshot** — added Kimi K2.7 Code (`kimi-k2.7-code`, $0.95/$4.00) and its faster `kimi-k2.7-code-highspeed` tier ($1.90/$8.00), both with toggleable thinking. Added explicit cache-read pricing to the legacy Moonshot V1 models (uniform, no cache discount).
 
@@ -85,7 +82,6 @@
 
 - fa02a31: Added glob pattern support in `auto_approve` lists — entries containing `*` match tool names (e.g., `"flemma:*"`). The `$standard` preset now includes `flemma:*` to auto-approve harness tools.
 - 5af8a62: Added background job support for async tools. Tools can run in the background without blocking the conversation — the model requests it via `background: true`, or the user moves an executing tool mid-flight with `<M-b>` (`:Flemma tool:background`). Completed results are delivered as `**Job Result:**` blocks when the conversation reaches idle. Orphaned jobs are detected and resolved on file reload.
-
   - `flemma:jobs:status` harness tool lets the model query job status
   - Jobs observability bar shows active count, spinner, and autopilot resume countdown (`ui.jobs.position`)
   - `tools.autopilot.resume_delay` (default 2000ms) debounces auto-continue after job completion; Ctrl+C cancels
@@ -138,18 +134,15 @@
 - 6b36e48: Extract reusable Bar UI utility and reorganise ui config namespace.
 
   **Breaking changes (default behaviour is unchanged for users who did not customise these keys):**
-
   - Config namespace moves under `ui`. Rename `notifications.*` → `ui.usage.*` and `progress.*` → `ui.progress.*`.
   - Removed config keys: `notifications.limit`, `notifications.border`, `notifications.zindex`, `notifications.position`, `progress.zindex`. Stacking, the underline border, and the z-index overrides are gone by design.
   - Highlight groups `FlemmaNotificationsBar`, `FlemmaNotificationsSecondary`, `FlemmaNotificationsMuted`, `FlemmaNotificationsCacheGood`, `FlemmaNotificationsCacheBad` rename to `FlemmaUsageBar{,Secondary,Muted,CacheGood,CacheBad}`. `FlemmaNotificationsBottom` is removed with the border feature. Fallback chains and computed colours preserved exactly.
   - User command `:Flemma notification:recall` renames to `:Flemma usage:recall`.
 
   **New capabilities:**
-
   - Usage bar and progress bar each gain a `position` option; choose from `top`, `bottom`, `top left`, `top right`, `bottom left`, `bottom right`. Defaults unchanged (`top` for usage, `bottom left` for progress).
 
   **Internal structure (informational):**
-
   - `lua/flemma/bar.lua` moves to `lua/flemma/ui/bar/layout.lua` and gains an `apply_rendered_highlights` helper.
   - New module `lua/flemma/ui/bar/init.lua` provides a handle-based `Bar.new(opts)` with `set_icon` / `set_segments` / `set_highlight` / `update` / `dismiss` / `is_dismissed` methods, six positions, mutual exclusion, and lifecycle autocmds.
   - `lua/flemma/notifications.lua` is deleted; its driver logic lives in `lua/flemma/usage.lua`.
@@ -194,7 +187,6 @@
 - 0dcddd0: Added `FlemmaStatusTextMuted` highlight group — a theme-neutral dim variant of `StatusLine` derived via Flemma's hl expression composer (`StatusLine±fg:#666666`). Use `%#FlemmaStatusTextMuted#…%*` in `statusline.format` to dim fragments while keeping the statusline background continuous.
 
   When rendered through the bundled lualine component, both escapes are auto-rewritten at render time so they anchor to the active section hl rather than plain `StatusLine`:
-
   - `%*` → section's default hl (restores `lualine_c_normal` etc. instead of falling back to `StatusLine`)
   - `%#FlemmaStatusTextMuted#` → a memoised render-time group combining the section's bg with the muted fg, so embedded muted text keeps bg continuity across mode tints
 
@@ -203,7 +195,7 @@
   The shipped `statusline.format` default now surfaces session request count + cost and the buffer token estimate alongside the model name, with muted separators between segments. See `lua/flemma/config/schema.lua` for the literal list; users with a custom `statusline.format` are unaffected.
 
 - 8bf8557: Added `thinking.foreign` config option to control whether foreign thinking blocks are included in requests. The `thinking` parameter now accepts an object form `{ level = "high", foreign = "preserve" }` alongside the existing scalar shorthand (coerced automatically).
-- df68d3f: Unified tool result status into a parenthesized header suffix. The pending / approved / denied / rejected / aborted lifecycle states and the previously-separate `(error)` marker now all live in the `**Tool Result:**` header via a modeline-parseable suffix — e.g. `` **Tool Result:** `toolu_01` (pending) ``.
+- df68d3f: Unified tool result status into a parenthesized header suffix. The pending / approved / denied / rejected / aborted lifecycle states and the previously-separate `(error)` marker now all live in the `**Tool Result:**` header via a modeline-parseable suffix — e.g. ``**Tool Result:** `toolu_01` (pending)``.
 
   The old `flemma:tool status=<status>` fenced-block format has been retired. The fence below a tool_result is now always a plain code block. On the AST, `is_error` is gone; `status = "error"` replaces it, and any non-status tokens in the header suffix (e.g. `(status=pending sandbox=false)`) round-trip through a new `meta` field for future metadata support.
 
@@ -214,7 +206,6 @@
   Classified as `minor` rather than `major` because the format change is bounded: completed conversations (the `(error)` case and all plain tool results) round-trip unchanged, and the only affected buffers are ones paused mid-approval — a transient state, not persisted work.
 
 - f1c86cb: Added distinct syntax highlight groups for every concise status suffix on `**Tool Result:**` headers, mirroring the long-standing `(error)` treatment:
-
   - `(pending)` → `FlemmaToolResultPending` → `DiagnosticInfo`
   - `(approved)` → `FlemmaToolResultApproved` → `DiagnosticOk`
   - `(rejected)` → `FlemmaToolResultRejected` → `DiagnosticWarn`
@@ -250,7 +241,6 @@
 - 1547404: Refactor: consolidated try_estimate_usage orchestration into a shared base.send_count_tokens helper. Adapters now declare only endpoint, body transformer, and response parser.
 - 22f5297: Fixed inconsistent `FlemmaToolUseTitle` / `FlemmaToolResultTitle` highlighting where only the first `**Tool Use:**` / `**Tool Result:**` header in a role block received the dedicated highlight while subsequent ones were rendered as plain text. Vim's default syntax sync (`maxlines=60`) could leave the outer `FlemmaSystem` / `FlemmaUser` / `FlemmaAssistant` region unmatched after a fenced code block between headers, so the contained `FlemmaToolUse` / `FlemmaToolResult` regions had nowhere to anchor. Added `syntax sync match … grouphere` directives on the three role markers so every header now picks up its title highlight regardless of position. The issue became visually obvious once `editing.conceal = "2nv"` hid the `**` markers, but was latent in all prior versions.
 - b03d3ca: Refreshed the default visuals:
-
   - Tool fold icons now distinguish request from response: `⬡` (hollow hexagon) for tool_use and `⬢` (filled hexagon) for tool_result, replacing the shared `◆` glyph. Both share the `FlemmaToolIcon` highlight group.
   - `@System` and `@You` messages now carry subtle background tints by default (`#101112` / `#202122`), making role transitions legible even when rulers are hidden. `@Assistant` stays on `Normal` so the eye rests on the LLM output.
   - Thinking blocks softened to dark gray on near-black (`bg:#000000 fg:#333333`), replacing the prior teal-tinted palette.
@@ -403,7 +393,6 @@
 - 80fc278: Added persistent progress indicator showing character count, elapsed time, and phase-specific animation throughout the full request lifecycle including tool use buffering. The indicator appears as a floating window at the bottom of the chat window when the progress line is off-screen, with spinner icon placed in the gutter to match notification bar layout. Configurable via `progress.highlight` and `progress.zindex`.
 - 308767b: Preprocessor rewriter modules can now declare their own Vim syntax rules and highlight groups via `get_vim_syntax(config)`, removing the need to modify the main syntax file when adding new rewriters.
 - fcbce89: Sandbox variable expansion overhaul and DNS fix:
-
   - Path variables in `rw_paths` now use `urn:flemma:cwd` and `urn:flemma:buffer:path` instead of `$CWD` and `$FLEMMA_BUFFER_PATH` (breaking change for custom configs)
   - Added `$ENV` and `${ENV:-default}` expansion with bash-style fallback syntax
   - Default `rw_paths` now includes `${TMPDIR:-/tmp}`, `${XDG_CACHE_HOME:-~/.cache}`, and `${XDG_DATA_HOME:-~/.local/share}` for package manager compatibility
@@ -767,20 +756,17 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
-
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
-
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
-
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).

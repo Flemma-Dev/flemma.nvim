@@ -12,6 +12,7 @@
 ---@class flemma.config
 local M = {}
 
+local bridge = require("flemma.bridge")
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local notify = require("flemma.notify")
@@ -385,15 +386,53 @@ end
 -- Materialization
 -- ---------------------------------------------------------------------------
 
+--- Expand a $-prefixed model reference into its concrete provider, model, and
+--- parameters. A model like `"$haiku"` is looked up in the preset registry (via
+--- `bridge`, to avoid a heavy require cycle) and its fields merged in, then the
+--- parameters are re-coerced against the schema. Mutates `config` in place — it
+--- is already a fresh deep copy owned by `materialize()`.
+---
+--- Returns `config` unchanged when the model is not a preset reference or the
+--- preset is unknown. The latter covers the bootstrap `materialize()` in
+--- `flemma.setup`, which runs before user presets are populated: `get_preset`
+--- returns nil, the raw alias survives, and `presets.resolve_default` resolves
+--- it from the store afterwards.
+---@param config table Materialized config; mutated in place
+---@return table config
+local function expand_model_preset(config)
+  if type(config.model) ~= "string" or not vim.startswith(config.model, "$") then
+    return config
+  end
+  local preset = bridge.get_preset(config.model)
+  if not preset then
+    return config
+  end
+  config.provider = preset.provider
+  config.model = preset.model
+  if preset.parameters and next(preset.parameters) then
+    config.parameters = vim.tbl_deep_extend("force", config.parameters or {}, preset.parameters)
+    -- Re-apply schema coercion to parameters after the preset merge.
+    local params_schema = nav.navigate_schema(root_schema, "parameters", { unwrap_leaf = true })
+    if params_schema then
+      config.parameters = nav.coerce_value(params_schema, config.parameters)
+    end
+  end
+  return config
+end
+
 --- Materialize the current resolved config into a plain Lua table.
 --- Walks the schema tree (static fields + DISCOVER-cached fields) and resolves
---- every path from the store. Returns a deep copy safe for external mutation.
---- Use when consumers need `pairs()`, `vim.deepcopy()`, or plain table semantics.
+--- every path from the store, then expands any $-prefixed model preset into its
+--- concrete provider/model/parameters. Returns a deep copy safe for external
+--- mutation. Use when consumers need the effective config as a plain table
+--- (`pairs()`, `vim.deepcopy()`); the raw accessors `get`/`inspect` deliberately
+--- preserve preset aliases.
 ---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return table
 function M.materialize(bufnr)
   assert(root_schema, "config.init() must be called before materialize()")
-  return vim.deepcopy(materialize_resolved(root_schema, "", bufnr) or {})
+  local resolved = vim.deepcopy(materialize_resolved(root_schema, "", bufnr) or {})
+  return expand_model_preset(resolved)
 end
 
 -- ---------------------------------------------------------------------------

@@ -145,13 +145,17 @@ Config proxies define `__pairs` that errors to prevent accidental iteration on p
 
 ### `get()` vs `materialize()` Decision Tree
 
-| Need                                                   | Use                         |
-| ------------------------------------------------------ | --------------------------- |
-| Static key reads (`cfg.provider`, `cfg.tools.timeout`) | `config.get(bufnr)`         |
-| `pairs()` iteration                                    | `config.materialize(bufnr)` |
-| Dynamic key access (`t[variable]`)                     | `config.materialize(bufnr)` |
-| `vim.deepcopy()` / `vim.inspect()`                     | `config.materialize(bufnr)` |
-| User-provided callbacks receiving config               | `config.materialize(bufnr)` |
+| Need                                                   | Use                                                 |
+| ------------------------------------------------------ | --------------------------------------------------- |
+| Static key reads (`cfg.provider`, `cfg.tools.timeout`) | `config.get(bufnr)`                                 |
+| `pairs()` iteration                                    | `config.materialize(bufnr)`                         |
+| Dynamic key access (`t[variable]`)                     | `config.materialize(bufnr)`                         |
+| `vim.deepcopy()` / `vim.inspect()`                     | `config.materialize(bufnr)`                         |
+| User-provided callbacks receiving config               | `config.materialize(bufnr)`                         |
+| Concrete model (expand `$preset` alias)                | `config.materialize(bufnr)`                         |
+| Raw configured model (keep `$preset`)                  | `config.get(bufnr)` / `config.inspect(bufnr, path)` |
+
+`config.materialize()` expands a `$preset` model reference into its concrete provider, model, and merged parameters; `config.get()`/`config.inspect()` preserve the raw alias. This is why setup's one-time `presets.resolve_default` reads the model via `config.get()` — `materialize()` would have already expanded it, hiding the `$` reference.
 
 ## Provider Parameter Resolution
 

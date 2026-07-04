@@ -149,8 +149,10 @@ M.setup = function(user_opts)
 
   -- Phase 4: Provider initialization (needs complete config)
 
-  -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
-  local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
+  -- Resolve preset reference in the model field (e.g., model = "$gemini-3-pro").
+  -- Read the raw stored alias via get(): materialize() (config.model) has already
+  -- expanded it, which would hide the "$" reference from resolve_default.
+  local resolved_preset, preset_error = presets.resolve_default(config_facade.get().model, user_opts.provider)
   if preset_error then
     notify.error(preset_error)
     return

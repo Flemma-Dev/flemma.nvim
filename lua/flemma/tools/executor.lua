@@ -571,7 +571,10 @@ function M.build_execution_context(params)
         ---@type flemma.tools.PathContext
         local path_namespace = {
           resolve = function(p)
-            return path_util.resolve(p, dirname or vim.fn.getcwd())
+            local expanded = store.with_cwd(store.get_buffer_store_path(bufnr), function()
+              return variables.expand_inline(p)
+            end)
+            return path_util.resolve(expanded, dirname or vim.fn.getcwd())
           end,
         }
         rawset(self, "path", path_namespace)

@@ -46,7 +46,7 @@ local cfg = config.get(bufnr)        -- read proxy
 cfg.tools.timeout                     -- nested reads
 cfg.thinking                          -- alias -> parameters.thinking
 
--- MATERIALIZE (when you need a plain table)
+-- MATERIALIZE (plain table; expands $preset model into concrete provider/model)
 local t = config.materialize(bufnr)   -- for pairs(), deepcopy, dynamic keys
 
 -- WRITE
@@ -66,18 +66,26 @@ config.LAYERS                         -- { DEFAULTS=10, SETUP=20, RUNTIME=30, FR
 
 ### get() vs materialize()
 
-| Need                                   | Use                  |
-| -------------------------------------- | -------------------- |
-| Static key reads (`cfg.tools.timeout`) | `get(bufnr)`         |
-| `pairs()` / iteration / dynamic keys   | `materialize(bufnr)` |
-| `vim.deepcopy()` / `vim.inspect()`     | `materialize(bufnr)` |
-| Callbacks receiving config             | `materialize(bufnr)` |
+`materialize()` expands a `$preset` model reference into its concrete provider,
+model, and parameters. `get()`/`inspect()` return the raw configured value with
+the `$preset` alias preserved — setup's one-time `presets.resolve_default` reads
+the raw alias via `get()`, and UI that shows the configured value uses `inspect()`.
+
+| Need                                    | Use                                   |
+| --------------------------------------- | ------------------------------------- |
+| Static key reads (`cfg.tools.timeout`)  | `get(bufnr)`                          |
+| `pairs()` / iteration / dynamic keys    | `materialize(bufnr)`                  |
+| `vim.deepcopy()` / `vim.inspect()`      | `materialize(bufnr)`                  |
+| Callbacks receiving config              | `materialize(bufnr)`                  |
+| Concrete model (expand `$preset` alias) | `materialize(bufnr)`                  |
+| Raw configured value (keep `$preset`)   | `get(bufnr)` / `inspect(bufnr, path)` |
 
 ## Key Invariants
 
 - **Store is schema-free.** Callers pass `{ is_list = true }` to resolution. The facade owns the schema.
 - **Providers are request-scoped.** Created in `send_to_provider()`, GC'd after. No global instance.
 - **All config reads go through the facade** — `config.get()` or `config.materialize()`.
+- **`materialize()` expands `$preset` model aliases; `get()`/`inspect()` keep them raw.** The store holds the raw alias (source of truth); expansion is a read-time concern, so no caller has to remember a separate resolve step.
 - **DISCOVER callbacks lazy-require.** `definition.lua` is pure data — inline `require()` in callbacks avoids circular deps.
 - **`auto_approve` always defaults to `{ "$standard" }`.** "Not configured" doesn't exist.
 - **Hybrid objects** (`tools`) support sub-key navigation AND list ops on the same path.
