@@ -32,11 +32,14 @@ qa:
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
 	bash contrib/scripts/lint-pcall-rethrow.sh \
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
+	jobs=$${JOBS:-$$(nproc)}; \
+	nver=$$(echo $$NVIM_VERSIONS | wc -w); \
+	per_version_jobs=$$(( jobs / nver )); \
+	if [ "$$per_version_jobs" -lt 1 ]; then per_version_jobs=1; fi; \
 	for entry in $$NVIM_VERSIONS; do \
 		IFS=: read -r label nvim_bin vimruntime plenary_path <<< "$$entry"; \
-		setsid env PROJECT_ROOT=$(PROJECT_ROOT) PLENARY_PATH="$$plenary_path" VIMRUNTIME="$$vimruntime" \
-			"$$nvim_bin" --headless --noplugin -u tests/minimal.vim \
-			-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
+		setsid env PROJECT_ROOT=$(PROJECT_ROOT) JOBS="$$per_version_jobs" \
+			bash contrib/scripts/run-flemma-specs.sh "$$nvim_bin" "$$vimruntime" "$$plenary_path" \
 			>"$$d/test-$$label" 2>&1 & gate[$$!]="test-$$label"; pgid[$$!]=1; \
 	done; \
 	cleanup() { \
