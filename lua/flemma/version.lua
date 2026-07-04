@@ -2,6 +2,6 @@
 local M = {}
 
 ---@type string
-M.VERSION = "0.13.0-dev"
+M.VERSION = "0.13.1"
 
 return M
