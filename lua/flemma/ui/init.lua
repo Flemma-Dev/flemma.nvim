@@ -47,6 +47,8 @@ local BASE_TOOL_PREVIEW_HL = "FlemmaToolPreview"
 ---@type table<integer, {key_display: string, label: string, min_pending: integer|nil}[]>
 local keybind_hints_cache = {}
 local fence_ns = vim.api.nvim_create_namespace("flemma_fence_overlays")
+---@type table<integer, TSNode|nil>
+local fence_tree_roots = {}
 
 ---@type string
 local FENCE_BAR_CHAR = "╌"
@@ -61,13 +63,13 @@ local APPROVAL_ICON_SETTLED = "⧖"
 ---@param label_hl string Highlight group for the language label
 ---@return {[1]:string, [2]:string}[]|nil
 function M.build_fence_virt_text(line, bar_hl, label_hl)
-  if not line:match("^```") then
+  local backticks, rest = line:match("^(```+)(.*)$")
+  if not backticks then
     return nil
   end
-  local bar = string.rep(FENCE_BAR_CHAR, 3)
-  local lang = line:match("^```(.+)$")
-  if lang then
-    return { { bar, bar_hl }, { lang, label_hl } }
+  local bar = string.rep(FENCE_BAR_CHAR, #backticks)
+  if rest ~= "" then
+    return { { bar, bar_hl }, { rest, label_hl } }
   end
   return { { bar, bar_hl } }
 end
@@ -117,6 +119,13 @@ function M.setup_fence_decoration_provider()
       if not highlight.is_fence_conceal_patched() then
         return false
       end
+      local ok, ts_parser = pcall(vim.treesitter.get_parser, bufnr)
+      if ok and ts_parser then
+        local trees = ts_parser:trees()
+        fence_tree_roots[bufnr] = trees[1] and trees[1]:root() or nil
+      else
+        fence_tree_roots[bufnr] = nil
+      end
     end,
     on_line = function(_, winid, bufnr, row)
       local bar_hl, label_hl = M.resolve_fence_highlights(bufnr, winid, row)
@@ -131,6 +140,13 @@ function M.setup_fence_decoration_provider()
       ---@cast label_hl string
       local chunks = M.build_fence_virt_text(line, bar_hl, label_hl)
       if chunks then
+        local root = fence_tree_roots[bufnr]
+        if root then
+          local node = root:named_descendant_for_range(row, 0, row, 0)
+          if not node or node:type() ~= "fenced_code_block_delimiter" then
+            return
+          end
+        end
         vim.api.nvim_buf_set_extmark(bufnr, fence_ns, row, 0, {
           virt_text = chunks,
           virt_text_pos = "overlay",
@@ -1243,6 +1259,7 @@ function M.setup()
         activity.cleanup_progress(ev.buf, M.update_ui)
         indicators.clear_all_tool_indicators(ev.buf)
         keybind_hints_cache[ev.buf] = nil
+        fence_tree_roots[ev.buf] = nil
         -- state.cleanup_buffer_state handles executor.cleanup_buffer internally
         state.cleanup_buffer_state(ev.buf)
       end
