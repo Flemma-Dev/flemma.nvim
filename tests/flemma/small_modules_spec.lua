@@ -166,6 +166,28 @@ describe("flemma.messages", function()
   describe("migration fidelity (UI strings)", function()
     it("renders the exact pre-migration strings", function()
       assert.are.equal("No usage data for this buffer.", messages["ui.usage.no_data"]{})
+      assert.are.equal("Flemma: Rejection reason (optional): ", messages["ui.rejection.prompt"]{})
+      assert.are.equal("Reject failed", messages["ui.rejection.reject_failed"]{})
+      assert.are.equal("No tool call found", messages["ui.rejection.no_tool_call"]{})
+      assert.are.equal(
+        "No tool result placeholder for tool_x1",
+        messages["ui.rejection.no_result_placeholder"]{ tool_id = "tool_x1" }
+      )
+      assert.are.equal(
+        "Tool tool_x1 has already completed",
+        messages["ui.rejection.already_completed"]{ tool_id = "tool_x1" }
+      )
+      assert.are.equal(
+        "No fence found in tool result for tool_x1",
+        messages["ui.rejection.no_fence"]{ tool_id = "tool_x1" }
+      )
+    end)
+
+    it("derives the rejection popup prefill from the harness feedback template", function()
+      -- ui/rejection.lua seeds the popup with this exact prefix (reason="")
+      -- so the popup and the vim.ui.input fallback both yield the same
+      -- "User feedback: <text>" message. Guards the cross-catalogue coupling.
+      assert.are.equal("User feedback: ", messages["tool.rejected.feedback"]{ reason = "" })
     end)
   end)
 

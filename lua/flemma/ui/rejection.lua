@@ -77,7 +77,7 @@ local function confirm(state)
   if ok then
     navigation.advance_to_next_pending(parent_buf, tool_id)
   else
-    notify.error(err or "Reject failed")
+    notify.error(err or messages["ui.rejection.reject_failed"]{})
   end
 end
 
@@ -202,7 +202,7 @@ end
 ---Fall back to vim.ui.input for rejection when the popup is disabled.
 ---@param bufnr integer
 local function fallback_input(bufnr)
-  vim.ui.input({ prompt = "Flemma: Rejection reason (optional): " }, function(input)
+  vim.ui.input({ prompt = messages["ui.rejection.prompt"]{} }, function(input)
     if input == nil then
       return
     end
@@ -215,7 +215,7 @@ local function fallback_input(bufnr)
     end
     local ok, err = executor.reject_at_cursor(bufnr, message)
     if not ok then
-      notify.error(err or "Reject failed")
+      notify.error(err or messages["ui.rejection.reject_failed"]{})
     end
   end)
 end
@@ -239,26 +239,26 @@ function M.open(bufnr)
   local cursor_pos = vim.api.nvim_win_get_cursor(parent_win)
   local ctx, err = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
   if not ctx then
-    notify.error(err or "No tool call found")
+    notify.error(err or messages["ui.rejection.no_tool_call"]{})
     return
   end
 
   local doc = parser.get_parsed_document(bufnr)
   local result_seg = ast.find_tool_sibling(doc, ctx.node)
   if not result_seg or result_seg.kind ~= "tool_result" then
-    notify.error("No tool result placeholder for " .. ctx.tool_id)
+    notify.error(messages["ui.rejection.no_result_placeholder"]{ tool_id = ctx.tool_id })
     return
   end
   ---@cast result_seg flemma.ast.ToolResultSegment
 
   if not result_seg.status or result_seg.status == "error" then
-    notify.error("Tool " .. ctx.tool_id .. " has already completed")
+    notify.error(messages["ui.rejection.already_completed"]{ tool_id = ctx.tool_id })
     return
   end
 
   local open_lnum, close_lnum = find_fence_lines(bufnr, result_seg)
   if not open_lnum then
-    notify.error("No fence found in tool result for " .. ctx.tool_id)
+    notify.error(messages["ui.rejection.no_fence"]{ tool_id = ctx.tool_id })
     return
   end
 
@@ -268,7 +268,10 @@ function M.open(bufnr)
   local float_buf = buffer_utils.create_scratch_buffer({ bufhidden = "wipe", undolevels = false })
   vim.b[float_buf].completion = rejection_config.completion
 
-  local prefill = "User feedback: "
+  -- The popup prefill is the harness feedback prefix rendered with an empty
+  -- reason, so a typed-over popup and the vim.ui.input fallback both yield the
+  -- same "User feedback: <text>" message the model sees.
+  local prefill = messages["tool.rejected.feedback"]{ reason = "" }
   vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, { prefill })
 
   local float_win = vim.api.nvim_open_win(float_buf, true, {

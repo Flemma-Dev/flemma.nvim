@@ -15,3 +15,24 @@ msgstr ""
 
 msgid "ui.usage.no_data"
 msgstr "No usage data for this buffer."
+
+msgid "ui.rejection.prompt"
+msgstr "Flemma: Rejection reason (optional): "
+
+msgid "ui.rejection.reject_failed"
+msgstr "Reject failed"
+
+msgid "ui.rejection.no_tool_call"
+msgstr "No tool call found"
+
+#. Variables: {{ tool_id }} — the tool call's identifier.
+msgid "ui.rejection.no_result_placeholder"
+msgstr "No tool result placeholder for {{ tool_id }}"
+
+#. Variables: {{ tool_id }} — the tool call's identifier.
+msgid "ui.rejection.already_completed"
+msgstr "Tool {{ tool_id }} has already completed"
+
+#. Variables: {{ tool_id }} — the tool call's identifier.
+msgid "ui.rejection.no_fence"
+msgstr "No fence found in tool result for {{ tool_id }}"

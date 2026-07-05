@@ -261,6 +261,12 @@ describe("flemma.utilities.po", function()
 
     describe_catalogue("po/flemma.po", {
       "ui.usage.no_data",
+      "ui.rejection.prompt",
+      "ui.rejection.reject_failed",
+      "ui.rejection.no_tool_call",
+      "ui.rejection.no_result_placeholder",
+      "ui.rejection.already_completed",
+      "ui.rejection.no_fence",
     })
 
     it("keeps keys unique across the shipped catalogues", function()
