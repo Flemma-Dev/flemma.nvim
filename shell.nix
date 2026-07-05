@@ -38,6 +38,7 @@ pkgs-stable.mkShell {
     links2
     mcporter
     nodejs-stable.pkgs.pnpm
+    shellcheck
     socat
     tree-sitter
     vhs

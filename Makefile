@@ -35,6 +35,8 @@ qa:
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
 	bash contrib/scripts/lint-po.sh \
 		>"$$d/po" 2>&1 & gate[$$!]=po; \
+	bash contrib/scripts/lint-shell.sh \
+		>"$$d/shell" 2>&1 & gate[$$!]=shell; \
 	jobs=$${JOBS:-$$(nproc)}; \
 	nver=$$(echo $$NVIM_VERSIONS | wc -w); \
 	per_version_jobs=$$(( jobs / nver )); \

@@ -68,6 +68,9 @@ for file in $(find lua/flemma -name '*.lua' -type f | sort); do
       continue
     fi
 
+    # Keep sed: SC2001's ${var//search/replace} does a global strip and can't anchor to ^,
+    # so it can't express this leading-only whitespace strip.
+    # shellcheck disable=SC2001
     echo "  $file:$abs_line: $(echo "$content" | sed 's/^[[:space:]]*//')"
     violations=$((violations + 1))
   done < <(tail -n +"$first_fn" "$file" | grep -n -E 'require\(?"flemma\.' || true)
