@@ -293,11 +293,10 @@ end
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
   -- Validate provider
   if not registry.has(provider_name) then
-    local err = string.format(
-      "Unknown provider '%s'. Supported providers are: %s",
-      tostring(provider_name),
-      table.concat(registry.supported_providers(), ", ")
-    )
+    local err = messages["ui.provider.unknown"]{
+      provider = tostring(provider_name),
+      providers = table.concat(registry.supported_providers(), ", "),
+    }
     log.error("initialize_provider(): " .. err)
     notify.error(err)
     return false, {}
@@ -311,12 +310,11 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   ---@type string|nil
   local model_fallback_warning
   if validated_model ~= model_name and model_name ~= nil then
-    model_fallback_warning = string.format(
-      "Model '%s' is not valid for provider '%s'. Using default: '%s'.",
-      tostring(model_name),
-      tostring(resolved_provider),
-      tostring(validated_model)
-    )
+    model_fallback_warning = messages["ui.provider.model_fallback"]{
+      model = tostring(model_name),
+      provider = tostring(resolved_provider),
+      fallback = tostring(validated_model),
+    }
   end
 
   -- Write to facade
@@ -364,8 +362,13 @@ function M.initialize_provider(provider_name, model_name, explicit_params, layer
     -- Same multi-line format as switch_provider: header + bullet lines
     local resolved = registry.resolve(provider_name) or provider_name
     local validated_model = config_facade.get().model
-    local model_desc = validated_model and (" with model '" .. validated_model .. "'") or ""
-    local lines = { "Initialized '" .. resolved .. "'" .. model_desc }
+    local header
+    if validated_model then
+      header = messages["ui.provider.initialized_with_model"]{ provider = resolved, model = validated_model }
+    else
+      header = messages["ui.provider.initialized"]{ provider = resolved }
+    end
+    local lines = { header }
     if model_fallback then
       table.insert(lines, "  ⚠ " .. model_fallback)
     end
@@ -421,8 +424,13 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Notify the user. Header line + optional bullet lines for warnings/overrides.
   local global_config = config_facade.get()
   local buffer_config = config_facade.get(bufnr)
-  local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
-  local header = "Switched to '" .. global_config.provider .. "'" .. model_info
+  local header
+  if global_config.model then
+    header =
+      messages["ui.provider.switched_with_model"]{ provider = global_config.provider, model = global_config.model }
+  else
+    header = messages["ui.provider.switched"]{ provider = global_config.provider }
+  end
   ---@type string[]
   local lines = {}
   local notify_level = vim.log.levels.INFO
@@ -436,7 +444,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Billing / cost warning
   local billing = registry.get_metadata(global_config.provider, "billing")
   if billing == "subscription" then
-    table.insert(lines, "  ⓘ Flemma draws from your subscription usage limit")
+    table.insert(lines, "  ⓘ " .. messages["ui.provider.subscription_notice"]{})
   else
     local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
     local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
@@ -445,21 +453,31 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
       and model_entry.pricing
       and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
     then
-      table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
+      table.insert(
+        lines,
+        "  ⚠ " .. messages["ui.provider.billed_at"]{ pricing = str.format_pricing_suffix(model_entry.pricing) }
+      )
       notify_level = vim.log.levels.WARN
     end
   end
 
-  -- Frontmatter override notice (provider, model, or both)
-  if buffer_config.provider ~= global_config.provider or buffer_config.model ~= global_config.model then
-    local parts = {}
-    if buffer_config.provider ~= global_config.provider then
-      table.insert(parts, "'" .. buffer_config.provider .. "'")
+  -- Frontmatter override notice (provider, model, or both). Full-sentence keys
+  -- per case — fragment concatenation reorders wrong once translated.
+  local provider_overridden = buffer_config.provider ~= global_config.provider
+  local model_overridden = buffer_config.model ~= global_config.model
+  if provider_overridden or model_overridden then
+    local notice
+    if provider_overridden and model_overridden then
+      notice = messages["ui.provider.frontmatter_override_both"]{
+        provider = buffer_config.provider,
+        model = buffer_config.model,
+      }
+    elseif provider_overridden then
+      notice = messages["ui.provider.frontmatter_override_provider"]{ provider = buffer_config.provider }
+    else
+      notice = messages["ui.provider.frontmatter_override_model"]{ model = buffer_config.model }
     end
-    if buffer_config.model ~= global_config.model then
-      table.insert(parts, "model '" .. buffer_config.model .. "'")
-    end
-    table.insert(lines, "  • This buffer uses " .. table.concat(parts, " / ") .. " (frontmatter)")
+    table.insert(lines, "  • " .. notice)
   end
 
   -- Parameter validation warnings
@@ -1152,7 +1170,10 @@ function M._run_send_pipeline(bufnr, opts)
     local rendered = 0
     for _, d in ipairs(sorted) do
       if rendered >= MAX_DIAGNOSTICS then
-        table.insert(diagnostic_lines, string.format(" …and %d more", #sorted - MAX_DIAGNOSTICS))
+        table.insert(
+          diagnostic_lines,
+          " " .. messages["ui.diagnostics.and_more"]{ count = #sorted - MAX_DIAGNOSTICS }
+        )
         break
       end
 
@@ -1178,7 +1199,7 @@ function M._run_send_pipeline(bufnr, opts)
     -- Footer: clarify whether the request was blocked
     if has_errors then
       table.insert(diagnostic_lines, "")
-      table.insert(diagnostic_lines, "Request blocked — fix errors to send.")
+      table.insert(diagnostic_lines, messages["ui.diagnostics.request_blocked"]{})
     end
 
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN

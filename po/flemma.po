@@ -162,12 +162,70 @@ msgstr "Provider name is required"
 msgid "ui.provider.ignoring_positionals"
 msgstr "Ignoring extra positional arguments: {{ args }}"
 
+#. Provider validation errors and the switch/initialize result notice
+#. (core.lua) — a conditional header line followed by ⚠/ⓘ/• bullet lines.
+#. Variables: {{ provider }}, {{ providers }} — the unknown name and the
+#. comma-separated list of supported providers.
+msgid "ui.provider.unknown"
+msgstr "Unknown provider '{{ provider }}'. Supported providers are: {{ providers }}"
+
+#. Variables: {{ model }}, {{ provider }}, {{ fallback }} — the rejected model,
+#. its provider, and the default substituted in its place.
+msgid "ui.provider.model_fallback"
+msgstr "Model '{{ model }}' is not valid for provider '{{ provider }}'. Using default: '{{ fallback }}'."
+
+#. Header after :Flemma switch. Paired forms: model resolved or not.
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.switched"
+msgstr "Switched to '{{ provider }}'"
+
+msgid "ui.provider.switched_with_model"
+msgstr "Switched to '{{ provider }}' with model '{{ model }}'"
+
+#. Header after initial provider setup. Paired forms: model resolved or not.
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.initialized"
+msgstr "Initialized '{{ provider }}'"
+
+msgid "ui.provider.initialized_with_model"
+msgstr "Initialized '{{ provider }}' with model '{{ model }}'"
+
+#. ⓘ bullet: the active provider bills against a subscription, not per-token.
+msgid "ui.provider.subscription_notice"
+msgstr "Flemma draws from your subscription usage limit"
+
+#. ⚠ bullet: per-token pricing for a model over the high-cost threshold.
+#. Variables: {{ pricing }} — the formatted input/output rate suffix.
+msgid "ui.provider.billed_at"
+msgstr "Billed at {{ pricing }}"
+
+#. • bullet: buffer frontmatter overrides the session provider and/or model.
+#. Three forms by which fields differ. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.frontmatter_override_provider"
+msgstr "This buffer uses '{{ provider }}' (frontmatter)"
+
+msgid "ui.provider.frontmatter_override_model"
+msgstr "This buffer uses model '{{ model }}' (frontmatter)"
+
+msgid "ui.provider.frontmatter_override_both"
+msgstr "This buffer uses '{{ provider }}' / model '{{ model }}' (frontmatter)"
+
 #. :Flemma diagnostics.
 msgid "ui.diagnostics.enabled"
 msgstr "Diagnostics enabled"
 
 msgid "ui.diagnostics.disabled"
 msgstr "Diagnostics disabled"
+
+#. Send-pipeline diagnostics summary — shown when a send surfaces buffer
+#. diagnostics (parse/frontmatter errors). Variables: {{ count }} — the
+#. number of diagnostics beyond the display cap.
+msgid "ui.diagnostics.and_more"
+msgstr "…and {{ count }} more"
+
+#. Footer when the send is blocked by critical errors.
+msgid "ui.diagnostics.request_blocked"
+msgstr "Request blocked — fix errors to send."
 
 #. :Flemma usage estimate.
 msgid "ui.usage.no_provider"
