@@ -57,3 +57,140 @@ msgstr "No pending tools to approve"
 #. the double-tap window cancels every tool in the buffer.
 msgid "ui.tool.nothing_to_cancel_retry"
 msgstr "Nothing to cancel (press again to cancel all)"
+
+msgid "ui.tool.nothing_to_cancel"
+msgstr "Nothing to cancel"
+
+msgid "ui.tool.cancelled"
+msgstr "Tool execution cancelled"
+
+msgid "ui.tool.none_pending"
+msgstr "No pending tool executions"
+
+msgid "ui.tool.all_cancelled"
+msgstr "All tool executions cancelled"
+
+msgid "ui.tool.list_header"
+msgstr "Pending tool executions:"
+
+#. Variables: {{ tool_name }}, {{ tool_id }}, {{ seconds }} — one pending row.
+msgid "ui.tool.list_row"
+msgstr "  {{ tool_name }} ({{ tool_id }}) - started {{ seconds }}s ago"
+
+#. :Flemma command dispatch and sub-command feedback.
+#. Variables: {{ commands }} — comma-separated list of available commands.
+msgid "ui.command.available"
+msgstr "Available commands → {{ commands }}"
+
+#. Variables: {{ command }} — the unrecognized command token.
+msgid "ui.command.unknown"
+msgstr "Unknown command '{{ command }}'"
+
+#. Variables: {{ command }}, {{ suggestion }} — the closest known command.
+msgid "ui.command.unknown_suggestion"
+msgstr "Unknown command '{{ command }}'. Did you mean '{{ suggestion }}'?"
+
+#. Variables: {{ command }} — a namespace node that has no action of its own.
+msgid "ui.command.not_invokable"
+msgstr "'{{ command }}' is not invokable"
+
+#. Variables: {{ command }}, {{ subcommands }} — its available child commands.
+msgid "ui.command.expects_subcommand"
+msgstr "'{{ command }}' expects a sub-command ({{ subcommands }})"
+
+#. Config action callbacks (on_request_start, on_request_complete, …).
+#. Variables: {{ label }}, {{ reason }} — the callback name and failure detail.
+msgid "ui.callback.failed"
+msgstr "{{ label }} callback failed: {{ reason }}"
+
+#. Variables: {{ label }}, {{ received }} — the callback name and the Lua type given.
+msgid "ui.callback.invalid_type"
+msgstr "{{ label }} expects a string or function, received {{ received }}"
+
+#. Variables: {{ label }}, {{ reason }} — the callback name and failure detail.
+msgid "ui.callback.command_failed"
+msgstr "{{ label }} command failed: {{ reason }}"
+
+#. :Flemma logging.
+#. Variables: {{ level }} — the rejected level string.
+msgid "ui.logging.invalid_level"
+msgstr "Invalid log level '{{ level }}'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR"
+
+#. Variables: {{ level }}, {{ path }} — the active level and the log file path.
+msgid "ui.logging.enabled"
+msgstr "Logging enabled (level: {{ level }}) - {{ path }}"
+
+msgid "ui.logging.disabled"
+msgstr "Logging disabled"
+
+msgid "ui.logging.currently_disabled"
+msgstr "Logging is currently disabled"
+
+#. :Flemma switch — provider and model selection.
+msgid "ui.provider.select_prompt"
+msgstr "Select Provider:"
+
+msgid "ui.provider.select_cancelled"
+msgstr "Provider selection cancelled"
+
+#. Variables: {{ provider }} — the selected provider name.
+msgid "ui.provider.no_models"
+msgstr "No models found for provider {{ provider }}"
+
+#. Variables: {{ provider }} — the selected provider name.
+msgid "ui.provider.select_model_prompt"
+msgstr "Select Model for {{ provider }}:"
+
+msgid "ui.provider.model_select_cancelled"
+msgstr "Model selection cancelled"
+
+#. Variables: {{ preset }} — the unknown preset token (e.g. '$fast').
+msgid "ui.provider.unknown_preset"
+msgstr "Unknown preset '{{ preset }}'"
+
+#. Variables: {{ preset }}, {{ args }} — the preset and the ignored positionals.
+msgid "ui.provider.ignoring_positionals_preset"
+msgstr "Ignoring extra positional arguments for preset '{{ preset }}': {{ args }}"
+
+msgid "ui.provider.name_required"
+msgstr "Provider name required (use :Flemma switch <provider>)"
+
+#. Variables: {{ args }} — the ignored positional arguments.
+msgid "ui.provider.ignoring_positionals"
+msgstr "Ignoring extra positional arguments: {{ args }}"
+
+#. :Flemma diagnostics.
+msgid "ui.diagnostics.enabled"
+msgstr "Diagnostics enabled"
+
+msgid "ui.diagnostics.disabled"
+msgstr "Diagnostics disabled"
+
+#. :Flemma usage estimate.
+msgid "ui.usage.no_provider"
+msgstr "No provider configured. Use :Flemma switch to select one."
+
+msgid "ui.usage.estimate_unsupported"
+msgstr "Current provider does not support usage estimates."
+
+#. Variables: {{ reason }} — the failure detail.
+msgid "ui.usage.estimate_failed"
+msgstr "Estimate failed: {{ reason }}"
+
+#. :Flemma autopilot.
+msgid "ui.autopilot.enabled"
+msgstr "Autopilot enabled"
+
+msgid "ui.autopilot.disabled"
+msgstr "Autopilot disabled"
+
+#. :Flemma sandbox.
+#. Variables: {{ reason }} — why the backend cannot be enabled.
+msgid "ui.sandbox.enable_failed"
+msgstr "Cannot enable sandbox: {{ reason }}"
+
+msgid "ui.sandbox.enabled"
+msgstr "Sandbox enabled"
+
+msgid "ui.sandbox.disabled"
+msgstr "Sandbox disabled"
