@@ -194,6 +194,7 @@ describe("flemma.utilities.po", function()
         "tool.find.input.path",
         "tool.find.input.limit",
         "tool.flemma.jobs.status.description",
+        "tool.flemma.jobs.status.input.job_id",
         "tool.grep.description",
         "tool.grep.input.label",
         "tool.grep.input.pattern",

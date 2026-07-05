@@ -132,6 +132,9 @@ msgstr ""
 "\"completed\" when the result is already in the conversation. Use this to "
 "check on long-running background tasks instead of retrying them."
 
+msgid "tool.flemma.jobs.status.input.job_id"
+msgstr "The job ID (e.g., 'job_xxx') from the tool result placeholder."
+
 #. Variables: {{ default_limit }} — the default match cap.
 msgid "tool.grep.description"
 msgstr ""

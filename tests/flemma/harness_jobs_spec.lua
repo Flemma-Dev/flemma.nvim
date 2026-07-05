@@ -43,6 +43,16 @@ describe("flemma.jobs.status", function()
     assert.is_truthy(vim.tbl_contains(definition.capabilities, "disables_save_to"))
   end)
 
+  it("exposes the job_id guidance as a description, not a default value", function()
+    -- Regression: the guidance string was passed as s.string(<default>), so it
+    -- landed in the schema's `default` slot (a nonsense default) with no
+    -- `description` for the model. It must serialize as `description` instead.
+    local schema = jobs_module.definitions[1].input_schema:to_json_schema()
+    local job_id = schema.properties.job_id
+    assert.equals("The job ID (e.g., 'job_xxx') from the tool result placeholder.", job_id.description)
+    assert.is_nil(job_id.default)
+  end)
+
   describe("execute", function()
     it("returns 'running' for an active background job", function()
       local bufnr = vim.api.nvim_create_buf(false, true)

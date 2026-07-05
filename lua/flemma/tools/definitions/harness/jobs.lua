@@ -23,7 +23,7 @@ M.definitions = {
       return input.job_id
     end,
     input_schema = s.object({
-      job_id = s.string("The job ID (e.g., 'job_xxx') from the tool result placeholder."),
+      job_id = s.string():describe(messages["tool.flemma.jobs.status.input.job_id"]),
     }),
     ---@param input { job_id: string }
     ---@param ctx flemma.tools.ExecutionContext
