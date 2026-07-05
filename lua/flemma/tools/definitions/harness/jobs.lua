@@ -6,6 +6,7 @@ local M = {}
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local query = require("flemma.ast.query")
 local s = require("flemma.schema")
 local state = require("flemma.state")
@@ -13,11 +14,7 @@ local state = require("flemma.state")
 M.definitions = {
   {
     name = "flemma.jobs.status",
-    description = "Check the status of a background job. "
-      .. 'Returns "running" while the job is executing, "completed (delivery pending)" once it has finished '
-      .. "and its result is queued to be injected into the conversation automatically (do not re-run the tool "
-      .. 'or keep polling — the result is on its way), or "completed" when the result is already in the conversation. '
-      .. "Use this to check on long-running background tasks instead of retrying them.",
+    description = messages["tool.flemma.jobs.status.description"]{},
     strict = true,
     async = false,
     capabilities = { "disables_background", "disables_save_to" },

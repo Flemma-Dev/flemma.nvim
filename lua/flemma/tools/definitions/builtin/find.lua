@@ -6,6 +6,7 @@
 ---@field _build_command fun(backend: "fd"|"git"|"find", pattern: string, search_path: string, exclude: string[]): string[] Build command array for the given backend (exposed for testing)
 local M = {}
 
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
@@ -140,20 +141,18 @@ M.definitions = {
         ),
       }),
     },
-    description = "Find files by glob pattern. "
-      .. "Uses fd, git ls-files, or GNU find (whichever is available). "
-      .. "Output is truncated to "
-      .. truncate.MAX_LINES
-      .. " lines or "
-      .. math.floor(truncate.MAX_BYTES / 1024)
-      .. "KB. "
-      .. "Returns sorted relative paths, one per line.",
+    description = messages["tool.find.description"]{
+      max_lines = truncate.MAX_LINES,
+      max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024),
+    },
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'finding test files')"),
-      pattern = s.string():describe("Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')"),
-      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
-      limit = s.number():nullable():describe("Maximum number of results (default: " .. DEFAULT_RESULT_LIMIT .. ")"),
+      label = s.string():describe(messages["tool.find.input.label"]),
+      pattern = s.string():describe(messages["tool.find.input.pattern"]),
+      path = s.string():nullable():describe(messages["tool.find.input.path"]),
+      limit = s.number()
+        :nullable()
+        :describe(messages["tool.find.input.limit"]{ default_limit = DEFAULT_RESULT_LIMIT }),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {

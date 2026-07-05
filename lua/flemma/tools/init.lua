@@ -273,7 +273,7 @@ function M.to_json_schema_for_prompt(definition)
     schema.properties["flemma.background"] = {
       type = is_strict and { "boolean", "null" } or "boolean",
       default = false,
-      description = messages.render("tool-parameter--background"),
+      description = messages["tool.parameter.background"]{},
     }
     if is_strict then
       schema.required = schema.required or {}
@@ -284,7 +284,7 @@ function M.to_json_schema_for_prompt(definition)
   if not has_cap(definition.name, "disables_save_to") then
     schema.properties["flemma.save_to"] = {
       type = is_strict and { "string", "null" } or "string",
-      description = messages.render("tool-parameter--save-to"),
+      description = messages["tool.parameter.save_to"]{},
     }
     if is_strict then
       schema.required = schema.required or {}

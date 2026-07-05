@@ -20,9 +20,9 @@ local roles = require("flemma.utilities.roles")
 ---@return string
 function M.resolve_error_message(status, content)
   if status == "rejected" then
-    return (content and content ~= "") and content or messages.render("tool-rejected")
+    return (content and content ~= "") and content or messages["tool.rejected"]{}
   end
-  return messages.render("tool-denied")
+  return messages["tool.denied"]{}
 end
 
 --- Find the @You: message immediately following a given message index
@@ -86,7 +86,7 @@ local function format_result_lines(result, compact)
   local content
 
   if is_error then
-    content = result.error or messages.render("tool-error--unknown")
+    content = result.error or messages["tool.error.unknown"]{}
     if result.output and result.output ~= "" then
       content = content .. "\n\nPartial output:\n" .. result.output
     end

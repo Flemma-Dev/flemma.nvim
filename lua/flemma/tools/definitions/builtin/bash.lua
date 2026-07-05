@@ -9,6 +9,7 @@ local M = {}
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
 local store = require("flemma.tools.store")
@@ -473,21 +474,15 @@ M.definitions = {
       }),
     },
     capabilities = { "auto_approves_if_sandboxed" },
-    description = "Execute a bash command in the current working directory. "
-      .. "Returns stdout and stderr. Output is truncated to last "
-      .. truncate.MAX_LINES
-      .. " lines or "
-      .. math.floor(truncate.MAX_BYTES / 1024)
-      .. "KB (whichever is hit first). "
-      .. "If truncated, full output is saved to a file. "
-      .. "$FLEMMA_TOOLS_STORE_PATH is set in the environment and points to a directory "
-      .. "where saved tool results for this conversation are stored. "
-      .. "Optionally provide a timeout in seconds.",
+    description = messages["tool.bash.description"]{
+      max_lines = truncate.MAX_LINES,
+      max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024),
+    },
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'running tests')"),
-      command = s.string():describe("The bash command to execute"),
-      timeout = s.number():nullable():describe("Timeout in seconds (default: 30)"),
+      label = s.string():describe(messages["tool.bash.input.label"]),
+      command = s.string():describe(messages["tool.bash.input.command"]),
+      timeout = s.number():nullable():describe(messages["tool.bash.input.timeout"]),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {

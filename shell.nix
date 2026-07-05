@@ -29,7 +29,9 @@ pkgs-stable.mkShell {
 
   buildInputs = with pkgs-unstable; [
     actionlint
+    ast-grep
     bubblewrap
+    gettext
     gh
     google-cloud-sdk
     libsecret

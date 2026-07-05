@@ -538,7 +538,7 @@ function M.cancel_request(opts)
             line_count,
             line_count,
             false,
-            vim.list_extend(separator, { "<!-- flemma:aborted: " .. messages.render("request-aborted") .. " -->" })
+            vim.list_extend(separator, { "<!-- flemma:aborted: " .. messages["request.aborted"] .. " -->" })
           )
         end)
         editing.auto_write(bufnr)
@@ -628,7 +628,7 @@ local function advance_phase2(opts)
   for _, ctx in ipairs(aborted) do
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
-      error = ctx.aborted_message or messages.render("request-aborted"),
+      error = ctx.aborted_message or messages["request.aborted"]{},
     }, compact_opts)
   end
 

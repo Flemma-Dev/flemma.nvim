@@ -8,6 +8,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local mime = require("flemma.mime")
@@ -16,18 +17,16 @@ local encoding = require("flemma.utilities.encoding")
 M.definitions = {
   {
     name = "read",
-    description = "Read the contents of a file. Output is truncated to "
-      .. truncate.MAX_LINES
-      .. " lines or "
-      .. math.floor(truncate.MAX_BYTES / 1024)
-      .. "KB (whichever is hit first). "
-      .. "Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+    description = messages["tool.read.description"]{
+      max_lines = truncate.MAX_LINES,
+      max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024),
+    },
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'reading config.lua')"),
-      path = s.string():describe("Path to the file to read (relative or absolute)"),
-      offset = s.number():nullable():describe("Line number to start reading from (1-indexed)"),
-      limit = s.number():nullable():describe("Maximum number of lines to read"),
+      label = s.string():describe(messages["tool.read.input.label"]),
+      path = s.string():describe(messages["tool.read.input.path"]),
+      offset = s.number():nullable():describe(messages["tool.read.input.offset"]),
+      limit = s.number():nullable():describe(messages["tool.read.input.limit"]),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {

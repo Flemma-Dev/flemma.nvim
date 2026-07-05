@@ -8,6 +8,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
@@ -118,21 +119,14 @@ M.definitions = {
         ),
       }),
     },
-    description = "Search file contents using ripgrep (rg) or grep. "
-      .. "Returns matching lines with file paths and line numbers. "
-      .. "Output is limited to "
-      .. DEFAULT_LIMIT
-      .. " matches by default. "
-      .. "Supports regex patterns. "
-      .. "When using grep -E fallback, \\d, \\w, \\s are automatically translated to POSIX equivalents.",
+    description = messages["tool.grep.description"]{ default_limit = DEFAULT_LIMIT },
     strict = true,
     input_schema = s.object({
-      label = s.string()
-        :describe("A short human-readable label for this operation (e.g., 'searching for TODO comments')"),
-      pattern = s.string():describe("Regular expression pattern to search for"),
-      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
-      glob = s.string():nullable():describe("File glob filter (e.g., '*.lua', '*.{ts,tsx}')"),
-      limit = s.number():nullable():describe("Maximum number of matches (default: " .. DEFAULT_LIMIT .. ")"),
+      label = s.string():describe(messages["tool.grep.input.label"]),
+      pattern = s.string():describe(messages["tool.grep.input.pattern"]),
+      path = s.string():nullable():describe(messages["tool.grep.input.path"]),
+      glob = s.string():nullable():describe(messages["tool.grep.input.glob"]),
+      limit = s.number():nullable():describe(messages["tool.grep.input.limit"]{ default_limit = DEFAULT_LIMIT }),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {

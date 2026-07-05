@@ -63,44 +63,226 @@ describe("flemma.messages", function()
     messages = require("flemma.messages")
   end)
 
-  describe("render", function()
-    it("renders job-executing--tracked template with variables", function()
-      local result = messages.render("job-executing--tracked", { job_id = "job_test1" })
+  describe("catalogue access", function()
+    it("renders with variables via __call", function()
+      local result = messages["job.executing.tracked"]{ job_id = "job_test1" }
       assert.is_string(result)
       assert.truthy(result:match("job_test1"))
       assert.truthy(result:match("flemma%.jobs%.status"))
       assert.truthy(result:match("Do not retry"))
     end)
 
-    it("renders job-executing--untracked template without job_id", function()
-      local result = messages.render("job-executing--untracked")
+    it("renders without variables via __call", function()
+      local result = messages["job.executing.untracked"]{}
       assert.is_string(result)
       assert.truthy(result:match("Do not retry"))
-      assert.is_falsy(result:match("flemma%.jobs%.status"))
       assert.is_falsy(result:match("job_id"))
     end)
 
-    it("errors for non-existent template", function()
-      assert.has_error(function()
-        messages.render("nonexistent_template")
-      end, nil)
+    it("renders via tostring()", function()
+      assert.are.equal("The tool was denied by a policy.", tostring(messages["tool.denied"]))
     end)
 
-    it("uses the templating engine for expression evaluation", function()
-      local result = messages.render("job-executing--tracked", { job_id = "job_expr" })
-      assert.is_string(result)
+    it("renders via concatenation on either side", function()
+      assert.are.equal("<<The tool was denied by a policy.", "<<" .. messages["tool.denied"])
+      assert.are.equal("The tool was denied by a policy.>>", messages["tool.denied"] .. ">>")
+    end)
+
+    it("leaves no unrendered expressions", function()
+      local result = messages["job.executing.tracked"]{ job_id = "job_expr" }
       assert.truthy(result:match("job_expr"))
       assert.is_falsy(result:match("{{"))
     end)
 
-    it("substitutes different job_ids correctly", function()
-      local result_a = messages.render("job-executing--tracked", { job_id = "job_aaa" })
-      local result_b = messages.render("job-executing--tracked", { job_id = "job_bbb" })
+    it("substitutes different variables per call", function()
+      local result_a = messages["job.executing.tracked"]{ job_id = "job_aaa" }
+      local result_b = messages["job.executing.tracked"]{ job_id = "job_bbb" }
       assert.truthy(result_a:match("job_aaa"))
       assert.is_falsy(result_a:match("job_bbb"))
       assert.truthy(result_b:match("job_bbb"))
       assert.is_falsy(result_b:match("job_aaa"))
     end)
+
+    it("errors for unknown catalogue keys", function()
+      assert.has_error(function()
+        return messages["does.not.exist"]
+      end)
+    end)
+  end)
+
+  describe("migration fidelity (framework strings)", function()
+    it("renders the exact pre-migration strings", function()
+      assert.are.equal("The tool was denied by a policy.", messages["tool.denied"]{})
+      assert.are.equal("This tool has been rejected by the user.", messages["tool.rejected"]{})
+      assert.are.equal(
+        "User feedback: because reasons",
+        messages["tool.rejected.feedback"]{ reason = "because reasons" }
+      )
+      assert.are.equal("User aborted tool execution.", messages["tool.aborted"]{})
+      assert.are.equal("Unknown error", messages["tool.error.unknown"]{})
+      assert.are.equal("Job lost: session ended before completion.", messages["job.lost"]{})
+      assert.are.equal("Response interrupted by the user.", messages["request.aborted"]{})
+      assert.are.equal(
+        "[Output not saved: disk full. Showing the full output instead.]",
+        messages["tool.output.not_saved"]{ reason = "disk full" }
+      )
+      assert.are.equal(
+        "Running as a background job `job_x1`. Use `flemma.jobs.status` with this job ID to check progress."
+          .. " Do not retry — the result will be delivered to you automatically when the job completes.",
+        messages["job.executing.tracked"]{ job_id = "job_x1" }
+      )
+      assert.are.equal(
+        "Running as a background job. Do not retry or attempt to check progress — the result will be"
+          .. " delivered to you automatically when the job completes.",
+        messages["job.executing.untracked"]{}
+      )
+    end)
+  end)
+
+  describe("migration fidelity (tool definitions)", function()
+    it("registered definitions render the exact pre-migration descriptions", function()
+      local expectations = {
+        ["flemma.tools.definitions.builtin.bash"] = "Execute a bash command in the current working directory."
+          .. " Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit"
+          .. " first). If truncated, full output is saved to a file. $FLEMMA_TOOLS_STORE_PATH is set in the"
+          .. " environment and points to a directory where saved tool results for this conversation are stored."
+          .. " Optionally provide a timeout in seconds.",
+        ["flemma.tools.definitions.builtin.edit"] = "Edit a file by replacing exact text. The oldText must"
+          .. " match exactly (including whitespace). Use this for precise, surgical edits.",
+        ["flemma.tools.definitions.builtin.read"] = "Read the contents of a file. Output is truncated to 2000"
+          .. " lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the"
+          .. " full file, continue with offset until complete.",
+        ["flemma.tools.definitions.builtin.write"] = "Write content to a file. Creates the file if it doesn't"
+          .. " exist, overwrites if it does. Automatically creates parent directories.",
+        ["flemma.tools.definitions.builtin.find"] = "Find files by glob pattern. Uses fd, git ls-files, or GNU"
+          .. " find (whichever is available). Output is truncated to 2000 lines or 50KB. Returns sorted"
+          .. " relative paths, one per line.",
+        ["flemma.tools.definitions.builtin.grep"] = "Search file contents using ripgrep (rg) or grep. Returns"
+          .. " matching lines with file paths and line numbers. Output is limited to 100 matches by default."
+          .. " Supports regex patterns. When using grep -E fallback, \\d, \\w, \\s are automatically"
+          .. " translated to POSIX equivalents.",
+        ["flemma.tools.definitions.builtin.ls"] = "List directory contents. Output is truncated to 2000 lines"
+          .. " or 50KB. Directories appear first (suffixed with /), then files, both sorted case-insensitively."
+          .. " Use max_depth > 1 to recurse into subdirectories (max 10). Use limit to cap the number of"
+          .. " entries (default 500).",
+        ["flemma.tools.definitions.harness.jobs"] = 'Check the status of a background job. Returns "running"'
+          .. ' while the job is executing, "completed (delivery pending)" once it has finished and its result'
+          .. " is queued to be injected into the conversation automatically (do not re-run the tool or keep"
+          .. ' polling — the result is on its way), or "completed" when the result is already in the'
+          .. " conversation. Use this to check on long-running background tasks instead of retrying them.",
+      }
+      for module_path, expected in pairs(expectations) do
+        package.loaded[module_path] = nil
+        local module = require(module_path)
+        assert.are.equal(expected, module.definitions[1].description, module_path)
+      end
+    end)
+  end)
+end)
+
+describe("messages brace-call formatter", function()
+  -- Exercises contrib/scripts/format-messages-brace-call.sh, the post-stylua
+  -- step that rewrites `messages["key"]({ ... })` to the brace-call house style
+  -- `messages["key"]{ ... }`. `f{ ... }` and `f({ ... })` are equivalent Lua, so
+  -- the rewrite is cosmetic — the point is that it strips *only* the call
+  -- parentheses of a `messages[<string>]` index, tracks paren depth so nested
+  -- parentheses survive, and touches nothing else (bare refs, strings, comments,
+  -- unrelated calls).
+  local formatter = (vim.env.PROJECT_ROOT or vim.fn.getcwd()) .. "/contrib/scripts/format-messages-brace-call.sh"
+
+  local function write_temp(content)
+    local path = vim.fn.tempname() .. ".lua"
+    local file = assert(io.open(path, "w"))
+    file:write(content)
+    file:close()
+    return path
+  end
+
+  local function read_all(path)
+    local file = assert(io.open(path, "r"))
+    local content = file:read("*a")
+    file:close()
+    return content
+  end
+
+  local function run_formatter(path)
+    local result = vim.system({ "bash", formatter, path }, { text = true }):wait()
+    assert.are.equal(0, result.code, "formatter exited non-zero: " .. (result.stderr or ""))
+  end
+
+  --- Format `source`, assert it becomes `expected`, then format again and
+  --- assert the second pass changes nothing (every rewrite must be idempotent).
+  local function assert_transforms(source, expected)
+    local path = write_temp(source)
+    run_formatter(path)
+    assert.are.equal(expected, read_all(path), "first pass produced the wrong output")
+    run_formatter(path)
+    assert.are.equal(expected, read_all(path), "second pass was not idempotent")
+  end
+
+  it("strips the parens around an empty-table call", function()
+    assert_transforms('local a = messages["job.lost"]({})\n', 'local a = messages["job.lost"]{}\n')
+  end)
+
+  it("strips the parens around a single-line table with a variable", function()
+    assert_transforms(
+      'local b = messages["job.executing.tracked"]({ job_id = id })\n',
+      'local b = messages["job.executing.tracked"]{ job_id = id }\n'
+    )
+  end)
+
+  it("preserves the body of a multi-line table", function()
+    local source = table.concat({
+      'local c = messages["tool.read.description"]({',
+      "  max_lines = 2000,",
+      "  max_bytes = 100,",
+      "})",
+      "",
+    }, "\n")
+    local expected = table.concat({
+      'local c = messages["tool.read.description"]{',
+      "  max_lines = 2000,",
+      "  max_bytes = 100,",
+      "}",
+      "",
+    }, "\n")
+    assert_transforms(source, expected)
+  end)
+
+  it("strips only the outer paren when the table nests a parenthesized call", function()
+    assert_transforms(
+      'local d = messages["tool.bash.description"]({ max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024) })\n',
+      'local d = messages["tool.bash.description"]{ max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024) }\n'
+    )
+  end)
+
+  it("strips only the messages paren when the whole call nests inside another call", function()
+    assert_transforms(
+      'local e = s.number():nullable():describe(messages["tool.find.input.limit"]({ default_limit = LIMIT }))\n',
+      'local e = s.number():nullable():describe(messages["tool.find.input.limit"]{ default_limit = LIMIT })\n'
+    )
+  end)
+
+  it("leaves a bare (uncalled) proxy reference untouched", function()
+    local source = table.concat({
+      'local bare = messages["tool.denied"]',
+      'local desc = schema:describe(messages["tool.denied"])',
+      "",
+    }, "\n")
+    assert_transforms(source, source)
+  end)
+
+  it("leaves messages references inside comments and strings untouched", function()
+    local source = table.concat({
+      '-- messages["tool.denied"]({ reason = x }) stays put in a comment',
+      [[local literal = 'messages["job.lost"]({})']],
+      "",
+    }, "\n")
+    assert_transforms(source, source)
+  end)
+
+  it("leaves unrelated single-table calls untouched", function()
+    assert_transforms("bridge.send_or_execute({ bufnr = 1 })\n", "bridge.send_or_execute({ bufnr = 1 })\n")
   end)
 end)
 

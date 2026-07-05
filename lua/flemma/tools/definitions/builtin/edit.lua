@@ -2,6 +2,7 @@
 --- Find-and-replace exact text in files
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 
 ---@class flemma.tools.definitions.builtin.Edit
@@ -11,16 +12,13 @@ local M = {}
 M.definitions = {
   {
     name = "edit",
-    description = "Edit a file by replacing exact text. "
-      .. "The oldText must match exactly (including whitespace). "
-      .. "Use this for precise, surgical edits.",
+    description = messages["tool.edit.description"]{},
     strict = true,
     input_schema = s.object({
-      label = s.string()
-        :describe("A short human-readable label for this operation (e.g., 'fixing typo in config.lua')"),
-      path = s.string():describe("Path to the file to edit (relative or absolute)"),
-      oldText = s.string():describe("Exact text to find and replace (must match exactly)"),
-      newText = s.string():describe("New text to replace the old text with"),
+      label = s.string():describe(messages["tool.edit.input.label"]),
+      path = s.string():describe(messages["tool.edit.input.path"]),
+      oldText = s.string():describe(messages["tool.edit.input.oldText"]),
+      newText = s.string():describe(messages["tool.edit.input.newText"]),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {

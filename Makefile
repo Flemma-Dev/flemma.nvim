@@ -10,6 +10,7 @@ default:
 # Format the entire codebase
 format:
 	treefmt
+	bash contrib/scripts/format-messages-brace-call.sh
 
 # Run all quality gates — parallel, bail on first failure
 qa:

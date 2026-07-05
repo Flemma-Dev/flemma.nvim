@@ -211,7 +211,7 @@ local function fallback_input(bufnr)
     end
     local message = nil
     if input ~= "" then
-      message = messages.render("tool-rejected--feedback", { reason = input })
+      message = messages["tool.rejected.feedback"]{ reason = input }
     end
     local ok, err = executor.reject_at_cursor(bufnr, message)
     if not ok then

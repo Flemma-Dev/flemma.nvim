@@ -2,6 +2,7 @@
 --- Write/create files with automatic parent directory creation
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local str = require("flemma.utilities.string")
@@ -13,14 +14,12 @@ local M = {}
 M.definitions = {
   {
     name = "write",
-    description = "Write content to a file. "
-      .. "Creates the file if it doesn't exist, overwrites if it does. "
-      .. "Automatically creates parent directories.",
+    description = messages["tool.write.description"]{},
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'creating config.lua')"),
-      path = s.string():describe("Path to the file to write (relative or absolute)"),
-      content = s.string():describe("Content to write to the file"),
+      label = s.string():describe(messages["tool.write.input.label"]),
+      path = s.string():describe(messages["tool.write.input.path"]),
+      content = s.string():describe(messages["tool.write.input.content"]),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
