@@ -33,6 +33,8 @@ qa:
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
 	bash contrib/scripts/lint-pcall-rethrow.sh \
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
+	bash contrib/scripts/lint-po.sh \
+		>"$$d/po" 2>&1 & gate[$$!]=po; \
 	jobs=$${JOBS:-$$(nproc)}; \
 	nver=$$(echo $$NVIM_VERSIONS | wc -w); \
 	per_version_jobs=$$(( jobs / nver )); \
