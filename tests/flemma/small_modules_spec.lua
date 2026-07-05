@@ -110,6 +110,30 @@ describe("flemma.messages", function()
     end)
   end)
 
+  describe("catalogue loading", function()
+    it("reports cross-catalogue key collisions at load time", function()
+      -- Shadow both shipped catalogues with minimal files defining the same
+      -- key, by prepending a temp root to the runtimepath.
+      local shadow_root = vim.fn.tempname()
+      vim.fn.mkdir(shadow_root .. "/po", "p")
+      local header = 'msgid ""\nmsgstr ""\n"Content-Type: text/plain; charset=UTF-8\\n"\n\n'
+      for name, value in pairs({ ["flemma-harness.po"] = "from harness", ["flemma.po"] = "from ui" }) do
+        local file = assert(io.open(shadow_root .. "/po/" .. name, "w"))
+        file:write(header .. 'msgid "duplicate.key"\nmsgstr "' .. value .. '"\n')
+        file:close()
+      end
+
+      vim.opt.runtimepath:prepend(shadow_root)
+      package.loaded["flemma.messages"] = nil
+      local ok, err = pcall(require, "flemma.messages")
+      vim.opt.runtimepath:remove(shadow_root)
+      package.loaded["flemma.messages"] = nil
+
+      assert.is_false(ok)
+      assert.truthy(tostring(err):match("duplicate%.key"))
+    end)
+  end)
+
   describe("migration fidelity (framework strings)", function()
     it("renders the exact pre-migration strings", function()
       assert.are.equal("The tool was denied by a policy.", messages["tool.denied"]{})
@@ -136,6 +160,12 @@ describe("flemma.messages", function()
           .. " delivered to you automatically when the job completes.",
         messages["job.executing.untracked"]{}
       )
+    end)
+  end)
+
+  describe("migration fidelity (UI strings)", function()
+    it("renders the exact pre-migration strings", function()
+      assert.are.equal("No usage data for this buffer.", messages["ui.usage.no_data"]{})
     end)
   end)
 

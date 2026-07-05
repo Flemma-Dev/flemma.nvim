@@ -1,4 +1,7 @@
---- String catalogue backed by po/flemma.po.
+--- String catalogue backed by po/flemma-harness.po (model-facing strings:
+--- conversation text, tool schemas) and po/flemma.po (user-facing UI
+--- strings), merged into one flat key namespace — keys must stay unique
+--- across the files, enforced at load time.
 --- The module IS the catalogue: indexing any key returns a lazily rendered
 --- string proxy. `messages["job.executing.tracked"]{ job_id = id }` renders
 --- with variables; `messages["tool.denied"]{}` forces a no-variable render
@@ -80,19 +83,49 @@ PROXY_METATABLE.__concat = function(left, right)
   return concat_operand_to_text(left) .. concat_operand_to_text(right)
 end
 
----Load and parse the shipped catalogue. Runs at require time so parse
----errors surface at startup, and the module-level result is the cache.
+---Runtime paths of the shipped catalogues. Keys must stay unique across
+---all files — load_catalogue() reports every collision at load time.
+local CATALOGUE_PATHS = {
+  "po/flemma-harness.po", -- model-facing: conversation text, tool schemas
+  "po/flemma.po", -- user-facing UI: notifications, prompts
+}
+
+---Read and parse one catalogue file off the runtimepath.
+---@param runtime_path string
 ---@return table<string, string>
-local function load_catalogue()
-  local matches = vim.api.nvim_get_runtime_file("po/flemma.po", false)
+local function load_file(runtime_path)
+  local matches = vim.api.nvim_get_runtime_file(runtime_path, false)
   local path = matches[1]
   if not path then
-    error("messages: po/flemma.po not found on the runtimepath")
+    error("messages: " .. runtime_path .. " not found on the runtimepath")
   end
   local file = assert(io.open(path, "r"), "messages: cannot open " .. path)
   local content = file:read("*a")
   file:close()
   return po.parse(content)
+end
+
+---Load and merge the shipped catalogues. Runs at require time so parse
+---errors and cross-file key collisions surface at startup, and the
+---module-level result is the cache.
+---@return table<string, string>
+local function load_catalogue()
+  local merged = {} ---@type table<string, string>
+  local collisions = {} ---@type string[]
+  for _, runtime_path in ipairs(CATALOGUE_PATHS) do
+    for key, content in pairs(load_file(runtime_path)) do
+      if merged[key] ~= nil then
+        table.insert(collisions, key)
+      else
+        merged[key] = content
+      end
+    end
+  end
+  if #collisions > 0 then
+    table.sort(collisions)
+    error("messages: keys defined in more than one catalogue: " .. table.concat(collisions, ", "))
+  end
+  return merged
 end
 
 local catalogue = load_catalogue()

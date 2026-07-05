@@ -1,0 +1,225 @@
+# Flemma harness catalogue — strings the model sees.
+# Everything here is prompt surface: conversation-injected text (tool
+# results, job placeholders) and request-payload text (tool descriptions,
+# harness parameters). English-only by design — edits here are prompt
+# engineering, not translation. Never translate this file.
+# User-facing UI strings live in po/flemma.po. Keys must stay unique across
+# both files; flemma.messages enforces this at load time.
+msgid ""
+msgstr ""
+"Project-Id-Version: flemma\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "tool.denied"
+msgstr "The tool was denied by a policy."
+
+msgid "tool.rejected"
+msgstr "This tool has been rejected by the user."
+
+#. Variables: {{ reason }} — the user's feedback text.
+msgid "tool.rejected.feedback"
+msgstr "User feedback: {{ reason }}"
+
+msgid "tool.aborted"
+msgstr "User aborted tool execution."
+
+msgid "tool.error.unknown"
+msgstr "Unknown error"
+
+#. Variables: {{ reason }} — why the save-to redirect failed.
+msgid "tool.output.not_saved"
+msgstr "[Output not saved: {{ reason }}. Showing the full output instead.]"
+
+msgid "tool.parameter.background"
+msgstr ""
+"Set to true to run this tool in the background. The conversation continues "
+"immediately with a placeholder; the actual result is delivered as a "
+"separate message later — you cannot access it until then. Default to "
+"foreground. Use background only when you have other meaningful work to do "
+"while waiting and no upcoming tool call or decision depends on this "
+"result, even indirectly. Avoid backgrounding all tool calls in a single "
+"response — keep at least one foreground result to act on."
+
+msgid "tool.parameter.save_to"
+msgstr ""
+"Save the full tool output to this file path instead of returning it in the "
+"conversation. You will receive a short preview of the output along with "
+"the file path where the complete content was saved. Use this when the "
+"output is large and would clutter the conversation, or when you need the "
+"output saved to a specific location for later use. Absolute paths and "
+"~/... paths are supported. Use $FLEMMA_TOOLS_STORE_PATH/<filename> to save "
+"into the conversation's store directory (the same directory where "
+"truncated tool results are automatically saved)."
+
+#. Variables: {{ job_id }} — the background job identifier.
+msgid "job.executing.tracked"
+msgstr ""
+"Running as a background job `{{ job_id }}`. Use `flemma.jobs.status` with "
+"this job ID to check progress. Do not retry — the result will be delivered "
+"to you automatically when the job completes."
+
+msgid "job.executing.untracked"
+msgstr ""
+"Running as a background job. Do not retry or attempt to check progress — "
+"the result will be delivered to you automatically when the job completes."
+
+msgid "job.lost"
+msgstr "Job lost: session ended before completion."
+
+msgid "request.aborted"
+msgstr "Response interrupted by the user."
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
+msgid "tool.bash.description"
+msgstr ""
+"Execute a bash command in the current working directory. Returns stdout "
+"and stderr. Output is truncated to last {{ max_lines }} lines or "
+"{{ max_bytes_kb }}KB (whichever is hit first). If truncated, full output "
+"is saved to a file. $FLEMMA_TOOLS_STORE_PATH is set in the environment and "
+"points to a directory where saved tool results for this conversation are "
+"stored. Optionally provide a timeout in seconds."
+
+msgid "tool.bash.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'running tests')"
+
+msgid "tool.bash.input.command"
+msgstr "The bash command to execute"
+
+msgid "tool.bash.input.timeout"
+msgstr "Timeout in seconds (default: 30)"
+
+msgid "tool.edit.description"
+msgstr ""
+"Edit a file by replacing exact text. The oldText must match exactly "
+"(including whitespace). Use this for precise, surgical edits."
+
+msgid "tool.edit.input.label"
+msgstr ""
+"A short human-readable label for this operation (e.g., 'fixing typo in "
+"config.lua')"
+
+msgid "tool.edit.input.path"
+msgstr "Path to the file to edit (relative or absolute)"
+
+msgid "tool.edit.input.oldText"
+msgstr "Exact text to find and replace (must match exactly)"
+
+msgid "tool.edit.input.newText"
+msgstr "New text to replace the old text with"
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
+msgid "tool.find.description"
+msgstr ""
+"Find files by glob pattern. Uses fd, git ls-files, or GNU find (whichever "
+"is available). Output is truncated to {{ max_lines }} lines or "
+"{{ max_bytes_kb }}KB. Returns sorted relative paths, one per line."
+
+msgid "tool.find.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'finding test files')"
+
+msgid "tool.find.input.pattern"
+msgstr "Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')"
+
+msgid "tool.find.input.path"
+msgstr "Directory to search in (default: working directory)"
+
+#. Variables: {{ default_limit }} — the default result cap.
+msgid "tool.find.input.limit"
+msgstr "Maximum number of results (default: {{ default_limit }})"
+
+msgid "tool.flemma.jobs.status.description"
+msgstr ""
+"Check the status of a background job. Returns \"running\" while the job is "
+"executing, \"completed (delivery pending)\" once it has finished and its "
+"result is queued to be injected into the conversation automatically (do "
+"not re-run the tool or keep polling — the result is on its way), or "
+"\"completed\" when the result is already in the conversation. Use this to "
+"check on long-running background tasks instead of retrying them."
+
+msgid "tool.flemma.jobs.status.input.job_id"
+msgstr "The job ID (e.g., 'job_xxx') from the tool result placeholder."
+
+#. Variables: {{ default_limit }} — the default match cap.
+msgid "tool.grep.description"
+msgstr ""
+"Search file contents using ripgrep (rg) or grep. Returns matching lines "
+"with file paths and line numbers. Output is limited to "
+"{{ default_limit }} matches by default. Supports regex patterns. When "
+"using grep -E fallback, \\d, \\w, \\s are automatically translated to "
+"POSIX equivalents."
+
+msgid "tool.grep.input.label"
+msgstr ""
+"A short human-readable label for this operation (e.g., 'searching for "
+"TODO comments')"
+
+msgid "tool.grep.input.pattern"
+msgstr "Regular expression pattern to search for"
+
+msgid "tool.grep.input.path"
+msgstr "Directory to search in (default: working directory)"
+
+msgid "tool.grep.input.glob"
+msgstr "File glob filter (e.g., '*.lua', '*.{ts,tsx}')"
+
+#. Variables: {{ default_limit }} — the default match cap.
+msgid "tool.grep.input.limit"
+msgstr "Maximum number of matches (default: {{ default_limit }})"
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }}, {{ default_limit }}.
+msgid "tool.ls.description"
+msgstr ""
+"List directory contents. Output is truncated to {{ max_lines }} lines or "
+"{{ max_bytes_kb }}KB. Directories appear first (suffixed with /), then "
+"files, both sorted case-insensitively. Use max_depth > 1 to recurse into "
+"subdirectories (max 10). Use limit to cap the number of entries (default "
+"{{ default_limit }})."
+
+msgid "tool.ls.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'listing project root')"
+
+msgid "tool.ls.input.path"
+msgstr "Directory path to list (relative or absolute)"
+
+msgid "tool.ls.input.max_depth"
+msgstr "Maximum recursion depth (default: 1, max: 10)"
+
+msgid "tool.ls.input.limit"
+msgstr "Maximum number of entries (default: 500)"
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
+msgid "tool.read.description"
+msgstr ""
+"Read the contents of a file. Output is truncated to {{ max_lines }} lines "
+"or {{ max_bytes_kb }}KB (whichever is hit first). Use offset/limit for "
+"large files. When you need the full file, continue with offset until "
+"complete."
+
+msgid "tool.read.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'reading config.lua')"
+
+msgid "tool.read.input.path"
+msgstr "Path to the file to read (relative or absolute)"
+
+msgid "tool.read.input.offset"
+msgstr "Line number to start reading from (1-indexed)"
+
+msgid "tool.read.input.limit"
+msgstr "Maximum number of lines to read"
+
+msgid "tool.write.description"
+msgstr ""
+"Write content to a file. Creates the file if it doesn't exist, overwrites "
+"if it does. Automatically creates parent directories."
+
+msgid "tool.write.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'creating config.lua')"
+
+msgid "tool.write.input.path"
+msgstr "Path to the file to write (relative or absolute)"
+
+msgid "tool.write.input.content"
+msgstr "Content to write to the file"

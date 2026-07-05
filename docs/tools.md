@@ -203,7 +203,7 @@ Async tools can run in the background without blocking the conversation. The too
 
 ### How tools enter background
 
-**Model-initiated.** Flemma injects a `flemma.background` boolean parameter into every async tool's schema (a [harness parameter](#harness-parameters), invisible to the tool itself). When the model sets `"flemma.background": true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../po/flemma.po) (key `tool.parameter.background`) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
+**Model-initiated.** Flemma injects a `flemma.background` boolean parameter into every async tool's schema (a [harness parameter](#harness-parameters), invisible to the tool itself). When the model sets `"flemma.background": true`, the tool executes in the background from the start — the tool_result placeholder receives a job ID and a placeholder message, and the conversation continues immediately. [The parameter description](../po/flemma-harness.po) (key `tool.parameter.background`) encourages foreground by default; the model should only background a tool when it has other meaningful work to do while waiting and no upcoming decision depends on the result.
 
 **User-initiated.** Press <kbd>Alt-B</kbd> (or `:Flemma tool:background`) while the cursor is on an executing tool to move it to background mid-flight. The tool keeps running, but the buffer unlocks and the conversation advances. If all foreground tools are now clear, autopilot triggers the next send automatically.
 
@@ -298,7 +298,7 @@ Re-running a tool writes to the same store path. Before overwriting, the configu
 
 ### `flemma.save_to` – redirecting output to a file
 
-Flemma injects an optional `flemma.save_to` string parameter into **every** tool's schema. When the model supplies a path, the full output is written there and the conversation receives a stub instead: a short head preview (`tools.store.preview`, default 10 lines / 2KB) followed by `[Output saved: /path/to/file — 1.2MB, 54321 lines]`. [The parameter description](../po/flemma.po) (key `tool.parameter.save_to`) tells the model to reach for it when output is large or needs to live at a specific path.
+Flemma injects an optional `flemma.save_to` string parameter into **every** tool's schema. When the model supplies a path, the full output is written there and the conversation receives a stub instead: a short head preview (`tools.store.preview`, default 10 lines / 2KB) followed by `[Output saved: /path/to/file — 1.2MB, 54321 lines]`. [The parameter description](../po/flemma-harness.po) (key `tool.parameter.save_to`) tells the model to reach for it when output is large or needs to live at a specific path.
 
 - Relative paths resolve against the chat file's directory; absolute and `~/…` paths work too.
 - `$FLEMMA_TOOLS_STORE_PATH/<filename>` targets the conversation's store directory.
