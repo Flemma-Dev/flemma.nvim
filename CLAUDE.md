@@ -20,6 +20,7 @@ Non-negotiable. The canonical statement of every hard rule lives in this block; 
 **Code**
 
 - All JSON through `require("flemma.utilities.json")` — never bare `vim.json.*` or `vim.fn.json_*`.
+- Never catalogue `flemma.logging` output — log lines stay inline English literals so they grep straight back to source when debugging; only `flemma.notify` (user-facing UI) and model-facing strings go through `flemma.messages`.
 - All structural buffer inspection through the AST — never regex/substring matching on buffer lines.
 - Never write a helper without searching for an existing one first — `utilities/` (16 modules), `ast/query.lua`, and the owning subsystem; duplicating an established helper is a review failure.
 - All `require()` calls at file top — dynamic module paths go through `flemma.loader`.
