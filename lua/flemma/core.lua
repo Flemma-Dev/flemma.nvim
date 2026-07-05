@@ -387,7 +387,7 @@ end
 ---@return true|nil success True on success, nil on failure
 function M.switch_provider(provider_name, model_name, parameters, opts)
   if not provider_name then
-    notify.error("Provider name is required")
+    notify.error(messages["ui.provider.name_missing"]{})
     return
   end
 
@@ -490,7 +490,7 @@ function M.cancel_request(opts)
     buffer_state.resume_delay_timer:close()
     buffer_state.resume_delay_timer = nil
     hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
-    notify.info("Cancelled pending auto-continue.")
+    notify.info(messages["ui.request.autocontinue_cancelled"]{})
     return
   end
 
@@ -498,7 +498,7 @@ function M.cancel_request(opts)
     buffer_state.pending_send.subscription:cancel()
     buffer_state.pending_send = nil
     state.unlock_buffer(bufnr)
-    notify.info("Cancelled queued send.")
+    notify.info(messages["ui.request.queued_send_cancelled"]{})
     return
   end
 
@@ -651,7 +651,7 @@ local function advance_phase2(opts)
     end
     local ok, err = executor.execute(bufnr, ctx)
     if not ok then
-      notify.error(err or "Execution failed")
+      notify.error(err or messages["ui.tool.execute_failed"]{})
     else
       executed_count = executed_count + 1
     end
@@ -790,7 +790,7 @@ local function attempt_advance_phase2(opts)
       current_state.pending_send = nil
       state.unlock_buffer(bufnr)
       local diagnostic_message = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
-      notify.error("Could not satisfy dependency: " .. (diagnostic_message or err.message))
+      notify.error(messages["ui.request.dependency_failed"]{ reason = diagnostic_message or err.message })
       return
     end
     pending_entry.opts.evaluated_frontmatter = nil
@@ -818,7 +818,7 @@ function M.send_or_execute(opts)
   -- Early guard: reject immediately if a provider request is already in flight.
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
+    notify.warn(messages["ui.request.in_progress"]{})
     return
   end
 
@@ -1035,14 +1035,14 @@ function M.send_to_provider(opts)
 
   -- Check if there's already a request in progress
   if buffer_state.current_request then
-    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
+    notify.warn(messages["ui.request.in_progress"]{})
     return
   end
 
   -- Check if tool executions are in progress (mutually exclusive with API requests)
   local pending_tools = executor.get_pending(bufnr)
   if #pending_tools > 0 then
-    notify.warn("Cannot send while tool execution is in progress.")
+    notify.warn(messages["ui.request.tool_in_progress"]{})
     return
   end
 
@@ -1072,7 +1072,7 @@ function M.send_to_provider(opts)
         buffer_state.pending_send = nil
         state.unlock_buffer(bufnr)
         local diag_msg = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
-        notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
+        notify.error(messages["ui.request.dependency_failed"]{ reason = diag_msg or err.message })
         return
       end
       if buffer_state.pending_send then
@@ -1622,7 +1622,7 @@ function M._run_send_pipeline(bufnr, opts)
             log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
-            notify.warn("Request completed but no response was received.")
+            notify.warn(messages["ui.request.no_response"]{})
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
