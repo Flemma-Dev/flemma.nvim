@@ -134,106 +134,40 @@ describe("flemma.messages", function()
     end)
   end)
 
-  describe("migration fidelity (framework strings)", function()
-    it("renders the exact pre-migration strings", function()
-      assert.are.equal("The tool was denied by a policy.", messages["tool.denied"]{})
-      assert.are.equal("This tool has been rejected by the user.", messages["tool.rejected"]{})
-      assert.are.equal(
-        "User feedback: because reasons",
-        messages["tool.rejected.feedback"]{ reason = "because reasons" }
-      )
-      assert.are.equal("User aborted tool execution.", messages["tool.aborted"]{})
-      assert.are.equal("Unknown error", messages["tool.error.unknown"]{})
-      assert.are.equal("Job lost: session ended before completion.", messages["job.lost"]{})
-      assert.are.equal("Response interrupted by the user.", messages["request.aborted"]{})
-      assert.are.equal(
-        "[Output not saved: disk full. Showing the full output instead.]",
-        messages["tool.output.not_saved"]{ reason = "disk full" }
-      )
-      assert.are.equal(
-        "Running as a background job `job_x1`. Use `flemma.jobs.status` with this job ID to check progress."
-          .. " Do not retry — the result will be delivered to you automatically when the job completes.",
-        messages["job.executing.tracked"]{ job_id = "job_x1" }
-      )
-      assert.are.equal(
-        "Running as a background job. Do not retry or attempt to check progress — the result will be"
-          .. " delivered to you automatically when the job completes.",
-        messages["job.executing.untracked"]{}
-      )
-    end)
-  end)
-
-  describe("migration fidelity (UI strings)", function()
-    it("renders the exact pre-migration strings", function()
-      assert.are.equal("No usage data for this buffer.", messages["ui.usage.no_data"]{})
-      assert.are.equal("Flemma: Rejection reason (optional): ", messages["ui.rejection.prompt"]{})
-      assert.are.equal("Reject failed", messages["ui.rejection.reject_failed"]{})
-      assert.are.equal("No tool call found", messages["ui.rejection.no_tool_call"]{})
-      assert.are.equal(
-        "No tool result placeholder for tool_x1",
-        messages["ui.rejection.no_result_placeholder"]{ tool_id = "tool_x1" }
-      )
-      assert.are.equal(
-        "Tool tool_x1 has already completed",
-        messages["ui.rejection.already_completed"]{ tool_id = "tool_x1" }
-      )
-      assert.are.equal(
-        "No fence found in tool result for tool_x1",
-        messages["ui.rejection.no_fence"]{ tool_id = "tool_x1" }
-      )
-      assert.are.equal("Execution failed", messages["ui.tool.execute_failed"]{})
-      assert.are.equal("Failed to move tool to background", messages["ui.tool.background_failed"]{})
-      assert.are.equal("Tool moved to background.", messages["ui.tool.backgrounded"]{})
-      assert.are.equal("Approve failed", messages["ui.tool.approve_failed"]{})
-      assert.are.equal("No pending tools to approve", messages["ui.tool.no_pending_approve"]{})
-      assert.are.equal("Nothing to cancel (press again to cancel all)", messages["ui.tool.nothing_to_cancel_retry"]{})
-    end)
-
-    it("derives the rejection popup prefill from the harness feedback template", function()
-      -- ui/rejection.lua seeds the popup with this exact prefix (reason="")
-      -- so the popup and the vim.ui.input fallback both yield the same
-      -- "User feedback: <text>" message. Guards the cross-catalogue coupling.
-      assert.are.equal("User feedback: ", messages["tool.rejected.feedback"]{ reason = "" })
-    end)
-  end)
-
-  describe("migration fidelity (tool definitions)", function()
-    it("registered definitions render the exact pre-migration descriptions", function()
-      local expectations = {
-        ["flemma.tools.definitions.builtin.bash"] = "Execute a bash command in the current working directory."
-          .. " Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit"
-          .. " first). If truncated, full output is saved to a file. $FLEMMA_TOOLS_STORE_PATH is set in the"
-          .. " environment and points to a directory where saved tool results for this conversation are stored."
-          .. " Optionally provide a timeout in seconds.",
-        ["flemma.tools.definitions.builtin.edit"] = "Edit a file by replacing exact text. The oldText must"
-          .. " match exactly (including whitespace). Use this for precise, surgical edits.",
-        ["flemma.tools.definitions.builtin.read"] = "Read the contents of a file. Output is truncated to 2000"
-          .. " lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the"
-          .. " full file, continue with offset until complete.",
-        ["flemma.tools.definitions.builtin.write"] = "Write content to a file. Creates the file if it doesn't"
-          .. " exist, overwrites if it does. Automatically creates parent directories.",
-        ["flemma.tools.definitions.builtin.find"] = "Find files by glob pattern. Uses fd, git ls-files, or GNU"
-          .. " find (whichever is available). Output is truncated to 2000 lines or 50KB. Returns sorted"
-          .. " relative paths, one per line.",
-        ["flemma.tools.definitions.builtin.grep"] = "Search file contents using ripgrep (rg) or grep. Returns"
-          .. " matching lines with file paths and line numbers. Output is limited to 100 matches by default."
-          .. " Supports regex patterns. When using grep -E fallback, \\d, \\w, \\s are automatically"
-          .. " translated to POSIX equivalents.",
-        ["flemma.tools.definitions.builtin.ls"] = "List directory contents. Output is truncated to 2000 lines"
-          .. " or 50KB. Directories appear first (suffixed with /), then files, both sorted case-insensitively."
-          .. " Use max_depth > 1 to recurse into subdirectories (max 10). Use limit to cap the number of"
-          .. " entries (default 500).",
-        ["flemma.tools.definitions.harness.jobs"] = 'Check the status of a background job. Returns "running"'
-          .. ' while the job is executing, "completed (delivery pending)" once it has finished and its result'
-          .. " is queued to be injected into the conversation automatically (do not re-run the tool or keep"
-          .. ' polling — the result is on its way), or "completed" when the result is already in the'
-          .. " conversation. Use this to check on long-running background tasks instead of retrying them.",
+  describe("tool definition descriptions", function()
+    it("render fully from the catalogue with no leftover placeholders", function()
+      -- Each builtin/harness tool wires its description to a catalogue key and
+      -- renders it at definition time. Assert the result is a non-empty, fully
+      -- substituted string instead of re-typing the English here — the PO file
+      -- is the single source of truth for the copy. A missing key errors on
+      -- require; an unfilled variable leaves "{{" behind. Both fail here.
+      local module_paths = {
+        "flemma.tools.definitions.builtin.bash",
+        "flemma.tools.definitions.builtin.edit",
+        "flemma.tools.definitions.builtin.read",
+        "flemma.tools.definitions.builtin.write",
+        "flemma.tools.definitions.builtin.find",
+        "flemma.tools.definitions.builtin.grep",
+        "flemma.tools.definitions.builtin.ls",
+        "flemma.tools.definitions.harness.jobs",
       }
-      for module_path, expected in pairs(expectations) do
+      for _, module_path in ipairs(module_paths) do
         package.loaded[module_path] = nil
         local module = require(module_path)
-        assert.are.equal(expected, module.definitions[1].description, module_path)
+        local description = module.definitions[1].description
+        assert.is_string(description, module_path)
+        assert.is_true(#description > 0, module_path)
+        assert.is_nil(description:match("{{"), module_path .. " left an unrendered placeholder")
       end
+    end)
+  end)
+
+  describe("rejection popup prefill", function()
+    it("is the harness feedback template rendered with an empty reason", function()
+      -- ui/rejection.lua seeds the popup with this exact prefix so the popup
+      -- and the vim.ui.input fallback both yield "User feedback: <text>".
+      -- Guards the one deliberate coupling between the two catalogues.
+      assert.are.equal("User feedback: ", messages["tool.rejected.feedback"]{ reason = "" })
     end)
   end)
 end)
