@@ -181,6 +181,12 @@ describe("flemma.messages", function()
         "No fence found in tool result for tool_x1",
         messages["ui.rejection.no_fence"]{ tool_id = "tool_x1" }
       )
+      assert.are.equal("Execution failed", messages["ui.tool.execute_failed"]{})
+      assert.are.equal("Failed to move tool to background", messages["ui.tool.background_failed"]{})
+      assert.are.equal("Tool moved to background.", messages["ui.tool.backgrounded"]{})
+      assert.are.equal("Approve failed", messages["ui.tool.approve_failed"]{})
+      assert.are.equal("No pending tools to approve", messages["ui.tool.no_pending_approve"]{})
+      assert.are.equal("Nothing to cancel (press again to cancel all)", messages["ui.tool.nothing_to_cancel_retry"]{})
     end)
 
     it("derives the rejection popup prefill from the harness feedback template", function()

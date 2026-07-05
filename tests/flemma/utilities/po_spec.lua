@@ -267,6 +267,12 @@ describe("flemma.utilities.po", function()
       "ui.rejection.no_result_placeholder",
       "ui.rejection.already_completed",
       "ui.rejection.no_fence",
+      "ui.tool.execute_failed",
+      "ui.tool.background_failed",
+      "ui.tool.backgrounded",
+      "ui.tool.approve_failed",
+      "ui.tool.no_pending_approve",
+      "ui.tool.nothing_to_cancel_retry",
     })
 
     it("keeps keys unique across the shipped catalogues", function()

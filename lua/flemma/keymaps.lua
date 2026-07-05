@@ -10,6 +10,7 @@ local hooks = require("flemma.hooks")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local navigation = require("flemma.navigation")
 local notify = require("flemma.notify")
 local state = require("flemma.state")
@@ -79,7 +80,7 @@ M.setup = function()
 
           local ok, err = executor.execute_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Execution failed")
+            notify.error(err or messages["ui.tool.execute_failed"]{})
           end
         end, { buffer = true, desc = "Execute Flemma tool at cursor" })
       end
@@ -90,9 +91,9 @@ M.setup = function()
 
           local ok, err = executor.background_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Failed to move tool to background")
+            notify.error(err or messages["ui.tool.background_failed"]{})
           else
-            notify.info("Tool moved to background.")
+            notify.info(messages["ui.tool.backgrounded"]{})
           end
         end, { buffer = true, desc = "Move Flemma tool to background" })
       end
@@ -103,7 +104,7 @@ M.setup = function()
 
           local ok, err = executor.approve_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Approve failed")
+            notify.error(err or messages["ui.tool.approve_failed"]{})
           end
         end, { buffer = true, desc = "Approve Flemma tool at cursor" })
       end
@@ -121,7 +122,7 @@ M.setup = function()
 
           local ok, err = executor.approve_all_pending(bufnr)
           if not ok then
-            notify.error(err or "No pending tools to approve")
+            notify.error(err or messages["ui.tool.no_pending_approve"]{})
           end
         end, { buffer = true, desc = "Approve all pending Flemma tools" })
       end
@@ -155,7 +156,7 @@ M.setup = function()
 
           last_cancel_miss_at = now
           log.debug("keymaps: Ctrl+C miss in buffer " .. bufnr .. ", awaiting double-tap for RAGE cancel")
-          notify.info("Nothing to cancel (press again to cancel all)")
+          notify.info(messages["ui.tool.nothing_to_cancel_retry"]{})
         end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
       end
 

@@ -36,3 +36,24 @@ msgstr "Tool {{ tool_id }} has already completed"
 #. Variables: {{ tool_id }} — the tool call's identifier.
 msgid "ui.rejection.no_fence"
 msgstr "No fence found in tool result for {{ tool_id }}"
+
+#. Tool-action feedback, shared by the keymaps and the :Flemma sub-commands.
+msgid "ui.tool.execute_failed"
+msgstr "Execution failed"
+
+msgid "ui.tool.background_failed"
+msgstr "Failed to move tool to background"
+
+msgid "ui.tool.backgrounded"
+msgstr "Tool moved to background."
+
+msgid "ui.tool.approve_failed"
+msgstr "Approve failed"
+
+msgid "ui.tool.no_pending_approve"
+msgstr "No pending tools to approve"
+
+#. Shown on a cancel keypress that cancelled nothing; a second press within
+#. the double-tap window cancels every tool in the buffer.
+msgid "ui.tool.nothing_to_cancel_retry"
+msgstr "Nothing to cancel (press again to cancel all)"
