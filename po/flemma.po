@@ -275,3 +275,15 @@ msgstr "Cancelled queued send."
 #. Variables: {{ reason }} — the dependency failure detail (e.g. a secret).
 msgid "ui.request.dependency_failed"
 msgstr "Could not satisfy dependency: {{ reason }}"
+
+#. build_prompt_and_provider structured errors — propagated to send_to_provider
+#. and to provider adapters via on_result({ err = ... }).
+msgid "ui.request.empty_buffer"
+msgstr "Empty buffer — nothing to send."
+
+msgid "ui.request.no_messages"
+msgstr "No messages found in buffer."
+
+#. Variables: {{ provider }} — the unrecognized provider key from config/frontmatter.
+msgid "ui.request.unknown_provider"
+msgstr "Unknown provider '{{ provider }}'."

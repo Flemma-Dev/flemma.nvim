@@ -997,15 +997,11 @@ function M.build_prompt_and_provider(bufnr, opts)
 
   local doc = parser.get_parsed_document(bufnr)
   if #doc.messages == 0 and not doc.frontmatter then
-    return nil, nil, nil, nil, { code = "empty_buffer", message = "Empty buffer — nothing to send." }
+    return nil, nil, nil, nil, { code = "empty_buffer", message = messages["ui.request.empty_buffer"]{} }
   end
 
   if not config_facade.get(bufnr).provider then
-    return nil,
-      nil,
-      nil,
-      nil,
-      { code = "no_provider", message = "No provider configured. Use :Flemma switch to select one." }
+    return nil, nil, nil, nil, { code = "no_provider", message = messages["ui.usage.no_provider"]{} }
   end
 
   local context = context_module.from_buffer(bufnr)
@@ -1018,7 +1014,7 @@ function M.build_prompt_and_provider(bufnr, opts)
   })
 
   if #prompt.history == 0 then
-    return nil, nil, nil, nil, { code = "no_messages", message = "No messages found in buffer." }
+    return nil, nil, nil, nil, { code = "no_messages", message = messages["ui.request.no_messages"]{} }
   end
 
   local effective_bufnr = prompt.bufnr
@@ -1035,7 +1031,7 @@ function M.build_prompt_and_provider(bufnr, opts)
       nil,
       {
         code = "unknown_provider",
-        message = "Unknown provider '" .. tostring(provider_key) .. "'.",
+        message = messages["ui.request.unknown_provider"]{ provider = tostring(provider_key) },
       }
   end
 
