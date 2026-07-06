@@ -99,7 +99,7 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-call_site_rule="${script_dir}/messages-call-variables.yml"
+call_site_rule="${script_dir}/ast-grep/rules/messages-call-variables.yml"
 if [ -f "$call_site_rule" ]; then
   # Build key→call-site-variables map from ast-grep matches.
   declare -A call_vars
@@ -220,7 +220,7 @@ fi
 
 # --- Pass 5: messages import naming (ast-grep) ---
 
-naming_rule="${script_dir}/messages-import-name.yml"
+naming_rule="${script_dir}/ast-grep/rules/messages-import-name.yml"
 naming_output=$(ast-grep scan --rule "${naming_rule}" lua/ 2>&1) || true
 if [ -n "$naming_output" ]; then
   echo "$naming_output"
@@ -233,7 +233,7 @@ fi
 # rule; only direct literals match. Reported as errors — the whole point of the
 # catalogue is that the user-facing surface is translatable.
 
-notify_rule="${script_dir}/notify-string-literal.yml"
+notify_rule="${script_dir}/ast-grep/rules/notify-string-literal.yml"
 while IFS= read -r match_line; do
   [ -z "$match_line" ] && continue
   echo "  ERROR: user-facing notify with an inline string literal (route through messages):"
@@ -249,7 +249,7 @@ done < <(ast-grep scan --rule "${notify_rule}" --json=compact lua/ 2>/dev/null |
 # that don't end sentences with a period/space. Each catalogue string must stay
 # a complete, independently translatable unit joined only by "\n".
 
-self_append_rule="${script_dir}/messages-self-append.yml"
+self_append_rule="${script_dir}/ast-grep/rules/messages-self-append.yml"
 while IFS=$'\t' read -r loc text; do
   [ -z "$loc" ] && continue
   bad=""

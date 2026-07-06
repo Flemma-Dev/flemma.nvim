@@ -4,12 +4,12 @@
 --- variable `n`. The compiler produces a closure tree — each node is a
 --- function `fun(n: integer): integer` — so no `load()` or string eval
 --- is involved.
----@class flemma.utilities.Plural
+---@class flemma.utilities.PluralForms
 local M = {}
 
----@alias flemma.utilities.plural.Fn fun(n: integer): integer
+---@alias flemma.utilities.plural_forms.Fn fun(n: integer): integer
 
----@class flemma.utilities.plural.Token
+---@class flemma.utilities.plural_forms.Token
 ---@field type string
 ---@field value? integer
 
@@ -40,9 +40,9 @@ local ONE_CHAR = {
 }
 
 ---@param expression string
----@return flemma.utilities.plural.Token[]
+---@return flemma.utilities.plural_forms.Token[]
 local function tokenize(expression)
-  ---@type flemma.utilities.plural.Token[]
+  ---@type flemma.utilities.plural_forms.Token[]
   local tokens = {}
   local i = 1
   local len = #expression
@@ -66,7 +66,7 @@ local function tokenize(expression)
         tokens[#tokens + 1] = { type = c }
         i = i + 1
       else
-        error(("plural: unexpected character %q at position %d"):format(c, i), 0)
+        error(("plural_forms: unexpected character %q at position %d"):format(c, i), 0)
       end
     end
   end
@@ -134,7 +134,7 @@ local EQ_OPS = {
 ---operators follow C precedence, and the result is the 0-based index
 ---into `msgstr[N]` forms.
 ---@param expression string
----@return flemma.utilities.plural.Fn
+---@return flemma.utilities.plural_forms.Fn
 function M.compile(expression)
   local tokens = tokenize(expression)
   local pos = 1
@@ -168,7 +168,7 @@ function M.compile(expression)
       advance()
       local expr = parse_ternary()
       if peek() ~= ")" then
-        error("plural: expected ')' in expression", 0)
+        error("plural_forms: expected ')' in expression", 0)
       end
       advance()
       return expr
@@ -179,13 +179,13 @@ function M.compile(expression)
         return operand(n) == 0 and 1 or 0
       end
     else
-      error(("plural: unexpected token %q in expression"):format(tt), 0)
+      error(("plural_forms: unexpected token %q in expression"):format(tt), 0)
     end
   end
 
-  ---@param inner fun(): flemma.utilities.plural.Fn
+  ---@param inner fun(): flemma.utilities.plural_forms.Fn
   ---@param ops table<string, fun(a: integer, b: integer): integer>
-  ---@return flemma.utilities.plural.Fn
+  ---@return flemma.utilities.plural_forms.Fn
   local function parse_left_assoc(inner, ops)
     local left = inner()
     while ops[peek()] do
@@ -255,7 +255,7 @@ function M.compile(expression)
     advance()
     local then_branch = parse_ternary()
     if peek() ~= ":" then
-      error("plural: expected ':' in ternary expression", 0)
+      error("plural_forms: expected ':' in ternary expression", 0)
     end
     advance()
     local else_branch = parse_ternary()
@@ -270,7 +270,7 @@ function M.compile(expression)
 
   local result = parse_ternary()
   if peek() ~= "eof" then
-    error(("plural: unexpected token %q after expression"):format(peek()), 0)
+    error(("plural_forms: unexpected token %q after expression"):format(peek()), 0)
   end
   return result
 end
@@ -279,15 +279,15 @@ end
 ---Input format: `"nplurals=N; plural=EXPRESSION;"`.
 ---@param value string
 ---@return integer nplurals
----@return flemma.utilities.plural.Fn plural
+---@return flemma.utilities.plural_forms.Fn plural
 function M.parse_header(value)
   local nplurals_str = value:match("nplurals%s*=%s*(%d+)")
   if not nplurals_str then
-    error("plural: Plural-Forms header missing nplurals", 0)
+    error("plural_forms: Plural-Forms header missing nplurals", 0)
   end
   local expression = value:match("plural%s*=%s*(.+)")
   if not expression then
-    error("plural: Plural-Forms header missing plural expression", 0)
+    error("plural_forms: Plural-Forms header missing plural expression", 0)
   end
   expression = expression:gsub(";%s*$", "")
   local nplurals = tonumber(nplurals_str) --[[@as integer]]

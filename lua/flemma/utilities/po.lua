@@ -6,7 +6,7 @@
 ---@class flemma.utilities.Po
 local M = {}
 
-local plural = require("flemma.utilities.plural")
+local plural_forms = require("flemma.utilities.plural_forms")
 
 ---@type table<string, string>
 local ESCAPES = { n = "\n", t = "\t", ['"'] = '"', ["\\"] = "\\" }
@@ -56,10 +56,10 @@ end
 ---compiled `Plural-Forms` expression.
 ---@class flemma.utilities.po.Entry
 ---@field forms string[] 1-indexed; singular: {msgstr}, plural: {msgstr[0], msgstr[1], …}
----@field plural? flemma.utilities.plural.Fn Compiled Plural-Forms expression; returns 0-based index
+---@field plural? flemma.utilities.plural_forms.Fn Compiled Plural-Forms expression; returns 0-based index
 
 ---Default English plural selector used when no Plural-Forms header exists.
----@type flemma.utilities.plural.Fn
+---@type flemma.utilities.plural_forms.Fn
 local DEFAULT_PLURAL_FN = function(n)
   return n ~= 1 and 1 or 0
 end
@@ -97,7 +97,7 @@ function M.parse(content)
   local line_number = 0
   local entry_line = 0
 
-  ---@type flemma.utilities.plural.Fn|nil
+  ---@type flemma.utilities.plural_forms.Fn|nil
   local header_plural_fn = nil
 
   local function finalize()
@@ -113,7 +113,7 @@ function M.parse(content)
           local value = header_line:match("^Plural%-Forms:%s*(.+)")
           if value then
             local _
-            _, header_plural_fn = plural.parse_header(value)
+            _, header_plural_fn = plural_forms.parse_header(value)
             break
           end
         end

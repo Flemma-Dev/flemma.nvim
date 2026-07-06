@@ -15,7 +15,7 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-rule="${script_dir}/messages-brace-call.yml"
+rule="${script_dir}/ast-grep/rules/messages-brace-call.yml"
 
 if [ "$#" -eq 0 ]; then
   set -- lua tests

@@ -7,7 +7,7 @@
 # Exits 0 if clean, 1 if violations found.
 set -euo pipefail
 
-rule="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/no-vim-notify.yml"
+rule="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ast-grep/rules/no-vim-notify.yml"
 
 if ! ast-grep scan --rule "${rule}" lua/flemma/; then
   echo ""

@@ -1,16 +1,16 @@
-package.loaded["flemma.utilities.plural"] = nil
+package.loaded["flemma.utilities.plural_forms"] = nil
 
-local plural = require("flemma.utilities.plural")
+local plural_forms = require("flemma.utilities.plural_forms")
 
-describe("flemma.utilities.plural", function()
+describe("flemma.utilities.plural_forms", function()
   before_each(function()
-    package.loaded["flemma.utilities.plural"] = nil
-    plural = require("flemma.utilities.plural")
+    package.loaded["flemma.utilities.plural_forms"] = nil
+    plural_forms = require("flemma.utilities.plural_forms")
   end)
 
   describe("compile", function()
     it("evaluates the English/Bulgarian formula: (n != 1)", function()
-      local fn = plural.compile("(n != 1)")
+      local fn = plural_forms.compile("(n != 1)")
       assert.are.equal(0, fn(1))
       assert.are.equal(1, fn(0))
       assert.are.equal(1, fn(2))
@@ -19,7 +19,7 @@ describe("flemma.utilities.plural", function()
     end)
 
     it("evaluates the French formula: (n > 1)", function()
-      local fn = plural.compile("(n > 1)")
+      local fn = plural_forms.compile("(n > 1)")
       assert.are.equal(0, fn(0))
       assert.are.equal(0, fn(1))
       assert.are.equal(1, fn(2))
@@ -28,7 +28,8 @@ describe("flemma.utilities.plural", function()
 
     it("evaluates the Russian formula: 3 forms", function()
       -- nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);
-      local fn = plural.compile("n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2")
+      local fn =
+        plural_forms.compile("n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2")
       -- singular: 1, 21, 31, 41, 51, 61, 71, 81, 91, 101, 121
       assert.are.equal(0, fn(1))
       assert.are.equal(0, fn(21))
@@ -53,7 +54,7 @@ describe("flemma.utilities.plural", function()
 
     it("evaluates the Polish formula: 3 forms", function()
       -- nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);
-      local fn = plural.compile("n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2")
+      local fn = plural_forms.compile("n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2")
       assert.are.equal(0, fn(1))
       assert.are.equal(1, fn(2))
       assert.are.equal(1, fn(3))
@@ -66,19 +67,19 @@ describe("flemma.utilities.plural", function()
     end)
 
     it("handles bare n without parens", function()
-      local fn = plural.compile("n != 1")
+      local fn = plural_forms.compile("n != 1")
       assert.are.equal(0, fn(1))
       assert.are.equal(1, fn(2))
     end)
 
     it("handles a constant expression", function()
-      local fn = plural.compile("0")
+      local fn = plural_forms.compile("0")
       assert.are.equal(0, fn(1))
       assert.are.equal(0, fn(99))
     end)
 
     it("handles logical negation", function()
-      local fn = plural.compile("!n")
+      local fn = plural_forms.compile("!n")
       assert.are.equal(1, fn(0))
       assert.are.equal(0, fn(1))
       assert.are.equal(0, fn(42))
@@ -86,21 +87,21 @@ describe("flemma.utilities.plural", function()
 
     it("handles nested ternaries (right-associative)", function()
       -- n==0 ? 10 : n==1 ? 20 : 30
-      local fn = plural.compile("n==0 ? 10 : n==1 ? 20 : 30")
+      local fn = plural_forms.compile("n==0 ? 10 : n==1 ? 20 : 30")
       assert.are.equal(10, fn(0))
       assert.are.equal(20, fn(1))
       assert.are.equal(30, fn(2))
     end)
 
     it("handles arithmetic operators", function()
-      local fn = plural.compile("n * 2 + 1")
+      local fn = plural_forms.compile("n * 2 + 1")
       assert.are.equal(1, fn(0))
       assert.are.equal(3, fn(1))
       assert.are.equal(7, fn(3))
     end)
 
     it("handles modulo", function()
-      local fn = plural.compile("n % 10")
+      local fn = plural_forms.compile("n % 10")
       assert.are.equal(0, fn(0))
       assert.are.equal(1, fn(1))
       assert.are.equal(5, fn(15))
@@ -108,7 +109,7 @@ describe("flemma.utilities.plural", function()
     end)
 
     it("handles integer division", function()
-      local fn = plural.compile("n / 3")
+      local fn = plural_forms.compile("n / 3")
       assert.are.equal(0, fn(0))
       assert.are.equal(0, fn(2))
       assert.are.equal(1, fn(3))
@@ -117,48 +118,48 @@ describe("flemma.utilities.plural", function()
     end)
 
     it("protects against division by zero", function()
-      local fn = plural.compile("n / 0")
+      local fn = plural_forms.compile("n / 0")
       assert.are.equal(0, fn(5))
     end)
 
     it("protects against modulo by zero", function()
-      local fn = plural.compile("n % 0")
+      local fn = plural_forms.compile("n % 0")
       assert.are.equal(0, fn(5))
     end)
 
     it("handles short-circuit && (left false skips right)", function()
       -- 0 && (n/0) — should return 0 without evaluating n/0
-      local fn = plural.compile("0 && n")
+      local fn = plural_forms.compile("0 && n")
       assert.are.equal(0, fn(42))
     end)
 
     it("handles short-circuit || (left true skips right)", function()
-      local fn = plural.compile("1 || n")
+      local fn = plural_forms.compile("1 || n")
       assert.are.equal(1, fn(0))
     end)
 
     it("rejects unexpected characters", function()
       assert.has_error(function()
-        plural.compile("n @ 1")
+        plural_forms.compile("n @ 1")
       end)
     end)
 
     it("rejects unterminated ternary", function()
       assert.has_error(function()
-        plural.compile("n ? 1")
+        plural_forms.compile("n ? 1")
       end)
     end)
 
     it("rejects trailing tokens", function()
       assert.has_error(function()
-        plural.compile("n 1")
+        plural_forms.compile("n 1")
       end)
     end)
   end)
 
   describe("parse_header", function()
     it("parses the English Plural-Forms header", function()
-      local nplurals, fn = plural.parse_header("nplurals=2; plural=(n != 1);")
+      local nplurals, fn = plural_forms.parse_header("nplurals=2; plural=(n != 1);")
       assert.are.equal(2, nplurals)
       assert.are.equal(0, fn(1))
       assert.are.equal(1, fn(0))
@@ -166,7 +167,7 @@ describe("flemma.utilities.plural", function()
     end)
 
     it("parses the Russian Plural-Forms header", function()
-      local nplurals, fn = plural.parse_header(
+      local nplurals, fn = plural_forms.parse_header(
         "nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);"
       )
       assert.are.equal(3, nplurals)
@@ -176,20 +177,20 @@ describe("flemma.utilities.plural", function()
     end)
 
     it("handles headers without trailing semicolons", function()
-      local nplurals, fn = plural.parse_header("nplurals=2; plural=(n != 1)")
+      local nplurals, fn = plural_forms.parse_header("nplurals=2; plural=(n != 1)")
       assert.are.equal(2, nplurals)
       assert.are.equal(0, fn(1))
     end)
 
     it("rejects headers missing nplurals", function()
       assert.has_error(function()
-        plural.parse_header("plural=(n != 1);")
+        plural_forms.parse_header("plural=(n != 1);")
       end)
     end)
 
     it("rejects headers missing the expression", function()
       assert.has_error(function()
-        plural.parse_header("nplurals=2;")
+        plural_forms.parse_header("nplurals=2;")
       end)
     end)
   end)

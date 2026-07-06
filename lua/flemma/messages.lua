@@ -32,7 +32,7 @@ local renderer = require("flemma.templating.renderer")
 ---@field key string Catalogue key, kept for error attribution
 ---@field template string Default msgstr template (singular form for plural entries)
 ---@field forms string[] All forms (singular: {template}, plural: {msgstr[0], msgstr[1], …})
----@field plural? flemma.utilities.plural.Fn Compiled Plural-Forms selector
+---@field plural? flemma.utilities.plural_forms.Fn Compiled Plural-Forms selector
 ---@operator call(table<string, any>): string
 ---@operator concat(any): string
 

@@ -52,7 +52,7 @@ violations=0
 # and be silently reported as "no violations". Capturing lets pipefail + || turn
 # any such tooling failure into a gate error instead of a false pass.
 if ! matches=$(
-  ast-grep scan --rule "${script_dir}/inline-require.yml" --json=compact lua/flemma/ |
+  ast-grep scan --rule "${script_dir}/ast-grep/rules/inline-require.yml" --json=compact lua/flemma/ |
     jq -r '.[] | [.file, (.range.start.line + 1), .metaVariables.single.ARG.text] | @tsv'
 ); then
   echo "ERROR: inline-require detection failed (ast-grep or jq errored above)." >&2
