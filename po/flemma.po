@@ -12,6 +12,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "ui.usage.no_data"
 msgstr "No usage data for this buffer."
@@ -374,6 +375,12 @@ msgid "ui.secrets.missing_name"
 msgstr "secrets resolver module missing 'name' field: {{ source }}"
 
 #. Migration notices (buffer open).
+#. Variables: {{ count }} — number of orphaned jobs resolved.
+msgid "ui.migration.orphaned_jobs_resolved"
+msgid_plural "ui.migration.orphaned_jobs_resolved"
+msgstr[0] "{{ count }} orphaned job resolved."
+msgstr[1] "{{ count }} orphaned jobs resolved."
+
 msgid "ui.migration.tool_names_migrated"
 msgstr "Tool names were migrated from ':' to '.' in Tool Use headers and frontmatter. Review the frontmatter to confirm the changes are correct."
 

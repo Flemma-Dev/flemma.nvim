@@ -181,7 +181,7 @@ function M.migrate(bufnr)
     if vim.api.nvim_buf_is_valid(bufnr) then
       local count = bridge.resolve_orphaned_jobs(bufnr)
       if count > 0 then
-        notify.info(count .. " orphaned job(s) resolved.")
+        notify.info(messages["ui.migration.orphaned_jobs_resolved"]{ count = count })
       end
     end
   end)

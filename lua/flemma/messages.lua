@@ -26,9 +26,13 @@ local renderer = require("flemma.templating.renderer")
 --- entry has none) — so a bare `messages["key"]()` is a type-check error
 --- instead of silently rendering, keeping the old no-args call style from
 --- creeping back in.
+--- Plural entries carry a `plural` selector — `__call` picks the form via
+--- the compiled Plural-Forms expression when `count` is present.
 ---@class flemma.messages.String
 ---@field key string Catalogue key, kept for error attribution
----@field template string Raw msgstr template
+---@field template string Default msgstr template (singular form for plural entries)
+---@field forms string[] All forms (singular: {template}, plural: {msgstr[0], msgstr[1], …})
+---@field plural? flemma.utilities.plural.Fn Compiled Plural-Forms selector
 ---@operator call(table<string, any>): string
 ---@operator concat(any): string
 
@@ -67,6 +71,11 @@ end
 ---@param variables table<string, any>
 ---@return string
 PROXY_METATABLE.__call = function(self, variables)
+  if self.plural and variables.count ~= nil then
+    local form_index = self.plural(variables.count)
+    local template = self.forms[form_index + 1] or self.forms[1]
+    return render(self.key, template, variables)
+  end
   return render(self.key, self.template, variables)
 end
 
@@ -92,7 +101,7 @@ local CATALOGUE_PATHS = {
 
 ---Read and parse one catalogue file off the runtimepath.
 ---@param runtime_path string
----@return table<string, string>
+---@return table<string, flemma.utilities.po.Entry>
 local function load_file(runtime_path)
   local matches = vim.api.nvim_get_runtime_file(runtime_path, false)
   local path = matches[1]
@@ -108,16 +117,16 @@ end
 ---Load and merge the shipped catalogues. Runs at require time so parse
 ---errors and cross-file key collisions surface at startup, and the
 ---module-level result is the cache.
----@return table<string, string>
+---@return table<string, flemma.utilities.po.Entry>
 local function load_catalogue()
-  local merged = {} ---@type table<string, string>
+  local merged = {} ---@type table<string, flemma.utilities.po.Entry>
   local collisions = {} ---@type string[]
   for _, runtime_path in ipairs(CATALOGUE_PATHS) do
-    for key, content in pairs(load_file(runtime_path)) do
+    for key, entry in pairs(load_file(runtime_path)) do
       if merged[key] ~= nil then
         table.insert(collisions, key)
       else
-        merged[key] = content
+        merged[key] = entry
       end
     end
   end
@@ -134,11 +143,14 @@ return setmetatable(M, {
   ---@param key string
   ---@return flemma.messages.String
   __index = function(_, key)
-    local template = catalogue[key]
-    if template == nil then
+    local entry = catalogue[key]
+    if entry == nil then
       error("messages: unknown catalogue key: " .. tostring(key))
     end
-    local proxy = setmetatable({ key = key, template = template }, PROXY_METATABLE)
+    local proxy = setmetatable(
+      { key = key, template = entry.forms[1], forms = entry.forms, plural = entry.plural },
+      PROXY_METATABLE
+    )
     rawset(M, key, proxy)
     return proxy
   end,
