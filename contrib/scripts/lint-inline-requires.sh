@@ -86,13 +86,5 @@ if [ "$violations" -gt 0 ]; then
   exit 1
 fi
 
-# Pass 2: flemma.messages must be imported as `local messages` — the
-# brace-call formatter (messages-brace-call.yml) matches this name
-# structurally; any other name silently bypasses the formatter.
-naming_rule="${script_dir}/messages-import-name.yml"
-if ! ast-grep scan --rule "${naming_rule}" lua/; then
-  exit 1
-fi
-
 echo "lint-inline-requires: OK"
 exit 0

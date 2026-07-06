@@ -33,8 +33,8 @@ qa:
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
 	bash contrib/scripts/lint-pcall-rethrow.sh \
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
-	bash contrib/scripts/lint-po.sh \
-		>"$$d/po" 2>&1 & gate[$$!]=po; \
+	bash contrib/scripts/lint-messages.sh \
+		>"$$d/messages" 2>&1 & gate[$$!]=messages; \
 	bash contrib/scripts/lint-shell.sh \
 		>"$$d/shell" 2>&1 & gate[$$!]=shell; \
 	jobs=$${JOBS:-$$(nproc)}; \
