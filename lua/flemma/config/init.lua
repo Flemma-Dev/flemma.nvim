@@ -15,6 +15,7 @@ local M = {}
 local bridge = require("flemma.bridge")
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
@@ -303,7 +304,7 @@ function M.register_module_defaults(parent_path, name, config_schema)
   local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
   local ok, err = apply_recursive(ctx, base_path, defaults)
   if not ok then
-    notify.warn("register_module_defaults failed for " .. base_path .. ": " .. err)
+    notify.warn(messages["ui.config.module_defaults_failed"]{ path = base_path, reason = err })
   end
 end
 

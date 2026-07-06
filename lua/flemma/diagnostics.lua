@@ -5,6 +5,7 @@ local M = {}
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local state = require("flemma.state")
 
@@ -412,7 +413,7 @@ local function notify_diagnostics(cache_lines, extra_comparison)
   end
 
   table.insert(sections, "")
-  table.insert(sections, "Run :Flemma diagnostics:diff for full diff")
+  table.insert(sections, messages["ui.diagnostics.diff_hint"]{})
   notify.warn("[diagnostics]: " .. table.concat(sections, "\n"))
 end
 
@@ -565,12 +566,12 @@ function M.open_diff(bufnr, normalized)
   local current = buffer_state.diagnostics_current_request
 
   if not current then
-    notify.warn("No request data available. Send at least one request with diagnostics enabled.")
+    notify.warn(messages["ui.diagnostics.no_request_data"]{})
     return
   end
 
   if not previous then
-    notify.warn("Only one request recorded. Send another request to compare.")
+    notify.warn(messages["ui.diagnostics.insufficient_data"]{})
     return
   end
 

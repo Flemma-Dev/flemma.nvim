@@ -3,6 +3,7 @@
 ---@class flemma.tools.Context
 local M = {}
 
+local messages = require("flemma.messages")
 local parser = require("flemma.parser")
 local notify = require("flemma.notify")
 local roles = require("flemma.utilities.roles")
@@ -188,11 +189,7 @@ function M.resolve_all_tool_blocks(bufnr)
   end
 
   if conflict_count > 0 then
-    notify.warn(
-      conflict_count
-        .. " tool result(s) have edited content inside an approved tool block – "
-        .. "skipping execution to protect your edits. Remove the (approved) status from the header to send your content."
-    )
+    notify.warn(messages["ui.tool.edit_conflict"]{ count = conflict_count })
   end
 
   -- Sort each group by start_line for deterministic document order

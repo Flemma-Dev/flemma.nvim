@@ -7,6 +7,7 @@ local cache = require("flemma.secrets.cache")
 local config = require("flemma.config")
 local context = require("flemma.secrets.context")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.secrets.registry")
@@ -139,13 +140,13 @@ function M.register(source, resolver)
   else
     local ok, mod = pcall(require, source)
     if not ok then
-      notify.error("failed to load secrets resolver: " .. source)
+      notify.error(messages["ui.secrets.load_failed"]{ source = source })
       log.error("secrets.register(): " .. tostring(mod))
       return
     end
     ---@cast mod flemma.secrets.Resolver
     if not mod.name then
-      notify.error("secrets resolver module missing 'name' field: " .. source)
+      notify.error(messages["ui.secrets.missing_name"]{ source = source })
       return
     end
     registry.register(mod.name, mod)

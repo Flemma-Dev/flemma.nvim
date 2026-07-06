@@ -7,6 +7,7 @@
 local M = {}
 
 local base = require("flemma.utilities.truncate")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local store = require("flemma.tools.store")
 
@@ -140,7 +141,7 @@ function M.truncate_with_overflow(text, opts)
       store_path, store_err = nil, tostring(store_path)
     end
     if store_err then
-      notify.warn("Could not save full tool output: " .. store_err)
+      notify.warn(messages["ui.tool.store_failed"]{ reason = store_err })
     end
     overflow_path = store_path --[[@as string|nil]]
   end

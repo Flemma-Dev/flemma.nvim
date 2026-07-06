@@ -84,7 +84,7 @@ function M.register_async(resolve_fn, opts)
     completed = true
 
     if err then
-      notify.warn("Async tool source failed: " .. err)
+      notify.warn(messages["ui.tool.source_failed"]{ reason = err })
     end
 
     pending_sources = pending_sources - 1

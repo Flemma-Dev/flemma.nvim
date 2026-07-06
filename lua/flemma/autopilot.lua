@@ -5,6 +5,7 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local bridge = require("flemma.bridge")
 local cursor = require("flemma.cursor")
@@ -155,7 +156,7 @@ function M.on_response_complete(bufnr)
 
   if bs.iteration > max_turns then
     M.disarm(bufnr)
-    notify.warn("Autopilot stopped – exceeded " .. max_turns .. " consecutive turns.")
+    notify.warn(messages["ui.autopilot.max_turns_exceeded"]{ max_turns = max_turns })
     log.warn("autopilot: exceeded max_turns (" .. max_turns .. ") for buffer " .. bufnr)
     return
   end

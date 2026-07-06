@@ -2,6 +2,7 @@
 --- Handles all HTTP requests and transport mechanisms
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local sink = require("flemma.sink")
 local version = require("flemma.version")
@@ -467,7 +468,7 @@ function M.cancel_request(job_id)
 
   if not ok then
     log.warn("Failed to get job PID for cancellation (job may have already completed): " .. tostring(job_id))
-    notify.warn("Request already completed or terminated")
+    notify.warn(messages["ui.request.already_completed"]{})
     return false
   end
 

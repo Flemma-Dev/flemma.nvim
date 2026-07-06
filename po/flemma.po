@@ -287,3 +287,138 @@ msgstr "No messages found in buffer."
 #. Variables: {{ provider }} — the unrecognized provider key from config/frontmatter.
 msgid "ui.request.unknown_provider"
 msgstr "Unknown provider '{{ provider }}'."
+
+msgid "ui.request.already_completed"
+msgstr "Request already completed or terminated"
+
+#. Autopilot safety limit — exceeded the configured max consecutive turns.
+#. Variables: {{ max_turns }} — the configured turn limit.
+msgid "ui.autopilot.max_turns_exceeded"
+msgstr "Autopilot stopped – exceeded {{ max_turns }} consecutive turns."
+
+#. Tool subsystem warnings.
+#. Variables: {{ reason }} — the store write failure detail.
+msgid "ui.tool.store_failed"
+msgstr "Could not save full tool output: {{ reason }}"
+
+#. Variables: {{ reason }} — the async tool source failure detail.
+msgid "ui.tool.source_failed"
+msgstr "Async tool source failed: {{ reason }}"
+
+#. Variables: {{ count }} — number of conflicting tool results.
+msgid "ui.tool.edit_conflict"
+msgstr "{{ count }} tool result(s) have edited content inside an approved tool block – skipping execution to protect your edits. Remove the (approved) status from the header to send your content."
+
+#. Variables: {{ tool_name }} — the tool being redefined.
+msgid "ui.tool.redefined"
+msgstr "tool '{{ tool_name }}' redefined (previously registered, now overwritten)"
+
+#. Provider response truncation notices.
+msgid "ui.provider.response_truncated"
+msgstr "Response truncated – model reached max output tokens"
+
+#. Variables: {{ reason }} — the truncation reason from the response.
+msgid "ui.provider.response_truncated_reason"
+msgstr "Response was truncated (reason: {{ reason }})"
+
+#. max_tokens clamping — value exceeds model limit or falls below minimum.
+#. Variables: {{ value }}, {{ model }}, {{ limit }}.
+msgid "ui.provider.max_tokens_exceeds"
+msgstr "max_tokens {{ value }} exceeds {{ model }} limit ({{ limit }}), clamping."
+
+msgid "ui.provider.max_tokens_below"
+msgstr "max_tokens {{ value }} below {{ model }} minimum ({{ limit }}), raising."
+
+#. Unknown preset with optional did-you-mean suggestion.
+#. Variables: {{ preset }}, {{ suggestion }}.
+msgid "ui.provider.unknown_preset_suggestion"
+msgstr "Unknown preset '{{ preset }}' — did you mean '{{ suggestion }}'?"
+
+#. Config setup diagnostics (init.lua, config/).
+#. Variables: {{ keys }} — comma-separated list of unrecognized config paths.
+msgid "ui.config.unknown_keys"
+msgstr "unknown config keys: {{ keys }}"
+
+#. Variables: {{ path }}, {{ reason }} — the module base path and the failure.
+msgid "ui.config.module_defaults_failed"
+msgstr "register_module_defaults failed for {{ path }}: {{ reason }}"
+
+#. Sandbox backend validation — shown once on first .chat buffer entry.
+msgid "ui.sandbox.no_backend"
+msgstr "Tool execution is not sandboxed -- no compatible backend found. Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable."
+
+#. Hook dispatch errors.
+#. Variables: {{ hook }}, {{ reason }}.
+msgid "ui.hook.subscriber_error"
+msgstr "hook '{{ hook }}' subscriber error: {{ reason }}"
+
+msgid "ui.hook.handler_error"
+msgstr "hook '{{ hook }}' handler error: {{ reason }}"
+
+#. Diagnostics comparison (diagnostics:diff).
+msgid "ui.diagnostics.no_request_data"
+msgstr "No request data available. Send at least one request with diagnostics enabled."
+
+msgid "ui.diagnostics.insufficient_data"
+msgstr "Only one request recorded. Send another request to compare."
+
+msgid "ui.diagnostics.diff_hint"
+msgstr "Run :Flemma diagnostics:diff for full diff"
+
+#. Secrets resolver setup errors.
+#. Variables: {{ source }} — the module path that failed to load.
+msgid "ui.secrets.load_failed"
+msgstr "failed to load secrets resolver: {{ source }}"
+
+msgid "ui.secrets.missing_name"
+msgstr "secrets resolver module missing 'name' field: {{ source }}"
+
+#. Migration notices (buffer open).
+msgid "ui.migration.tool_names_migrated"
+msgstr "Tool names were migrated from ':' to '.' in Tool Use headers and frontmatter. Review the frontmatter to confirm the changes are correct."
+
+#. Preset validation errors (presets.lua).
+#. Variables: {{ preset }}, {{ received }} — the preset name and the offending type.
+msgid "ui.preset.invalid_type"
+msgstr "Preset '{{ preset }}' must be a table or string, received {{ received }}"
+
+#. Variables: {{ preset }}, {{ received }}.
+msgid "ui.preset.invalid_auto_approve"
+msgstr "Preset '{{ preset }}' auto_approve must be a string[], got {{ received }}"
+
+#. Variables: {{ preset }}, {{ received }}.
+msgid "ui.preset.invalid_tools"
+msgstr "Preset '{{ preset }}' tools must be a string[], got {{ received }}"
+
+#. Variables: {{ preset }}.
+msgid "ui.preset.invalid_provider"
+msgstr "Preset '{{ preset }}' has an invalid provider field"
+
+msgid "ui.preset.invalid_model"
+msgstr "Preset '{{ preset }}' has an invalid model field"
+
+msgid "ui.preset.invalid_string_format"
+msgstr "Preset '{{ preset }}' string definitions must start with '<provider> <model>'"
+
+#. Variables: {{ preset }}, {{ args }} — the preset name and the extra positionals.
+msgid "ui.preset.unexpected_positional"
+msgstr "Preset '{{ preset }}' contains unexpected positional argument: {{ args }}"
+
+msgid "ui.preset.extra_positionals"
+msgstr "Preset '{{ preset }}' ignores additional positional values ({{ args }}) beyond provider/model"
+
+#. Variables: {{ preset }} — the naming convention violation.
+msgid "ui.preset.invalid_name"
+msgstr "Preset '{{ preset }}' ignored — name must start with '$' followed by a lowercase letter"
+
+#. Variables: {{ preset }}, {{ tool_name }}, {{ field }} — the preset, tool, and field.
+msgid "ui.preset.unknown_tool"
+msgstr "Preset '{{ preset }}' references unknown tool '{{ tool_name }}' in {{ field }}"
+
+#. Variables: {{ preset }} — the default model preset reference.
+msgid "ui.preset.not_found"
+msgstr "Default preset '{{ preset }}' not found. Provider not initialized."
+
+#. Variables: {{ provider_explicit }}, {{ preset }}, {{ provider_preset }}.
+msgid "ui.preset.provider_conflict"
+msgstr "Explicit provider '{{ provider_explicit }}' conflicts with preset '{{ preset }}' (provider: '{{ provider_preset }}'). Provider not initialized."
