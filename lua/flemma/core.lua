@@ -570,7 +570,9 @@ function M.cancel_request(opts)
 
       local msg = messages["ui.request.cancelled"]{}
       if log.is_enabled() then
-        msg = msg .. ". " .. messages["ui.request.see_log"]{ path = log.get_path() }
+        -- Newline join keeps each catalogue string a complete, independently
+        -- translatable sentence — no language-specific punctuation joiner.
+        msg = msg .. "\n" .. messages["ui.request.see_log"]{ path = log.get_path() }
       end
       notify.info(msg)
       -- Force UI update after cancellation
@@ -1714,7 +1716,7 @@ function M._run_send_pipeline(bufnr, opts)
           end
 
           if log.is_enabled() then
-            error_msg = error_msg .. " " .. messages["ui.request.see_log"]{ path = log.get_path() }
+            error_msg = error_msg .. "\n" .. messages["ui.request.see_log"]{ path = log.get_path() }
           end
           notify.error(error_msg)
 

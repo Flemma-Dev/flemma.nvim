@@ -8,6 +8,7 @@
 #           #. Variables: comments, and pure-formatting entries (no translatable words)
 #   Pass 5: messages import naming via ast-grep (must be `local messages`)
 #   Pass 6: user-facing notify.* must route through messages, not inline literals
+#   Pass 7: translations may only be joined by newlines, never punctuation
 # Exits 0 if clean (warnings are reported but non-fatal), 1 on errors.
 set -euo pipefail
 
@@ -240,6 +241,34 @@ while IFS= read -r match_line; do
   errors=$((errors + 1))
 done < <(ast-grep scan --rule "${notify_rule}" --json=compact lua/ 2>/dev/null |
   jq -r '.[] | "\(.file):\(.range.start.line + 1): \(.text | gsub("\n";" ") | .[0:80])"')
+
+# --- Pass 7: translations may only be joined by newlines ---
+# A self-append that pulls in a message (msg = msg .. SEP .. messages[...]) is
+# fine when SEP is a newline (layout) but not when it is language-specific
+# punctuation like ". " or " " (grammar) — the joiner would be wrong in scripts
+# that don't end sentences with a period/space. Each catalogue string must stay
+# a complete, independently translatable unit joined only by "\n".
+
+self_append_rule="${script_dir}/messages-self-append.yml"
+while IFS=$'\t' read -r loc text; do
+  [ -z "$loc" ] && continue
+  bad=""
+  while IFS= read -r lit; do
+    lit="${lit#\"}"
+    lit="${lit%\"}"
+    # Skip catalogue keys (lowercase dotted identifiers) — not joiners.
+    [[ "$lit" =~ ^[a-z][a-z0-9_.]*$ ]] && continue
+    # Allowed joiner: newline-only. Strip every \n; anything left is grammar.
+    [ -z "${lit//\\n/}" ] && continue
+    bad="${bad}'${lit}' "
+  done < <(printf '%s' "$text" | grep -oP '"[^"]*"')
+  if [ -n "$bad" ]; then
+    echo "  ERROR: ${loc} joins a translation with a non-newline separator: ${bad}"
+    printf '    translations may only be joined by "\\n" — use a fuller message or newline layout\n'
+    errors=$((errors + 1))
+  fi
+done < <(ast-grep scan --rule "${self_append_rule}" --json=compact lua/ 2>/dev/null |
+  jq -r '.[] | "\(.file):\(.range.start.line + 1)\t\(.text | gsub("\n"; " "))"')
 
 # --- Summary ---
 
