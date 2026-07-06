@@ -19,7 +19,11 @@ local M = {}
 
 local log = require("flemma.logging")
 local po = require("flemma.utilities.po")
-local renderer = require("flemma.templating.renderer")
+-- flemma.templating.renderer is require()d lazily inside render(), never here:
+-- renderer → templating.compiler → flemma.messages closes a require cycle
+-- (compiler.lua emits the "ui.template.emit_error" catalogue entry). Deferring
+-- it keeps flemma.messages safe to require() at file top from anywhere.
+-- Allowlisted in contrib/scripts/lint-inline-requires.sh.
 
 ---A lazily rendered catalogue entry.
 --- `variables` is mandatory on `__call` — always pass a table (`{}` when the
@@ -47,6 +51,9 @@ local renderer = require("flemma.templating.renderer")
 ---@param variables? table<string, any>
 ---@return string
 local function render(key, template, variables)
+  -- Lazy: renderer → compiler → messages would cycle at load time; require()
+  -- here returns the already-loaded module.
+  local renderer = require("flemma.templating.renderer")
   local parts, diagnostics = renderer.render(template, variables or {})
   for _, diagnostic in ipairs(diagnostics) do
     log.warn("messages: '" .. key .. "': " .. (diagnostic.error or "unknown error"))

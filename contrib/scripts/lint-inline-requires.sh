@@ -14,11 +14,16 @@ set -euo pipefail
 # ast/init.lua:      dump is lazy-required via metatable __index to break the
 #                    ast↔dump circular dependency (ast imports dump, dump imports
 #                    parser, parser imports ast) — see the file's header note.
+# messages.lua:      renderer is lazy-required to break the
+#                    messages↔renderer↔compiler cycle (compiler emits a catalogue
+#                    diagnostic); keeps flemma.messages safe to require() at file
+#                    top everywhere.
 ALLOWED_INLINE=(
   "lua/flemma/commands.lua=*"
   "lua/flemma/config/schema.lua=*"
   "lua/flemma/tools/init.lua=flemma.tools.executor"
   "lua/flemma/ast/init.lua=flemma.ast.dump"
+  "lua/flemma/messages.lua=flemma.templating.renderer"
 )
 
 # Build a lookup function from the allowlist.
