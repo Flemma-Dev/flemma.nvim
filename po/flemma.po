@@ -180,6 +180,7 @@ msgstr "Model '{{ model }}' is not valid for provider '{{ provider }}'. Using de
 msgid "ui.provider.switched"
 msgstr "Switched to '{{ provider }}'"
 
+#. Variables: {{ provider }}, {{ model }}.
 msgid "ui.provider.switched_with_model"
 msgstr "Switched to '{{ provider }}' with model '{{ model }}'"
 
@@ -188,6 +189,7 @@ msgstr "Switched to '{{ provider }}' with model '{{ model }}'"
 msgid "ui.provider.initialized"
 msgstr "Initialized '{{ provider }}'"
 
+#. Variables: {{ provider }}, {{ model }}.
 msgid "ui.provider.initialized_with_model"
 msgstr "Initialized '{{ provider }}' with model '{{ model }}'"
 
@@ -205,9 +207,11 @@ msgstr "Billed at {{ pricing }}"
 msgid "ui.provider.frontmatter_override_provider"
 msgstr "This buffer uses '{{ provider }}' (frontmatter)"
 
+#. Variables: {{ model }}.
 msgid "ui.provider.frontmatter_override_model"
 msgstr "This buffer uses model '{{ model }}' (frontmatter)"
 
+#. Variables: {{ provider }}, {{ model }}.
 msgid "ui.provider.frontmatter_override_both"
 msgstr "This buffer uses '{{ provider }}' / model '{{ model }}' (frontmatter)"
 
@@ -327,6 +331,7 @@ msgstr "Response was truncated (reason: {{ reason }})"
 msgid "ui.provider.max_tokens_exceeds"
 msgstr "max_tokens {{ value }} exceeds {{ model }} limit ({{ limit }}), clamping."
 
+#. Variables: {{ value }}, {{ model }}, {{ limit }}.
 msgid "ui.provider.max_tokens_below"
 msgstr "max_tokens {{ value }} below {{ model }} minimum ({{ limit }}), raising."
 
@@ -353,6 +358,7 @@ msgstr "Tool execution is not sandboxed -- no compatible backend found. Run :Fle
 msgid "ui.hook.subscriber_error"
 msgstr "hook '{{ hook }}' subscriber error: {{ reason }}"
 
+#. Variables: {{ hook }}, {{ reason }}.
 msgid "ui.hook.handler_error"
 msgstr "hook '{{ hook }}' handler error: {{ reason }}"
 
@@ -371,6 +377,7 @@ msgstr "Run :Flemma diagnostics:diff for full diff"
 msgid "ui.secrets.load_failed"
 msgstr "failed to load secrets resolver: {{ source }}"
 
+#. Variables: {{ source }}.
 msgid "ui.secrets.missing_name"
 msgstr "secrets resolver module missing 'name' field: {{ source }}"
 
@@ -435,6 +442,7 @@ msgstr "Try again in a moment."
 msgid "ui.request.curl_resolve_failed"
 msgstr "cURL could not resolve host (exit code {{ code }}). Check network or hostname."
 
+#. Variables: {{ code }}.
 msgid "ui.request.curl_connect_failed"
 msgstr "cURL could not connect to host (exit code {{ code }}). Check network or if the host is up."
 
@@ -442,6 +450,7 @@ msgstr "cURL could not connect to host (exit code {{ code }}). Check network or 
 msgid "ui.request.curl_timeout"
 msgstr "cURL request timed out (exit code {{ code }}). Timeout is {{ timeout }} seconds."
 
+#. Variables: {{ code }}.
 msgid "ui.request.curl_failed"
 msgstr "cURL request failed (exit code {{ code }})."
 
@@ -541,9 +550,11 @@ msgstr "Preset '{{ preset }}' tools must be a string[], got {{ received }}"
 msgid "ui.preset.invalid_provider"
 msgstr "Preset '{{ preset }}' has an invalid provider field"
 
+#. Variables: {{ preset }}.
 msgid "ui.preset.invalid_model"
 msgstr "Preset '{{ preset }}' has an invalid model field"
 
+#. Variables: {{ preset }}.
 msgid "ui.preset.invalid_string_format"
 msgstr "Preset '{{ preset }}' string definitions must start with '<provider> <model>'"
 
@@ -551,6 +562,7 @@ msgstr "Preset '{{ preset }}' string definitions must start with '<provider> <mo
 msgid "ui.preset.unexpected_positional"
 msgstr "Preset '{{ preset }}' contains unexpected positional argument: {{ args }}"
 
+#. Variables: {{ preset }}, {{ args }}.
 msgid "ui.preset.extra_positionals"
 msgstr "Preset '{{ preset }}' ignores additional positional values ({{ args }}) beyond provider/model"
 

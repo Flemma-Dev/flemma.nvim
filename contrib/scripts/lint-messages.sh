@@ -114,15 +114,30 @@ if [ -f "$call_site_rule" ]; then
     jq -r '.[] | .metaVariables.single.KEY.text + "\t" + (.text | gsub("\n"; " "))')
 
   # Build key→template-variables map from PO msgstr {{ var }} placeholders.
+  # Also track whether each entry's comment block includes `#. Variables:`.
   # Plural entries implicitly accept `count` for the Plural-Forms selector.
   declare -A tmpl_vars
   declare -A plural_keys
+  declare -A has_var_comment
   current_key=""
   current_str=""
+  current_has_var_comment=""
   while IFS= read -r line; do
-    if [[ "$line" =~ ^msgid\ \"(.+)\"$ ]]; then
+    if [[ "$line" =~ ^"#." ]] && [[ "$line" =~ "Variables:" ]]; then
+      current_has_var_comment=1
+    elif [[ "$line" =~ ^"#." ]]; then
+      : # other extracted comment lines — keep current_has_var_comment
+    elif [[ "$line" =~ ^"#" ]]; then
+      # Translator comments (#, #:, #,, #~) are not extracted comments —
+      # reset the Variables flag so it doesn't bleed into the next entry.
+      current_has_var_comment=""
+    elif [[ "$line" =~ ^msgid\ \"(.+)\"$ ]]; then
       current_key="${BASH_REMATCH[1]}"
       current_str=""
+      if [ -n "$current_has_var_comment" ]; then
+        has_var_comment["$current_key"]=1
+      fi
+      current_has_var_comment=""
     elif [[ "$line" =~ ^msgid_plural ]]; then
       plural_keys["$current_key"]=1
     elif [[ "$line" =~ ^msgstr(\[[0-9]+\])?\ \"(.*)\"$ ]]; then
@@ -151,6 +166,14 @@ if [ -f "$call_site_rule" ]; then
     cat po/*.po
     echo ""
   )
+
+  # Entries with {{ }} placeholders must have a #. Variables: comment.
+  for key in "${!tmpl_vars[@]}"; do
+    if [ -z "${has_var_comment[$key]:-}" ]; then
+      echo "  ERROR: msgid \"${key}\" has {{ }} placeholders but no #. Variables: comment"
+      errors=$((errors + 1))
+    fi
+  done
 
   # Compare: call-site variables vs template variables.
   for key in "${!call_vars[@]}"; do
