@@ -414,7 +414,7 @@ local function notify_diagnostics(cache_lines, extra_comparison)
 
   table.insert(sections, "")
   table.insert(sections, messages["ui.diagnostics.diff_hint"]{})
-  notify.warn("[diagnostics]: " .. table.concat(sections, "\n"))
+  notify.warn(messages["ui.diagnostics.prefix"]{} .. table.concat(sections, "\n"))
 end
 
 ---@param raw_json string

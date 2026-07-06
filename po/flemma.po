@@ -408,6 +408,60 @@ msgstr "unknown error"
 msgid "ui.diagnostics.in_role"
 msgstr "in @{{ role }}"
 
+#. Request lifecycle — cancellation, error advice, cURL failures.
+msgid "ui.request.cancelled"
+msgstr "Request cancelled"
+
+#. Variables: {{ path }} — the log file path.
+msgid "ui.request.see_log"
+msgstr "See {{ path }} for details"
+
+#. Variables: {{ queued }}, {{ running }}, {{ limit }}.
+msgid "ui.request.tools_queued"
+msgid_plural "ui.request.tools_queued"
+msgstr[0] "{{ queued }} tool queued — max_concurrent limit reached ({{ running }}/{{ limit }} running)"
+msgstr[1] "{{ queued }} tools queued — max_concurrent limit reached ({{ running }}/{{ limit }} running)"
+
+msgid "ui.request.context_overflow"
+msgstr "Your conversation is too long for this model. Remove earlier messages or start a new conversation."
+
+msgid "ui.request.auth_expired"
+msgstr "Authentication expired. Send again to generate a fresh token."
+
+msgid "ui.request.rate_limited"
+msgstr "Try again in a moment."
+
+#. Variables: {{ code }} — the cURL exit code.
+msgid "ui.request.curl_resolve_failed"
+msgstr "cURL could not resolve host (exit code {{ code }}). Check network or hostname."
+
+msgid "ui.request.curl_connect_failed"
+msgstr "cURL could not connect to host (exit code {{ code }}). Check network or if the host is up."
+
+#. Variables: {{ code }}, {{ timeout }}.
+msgid "ui.request.curl_timeout"
+msgstr "cURL request timed out (exit code {{ code }}). Timeout is {{ timeout }} seconds."
+
+msgid "ui.request.curl_failed"
+msgstr "cURL request failed (exit code {{ code }})."
+
+#. Diagnostics comparison prefix.
+msgid "ui.diagnostics.prefix"
+msgstr "[diagnostics]: "
+
+#. Usage estimate formatting (utilities/string.lua).
+#. Variables: {{ input_rate }}, {{ output_rate }}.
+msgid "ui.usage.pricing_suffix"
+msgstr "{{ input_rate }} input / {{ output_rate }} output per MTok"
+
+#. Variables: {{ count }}, {{ model }}.
+msgid "ui.usage.estimate_tokens_only"
+msgstr "{{ count }} input tokens · {{ model }}"
+
+#. Variables: {{ count }}, {{ cost }}, {{ model }}, {{ pricing }}.
+msgid "ui.usage.estimate_with_cost"
+msgstr "{{ count }} input tokens · {{ cost }} · {{ model }} ({{ pricing }})"
+
 #. Keymap descriptions — shown in :map, which-key, telescope keymaps.
 msgid "ui.keymap.send"
 msgstr "Send to Flemma"

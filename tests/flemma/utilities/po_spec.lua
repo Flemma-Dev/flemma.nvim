@@ -460,6 +460,20 @@ describe("flemma.utilities.po", function()
       "ui.keymap.conceal_off",
       "ui.keymap.colon_insert",
       "ui.keymap.insert_send",
+      "ui.request.cancelled",
+      "ui.request.see_log",
+      "ui.request.tools_queued",
+      "ui.request.context_overflow",
+      "ui.request.auth_expired",
+      "ui.request.rate_limited",
+      "ui.request.curl_resolve_failed",
+      "ui.request.curl_connect_failed",
+      "ui.request.curl_timeout",
+      "ui.request.curl_failed",
+      "ui.diagnostics.prefix",
+      "ui.usage.pricing_suffix",
+      "ui.usage.estimate_tokens_only",
+      "ui.usage.estimate_with_cost",
     })
 
     it("keeps keys unique across the shipped catalogues", function()

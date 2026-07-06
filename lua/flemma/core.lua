@@ -568,9 +568,9 @@ function M.cancel_request(opts)
       autopilot.disarm(bufnr)
       cursor.untail(bufnr)
 
-      local msg = "Request cancelled"
+      local msg = messages["ui.request.cancelled"]{}
       if log.is_enabled() then
-        msg = msg .. ". See " .. log.get_path() .. " for details"
+        msg = msg .. ". " .. messages["ui.request.see_log"]{ path = log.get_path() }
       end
       notify.info(msg)
       -- Force UI update after cancellation
@@ -677,16 +677,12 @@ local function advance_phase2(opts)
 
   if throttled and opts.user_initiated then
     local queued = #approved - executed_count
-    notify.info(
-      queued
-        .. " tool"
-        .. (queued == 1 and "" or "s")
-        .. " queued — max_concurrent limit reached ("
-        .. executor.count_running(bufnr)
-        .. "/"
-        .. max_concurrent
-        .. " running)"
-    )
+    notify.info(messages["ui.request.tools_queued"]{
+      count = queued,
+      queued = queued,
+      running = executor.count_running(bufnr),
+      limit = max_concurrent,
+    })
   end
 
   -- Collect truly-pending blocks (empty content — user-filled ones were already resolved).
@@ -1316,22 +1312,20 @@ function M._run_send_pipeline(bufnr, opts)
 
         local notify_msg = msg
         if current_provider:is_context_overflow(msg) then
-          notify_msg = notify_msg
-            .. "\n\nYour conversation is too long for this model."
-            .. " Remove earlier messages or start a new conversation."
+          notify_msg = notify_msg .. "\n\n" .. messages["ui.request.context_overflow"]{}
         elseif current_provider:is_auth_error(msg) then
           local cred = current_provider:get_credential()
           secrets.invalidate(cred.kind, cred.service)
-          notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
+          notify_msg = notify_msg .. "\n\n" .. messages["ui.request.auth_expired"]{}
         elseif current_provider:is_rate_limit_error(msg) then
           local details = current_provider:format_rate_limit_details()
           if details then
             notify_msg = notify_msg .. "\n\n" .. details
           end
-          notify_msg = notify_msg .. "\n\nTry again in a moment."
+          notify_msg = notify_msg .. "\n\n" .. messages["ui.request.rate_limited"]{}
         end
         if log.is_enabled() then
-          notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
+          notify_msg = notify_msg .. "\n" .. messages["ui.request.see_log"]{ path = log.get_path() }
         end
         notify.error(notify_msg)
       end)
@@ -1710,26 +1704,17 @@ function M._run_send_pipeline(bufnr, opts)
 
           local error_msg
           if effective_code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
-            error_msg =
-              string.format("cURL could not resolve host (exit code %d). Check network or hostname.", effective_code)
+            error_msg = messages["ui.request.curl_resolve_failed"]{ code = effective_code }
           elseif effective_code == 7 then -- CURLE_COULDNT_CONNECT
-            error_msg = string.format(
-              "cURL could not connect to host (exit code %d). Check network or if the host is up.",
-              effective_code
-            )
+            error_msg = messages["ui.request.curl_connect_failed"]{ code = effective_code }
           elseif effective_code == 28 then -- cURL timeout error
-            local timeout_value = effective_timeout -- Captured before async callback
-            error_msg = string.format(
-              "cURL request timed out (exit code %d). Timeout is %s seconds.",
-              effective_code,
-              tostring(timeout_value)
-            )
+            error_msg = messages["ui.request.curl_timeout"]{ code = effective_code, timeout = effective_timeout }
           else -- Other cURL errors
-            error_msg = string.format("cURL request failed (exit code %d).", effective_code)
+            error_msg = messages["ui.request.curl_failed"]{ code = effective_code }
           end
 
           if log.is_enabled() then
-            error_msg = error_msg .. " See " .. log.get_path() .. " for details."
+            error_msg = error_msg .. " " .. messages["ui.request.see_log"]{ path = log.get_path() }
           end
           notify.error(error_msg)
 
