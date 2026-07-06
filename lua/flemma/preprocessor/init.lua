@@ -7,6 +7,7 @@
 local M = {}
 
 local context_module = require("flemma.preprocessor.context")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.preprocessor.registry")
@@ -284,7 +285,9 @@ function M.setup()
   for _, module_path in ipairs(BUILTIN_REWRITERS) do
     local load_ok, load_err = pcall(M.register, module_path)
     if not load_ok then
-      notify.warn("Failed to load built-in rewriter " .. module_path .. ": " .. tostring(load_err))
+      notify.warn(
+        messages["ui.preprocessor.rewriter_load_failed"]{ module = module_path, reason = tostring(load_err) }
+      )
     end
   end
 

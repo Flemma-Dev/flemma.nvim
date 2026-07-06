@@ -4,7 +4,10 @@
 #   Pass 1: msgfmt --check on every po/*.po (PO syntax, format-string consistency)
 #   Pass 2: every messages["key"] in source resolves to a PO entry (ERROR — runtime crash)
 #   Pass 3: every PO entry is referenced in source (WARNING — dead key, wasted translator effort)
-#   Pass 4: messages import naming via ast-grep (must be `local messages`)
+#   Pass 4: variable consistency — call-site {vars} vs msgstr {{ placeholders }},
+#           #. Variables: comments, and pure-formatting entries (no translatable words)
+#   Pass 5: messages import naming via ast-grep (must be `local messages`)
+#   Pass 6: user-facing notify.* must route through messages, not inline literals
 # Exits 0 if clean (warnings are reported but non-fatal), 1 on errors.
 set -euo pipefail
 
@@ -146,6 +149,15 @@ if [ -f "$call_site_rule" ]; then
       current_str="${current_str}${BASH_REMATCH[1]}"
     elif [[ -z "$line" || "$line" =~ ^# ]] && [ -n "$current_key" ]; then
       if [ -n "$current_str" ]; then
+        # Pure-formatting check: strip {{ vars }} and every non-letter. If
+        # nothing remains, the entry has no translatable words — it's pure
+        # formatting (e.g. "{{ path }}: {{ message }}") and should be composed
+        # in code, not catalogued. Letters from any script count (Unicode-aware).
+        stripped=$(echo "$current_str" | sed 's/{{[^}]*}}//g' | grep -oP '[[:alpha:]]' || true)
+        if [ -z "$stripped" ]; then
+          echo "  ERROR: msgid \"${current_key}\" is pure formatting (no translatable words): \"${current_str}\""
+          errors=$((errors + 1))
+        fi
         vars=$(echo "$current_str" | grep -oP '\{\{\s*\K\w+(?=\s*\}\})' | sort -u | tr '\n' ',' | sed 's/,$//' || true)
         # Plural entries implicitly accept `count` for the Plural-Forms selector.
         if [ -n "${plural_keys[$current_key]:-}" ]; then
@@ -213,6 +225,21 @@ if [ -n "$naming_output" ]; then
   echo "$naming_output"
   errors=$((errors + 1))
 fi
+
+# --- Pass 6: user-facing notify.* must route through messages ---
+# A string literal (two or more letters) spliced into notify.warn/error/info
+# is untranslated prose. Catalogue keys (messages["ui.x"]) are excluded by the
+# rule; only direct literals match. Reported as errors — the whole point of the
+# catalogue is that the user-facing surface is translatable.
+
+notify_rule="${script_dir}/notify-string-literal.yml"
+while IFS= read -r match_line; do
+  [ -z "$match_line" ] && continue
+  echo "  ERROR: user-facing notify with an inline string literal (route through messages):"
+  echo "    ${match_line}"
+  errors=$((errors + 1))
+done < <(ast-grep scan --rule "${notify_rule}" --json=compact lua/ 2>/dev/null |
+  jq -r '.[] | "\(.file):\(.range.start.line + 1): \(.text | gsub("\n";" ") | .[0:80])"')
 
 # --- Summary ---
 

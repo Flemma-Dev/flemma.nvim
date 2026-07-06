@@ -523,6 +523,11 @@ msgstr "Auto-newline after role markers"
 msgid "ui.keymap.insert_send"
 msgstr "Send to Flemma and continue editing"
 
+#. Preprocessor rewriter load failure.
+#. Variables: {{ module }}, {{ reason }}.
+msgid "ui.preprocessor.rewriter_load_failed"
+msgstr "Failed to load built-in rewriter {{ module }}: {{ reason }}"
+
 #. Migration notices (buffer open).
 #. Variables: {{ count }} — number of orphaned jobs resolved.
 msgid "ui.migration.orphaned_jobs_resolved"
