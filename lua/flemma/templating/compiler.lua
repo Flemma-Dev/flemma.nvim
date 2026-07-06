@@ -8,6 +8,7 @@ local ast = require("flemma.ast")
 local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local encoding = require("flemma.utilities.encoding")
 local readiness = require("flemma.readiness")
 
@@ -357,7 +358,7 @@ function M.execute(result, env)
         table.insert(diagnostics, {
           type = "template",
           severity = "warning",
-          error = "Error during emit: " .. tostring(err),
+          error = messages["ui.template.emit_error"]{ detail = tostring(err) },
           source_file = env.__filename or "N/A",
         })
       end

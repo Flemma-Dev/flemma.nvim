@@ -523,6 +523,43 @@ msgstr "Auto-newline after role markers"
 msgid "ui.keymap.insert_send"
 msgstr "Send to Flemma and continue editing"
 
+#. Template evaluation diagnostics — shown when a user's {{ }} expression or
+#. @file reference fails. Lua/libuv stdlib error details stay as {{ detail }}.
+msgid "ui.template.file_drift_label"
+msgstr "File drift detected (content changed since last request)"
+
+#. Variables: {{ path }} — the file whose content changed.
+msgid "ui.template.file_changed"
+msgstr "File changed since last request: {{ path }}"
+
+#. Variables: {{ received }} — the type actually passed to include().
+msgid "ui.template.include_expects_string"
+msgstr "include() expects a string path, got {{ received }}"
+
+#. Variables: {{ name }} — the unknown personality name.
+msgid "ui.template.unknown_personality"
+msgstr "Unknown personality: '{{ name }}'"
+
+#. Variables: {{ name }}, {{ suggestion }}.
+msgid "ui.template.unknown_personality_suggestion"
+msgstr "Unknown personality: '{{ name }}' — did you mean '{{ suggestion }}'?"
+
+#. Variables: {{ path }} — the resolved file path.
+msgid "ui.template.file_not_found"
+msgstr "File not found: {{ path }}"
+
+#. Variables: {{ path }} — the resolved file path.
+msgid "ui.template.mime_undetermined"
+msgstr "Could not determine MIME type for: {{ path }}"
+
+#. Variables: {{ filename }} — the file requesting the circular include.
+msgid "ui.template.circular_include"
+msgstr "Circular include detected (requested by '{{ filename }}')"
+
+#. Variables: {{ detail }} — the underlying Lua error (not translated).
+msgid "ui.template.emit_error"
+msgstr "Error during emit: {{ detail }}"
+
 #. Preprocessor rewriter load failure.
 #. Variables: {{ module }}, {{ reason }}.
 msgid "ui.preprocessor.rewriter_load_failed"

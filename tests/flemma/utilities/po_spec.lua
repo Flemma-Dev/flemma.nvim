@@ -474,6 +474,10 @@ describe("flemma.utilities.po", function()
       "ui.usage.pricing_suffix",
       "ui.usage.estimate_tokens_only",
       "ui.usage.estimate_with_cost",
+      "ui.template.file_not_found",
+      "ui.template.circular_include",
+      "ui.template.unknown_personality_suggestion",
+      "ui.template.emit_error",
     })
 
     it("keeps keys unique across the shipped catalogues", function()

@@ -15,6 +15,7 @@ local M = {}
 local templating = require("flemma.templating")
 local emittable = require("flemma.emittable")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
@@ -58,8 +59,8 @@ local function check_file_drift(env, target_path, content)
     table.insert(collector, {
       type = "custom:file_drift",
       severity = "warning",
-      label = "File drift detected (content changed since last request)",
-      error = string.format("File changed since last request: %s", target_path),
+      label = messages["ui.template.file_drift_label"]{},
+      error = messages["ui.template.file_changed"]{ path = target_path },
       filename = target_path,
     })
   end
@@ -113,7 +114,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     if type(relative_path) ~= "string" then
       error({
         type = "expression",
-        error = string.format("include() expects a string path, got %s", type(relative_path)),
+        error = messages["ui.template.include_expects_string"]{ received = type(relative_path) },
       })
     end
 
@@ -124,11 +125,14 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       local personality_name = relative_path:sub(#PERSONALITY_URN_PREFIX + 1)
       local personality = personality_registry.get(personality_name)
       if not personality then
-        local msg = string.format("Unknown personality: '%s'", personality_name)
         local all_personalities = personality_registry.get_all()
         local suggestion = str.closest_match(personality_name, all_personalities)
+        local msg
         if suggestion then
-          msg = msg .. string.format(". Did you mean '%s'?", suggestion)
+          msg =
+            messages["ui.template.unknown_personality_suggestion"]{ name = personality_name, suggestion = suggestion }
+        else
+          msg = messages["ui.template.unknown_personality"]{ name = personality_name }
         end
         error({ type = "expression", error = msg })
       end
@@ -147,7 +151,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         type = "file",
         filename = target_path,
         raw = relative_path,
-        error = "File not found: " .. target_path,
+        error = messages["ui.template.file_not_found"]{ path = target_path },
         include_stack = { unpack(include_stack) },
       })
     end
@@ -162,7 +166,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
           type = "file",
           filename = target_path,
           raw = relative_path,
-          error = "Could not determine MIME type for: " .. target_path,
+          error = messages["ui.template.mime_undetermined"]{ path = target_path },
           include_stack = { unpack(include_stack) },
         })
       end
@@ -189,7 +193,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
           type = "file",
           filename = target_path,
           raw = relative_path,
-          error = string.format("Circular include detected (requested by '%s')", env.__filename or "N/A"),
+          error = messages["ui.template.circular_include"]{ filename = env.__filename or "N/A" },
           include_stack = { unpack(include_stack) },
         })
       end
