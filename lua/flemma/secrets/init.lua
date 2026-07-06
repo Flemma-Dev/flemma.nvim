@@ -56,12 +56,9 @@ function M.resolve(credential)
     end)
   end)
 
-  error(
-    readiness.Suspense.new(
-      "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)) .. "…",
-      boundary
-    )
-  )
+  local description = credential.description
+    or messages["ui.secrets.credential_description"]{ kind = credential.kind, service = credential.service }
+  error(readiness.Suspense.new(messages["ui.secrets.resolving"]{ description = description }, boundary))
 end
 
 ---@param credential flemma.secrets.Credential

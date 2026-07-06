@@ -435,6 +435,14 @@ describe("flemma.utilities.po", function()
       "ui.tool.no_pending_approve",
       "ui.tool.nothing_to_cancel_retry",
       "ui.migration.orphaned_jobs_resolved",
+      "ui.secrets.resolving",
+      "ui.secrets.credential_description",
+      "ui.tool.loading",
+      "ui.config.apply_unknown_key",
+      "ui.config.apply_list_item_error",
+      "ui.config.apply_validation_error",
+      "ui.diagnostics.unknown_error",
+      "ui.diagnostics.in_role",
     })
 
     it("keeps keys unique across the shipped catalogues", function()

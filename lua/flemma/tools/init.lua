@@ -207,7 +207,7 @@ function M.ensure_ready()
         done({ ok = true })
       end)
     end)
-    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
+    error(readiness.Suspense.new(messages["ui.tool.loading"]{}, boundary))
   end
   ensure_modules_loaded()
 end

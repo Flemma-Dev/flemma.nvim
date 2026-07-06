@@ -374,6 +374,40 @@ msgstr "failed to load secrets resolver: {{ source }}"
 msgid "ui.secrets.missing_name"
 msgstr "secrets resolver module missing 'name' field: {{ source }}"
 
+#. Suspense messages — shown when the send pipeline blocks on a dependency.
+#. Variables: {{ description }} — what is being resolved (credential label or fallback).
+msgid "ui.secrets.resolving"
+msgstr "Resolving {{ description }}…"
+
+#. Fallback credential label when no description is set.
+#. Variables: {{ kind }}, {{ service }}.
+msgid "ui.secrets.credential_description"
+msgstr "{{ kind }} for {{ service }}"
+
+msgid "ui.tool.loading"
+msgstr "Waiting for tool definitions to load…"
+
+#. config.apply validation errors — prefixed with "config.apply: " at call site.
+#. Variables: {{ key }} — the unrecognized config path.
+msgid "ui.config.apply_unknown_key"
+msgstr "unknown key '{{ key }}'"
+
+#. Variables: {{ index }}, {{ path }}, {{ reason }}.
+msgid "ui.config.apply_list_item_error"
+msgstr "list item[{{ index }}] at '{{ path }}': {{ reason }}"
+
+#. Variables: {{ path }}, {{ reason }}.
+msgid "ui.config.apply_validation_error"
+msgstr "validation error at '{{ path }}': {{ reason }}"
+
+#. Diagnostic formatting fallbacks.
+msgid "ui.diagnostics.unknown_error"
+msgstr "unknown error"
+
+#. Variables: {{ role }} — the @Role marker.
+msgid "ui.diagnostics.in_role"
+msgstr "in @{{ role }}"
+
 #. Migration notices (buffer open).
 #. Variables: {{ count }} — number of orphaned jobs resolved.
 msgid "ui.migration.orphaned_jobs_resolved"

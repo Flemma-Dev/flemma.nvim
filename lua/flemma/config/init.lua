@@ -142,7 +142,7 @@ local function apply_recursive(ctx, path, value)
         return true
       end
     end
-    return report_error(ctx, string.format("config.apply: unknown key '%s'", path))
+    return report_error(ctx, "config.apply: " .. messages["ui.config.apply_unknown_key"]{ key = path })
   end
 
   if leaf:is_object() and type(value) == "table" then
@@ -159,7 +159,8 @@ local function apply_recursive(ctx, path, value)
           if not ok then
             return report_error(
               ctx,
-              string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid")
+              "config.apply: "
+                .. messages["ui.config.apply_list_item_error"]{ index = i, path = path, reason = err or "invalid" }
             )
           end
         end
@@ -183,7 +184,10 @@ local function apply_recursive(ctx, path, value)
     end
     local valid, err = leaf:validate_value(value)
     if not valid then
-      return report_error(ctx, string.format("config.apply: validation error at '%s': %s", path, err or "invalid"))
+      return report_error(
+        ctx,
+        "config.apply: " .. messages["ui.config.apply_validation_error"]{ path = path, reason = err or "invalid" }
+      )
     end
     store.record(ctx.layer, ctx.bufnr, "set", path, value)
   end
