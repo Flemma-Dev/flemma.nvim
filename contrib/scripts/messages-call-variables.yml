@@ -1,0 +1,7 @@
+# ast-grep rule: match messages["key"]{ ... } brace-call sites.
+# Used by lint-messages.sh to extract the key and the table constructor
+# for variable consistency checking against PO template placeholders.
+id: messages-call-variables
+language: lua
+rule:
+  pattern: messages[$KEY]{ $$$ }

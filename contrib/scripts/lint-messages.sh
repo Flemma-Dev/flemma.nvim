@@ -88,9 +88,103 @@ if [ -n "$unused" ]; then
   done <<<"$unused"
 fi
 
-# --- Pass 4: messages import naming (ast-grep) ---
+# --- Pass 4: variable consistency ---
+# For each messages["key"]{ var = ... } call, extract the variable names
+# passed at the call site and compare against {{ var }} placeholders in the
+# PO msgstr. Mismatches are warnings (call-site typo or missing template var).
 
-naming_rule="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/messages-import-name.yml"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+call_site_rule="${script_dir}/messages-call-variables.yml"
+if [ -f "$call_site_rule" ]; then
+  # Build key→call-site-variables map from ast-grep matches.
+  declare -A call_vars
+  while IFS=$'\t' read -r raw_key match_text; do
+    [ -z "$raw_key" ] && continue
+    key="${raw_key#\"}"
+    key="${key%\"}"
+    # Strip the messages["..."]{ prefix, then extract word = field names.
+    # The jq output already has newlines replaced with spaces.
+    body="${match_text#*\{}"
+    vars=$(echo "$body" | grep -oP '\b\w+(?=\s*=\s)' | sort -u | tr '\n' ',' | sed 's/,$//' || true)
+    if [ -n "$vars" ]; then
+      call_vars["$key"]="$vars"
+    fi
+  done < <(ast-grep scan --rule "$call_site_rule" --json=compact lua/ tests/ 2>/dev/null |
+    jq -r '.[] | .metaVariables.single.KEY.text + "\t" + (.text | gsub("\n"; " "))')
+
+  # Build key→template-variables map from PO msgstr {{ var }} placeholders.
+  # Plural entries implicitly accept `count` for the Plural-Forms selector.
+  declare -A tmpl_vars
+  declare -A plural_keys
+  current_key=""
+  current_str=""
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^msgid\ \"(.+)\"$ ]]; then
+      current_key="${BASH_REMATCH[1]}"
+      current_str=""
+    elif [[ "$line" =~ ^msgid_plural ]]; then
+      plural_keys["$current_key"]=1
+    elif [[ "$line" =~ ^msgstr(\[[0-9]+\])?\ \"(.*)\"$ ]]; then
+      current_str="${current_str}${BASH_REMATCH[2]}"
+    elif [[ "$line" =~ ^\"(.*)\"$ ]]; then
+      current_str="${current_str}${BASH_REMATCH[1]}"
+    elif [[ -z "$line" || "$line" =~ ^# ]] && [ -n "$current_key" ]; then
+      if [ -n "$current_str" ]; then
+        vars=$(echo "$current_str" | grep -oP '\{\{\s*\K\w+(?=\s*\}\})' | sort -u | tr '\n' ',' | sed 's/,$//' || true)
+        # Plural entries implicitly accept `count` for the Plural-Forms selector.
+        if [ -n "${plural_keys[$current_key]:-}" ]; then
+          if [ -n "$vars" ]; then
+            vars=$(echo "$vars,count" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+          else
+            vars="count"
+          fi
+        fi
+        if [ -n "$vars" ]; then
+          tmpl_vars["$current_key"]="$vars"
+        fi
+      fi
+      current_key=""
+      current_str=""
+    fi
+  done < <(
+    cat po/*.po
+    echo ""
+  )
+
+  # Compare: call-site variables vs template variables.
+  for key in "${!call_vars[@]}"; do
+    cv="${call_vars[$key]}"
+    tv="${tmpl_vars[$key]:-}"
+    if [ -n "$cv" ] && [ -z "$tv" ]; then
+      echo "  WARNING: messages[\"${key}\"] passes variables (${cv}) but msgstr has no {{ }} placeholders"
+      warnings=$((warnings + 1))
+    elif [ -n "$cv" ] && [ -n "$tv" ]; then
+      # Normalize for comparison (sorted comma-separated).
+      cv_sorted=$(echo "$cv" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
+      tv_sorted=$(echo "$tv" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
+      if [ "$cv_sorted" != "$tv_sorted" ]; then
+        echo "  WARNING: messages[\"${key}\"] variable mismatch — call site: ${cv_sorted}, template: ${tv_sorted}"
+        warnings=$((warnings + 1))
+      fi
+    fi
+  done
+
+  # Reverse: template has {{ }} but call site passes no variables.
+  for key in "${!tmpl_vars[@]}"; do
+    if [ -z "${call_vars[$key]:-}" ]; then
+      # Only warn if this key appears in source at all (dead keys handled above).
+      if echo "$source_keys" | grep -qxF "$key"; then
+        echo "  WARNING: msgid \"${key}\" has {{ }} placeholders but no call site passes variables"
+        warnings=$((warnings + 1))
+      fi
+    fi
+  done
+fi
+
+# --- Pass 5: messages import naming (ast-grep) ---
+
+naming_rule="${script_dir}/messages-import-name.yml"
 naming_output=$(ast-grep scan --rule "${naming_rule}" lua/ 2>&1) || true
 if [ -n "$naming_output" ]; then
   echo "$naming_output"
