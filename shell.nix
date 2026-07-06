@@ -34,6 +34,7 @@ pkgs-stable.mkShell {
     gettext
     gh
     google-cloud-sdk
+    jq
     libsecret
     links2
     mcporter

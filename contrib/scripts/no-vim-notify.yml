@@ -1,0 +1,24 @@
+# ast-grep rule driving contrib/scripts/lint-no-vim-notify.sh.
+#
+# Flags direct vim.notify / vim.notify_once calls in production code; all
+# user-facing notifications must go through flemma.notify (see
+# lua/flemma/notify.lua). Matching the call node structurally means comments
+# and string literals that merely contain the text "vim.notify" are ignored for
+# free — unlike the previous grep, which stripped `-- comments` by hand and
+# carried a documented false-positive on `--` appearing inside string literals.
+#
+# ignores lists the two files permitted to call vim.notify directly:
+#   notify.lua: the flemma.notify module itself; its default_impl IS a vim.notify call.
+#   init.lua:   pre-Neovim-0.11 fallback that bypasses flemma.notify because the
+#               module needs vim.uv (0.11+) and would fail to load on older versions.
+id: no-direct-vim-notify
+language: lua
+rule:
+  any:
+    - pattern: vim.notify($$$)
+    - pattern: vim.notify_once($$$)
+ignores:
+  - lua/flemma/notify.lua
+  - lua/flemma/init.lua
+message: "Use flemma.notify instead of direct vim.notify (see lua/flemma/notify.lua)."
+severity: error
