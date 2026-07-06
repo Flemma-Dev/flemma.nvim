@@ -71,7 +71,7 @@ M.setup = function()
       if config.keymaps.normal.send then
         vim.keymap.set("n", config.keymaps.normal.send, function()
           core.send_or_execute({ user_initiated = true, bufnr = vim.api.nvim_get_current_buf() })
-        end, { buffer = true, desc = "Send to Flemma" })
+        end, { buffer = true, desc = messages["ui.keymap.send"]{} })
       end
 
       if config.keymaps.normal.tool_execute then
@@ -82,7 +82,7 @@ M.setup = function()
           if not ok then
             notify.error(err or messages["ui.tool.execute_failed"]{})
           end
-        end, { buffer = true, desc = "Execute Flemma tool at cursor" })
+        end, { buffer = true, desc = messages["ui.keymap.tool_execute"]{} })
       end
 
       if config.keymaps.normal.tool_background then
@@ -95,7 +95,7 @@ M.setup = function()
           else
             notify.info(messages["ui.tool.backgrounded"]{})
           end
-        end, { buffer = true, desc = "Move Flemma tool to background" })
+        end, { buffer = true, desc = messages["ui.keymap.tool_background"]{} })
       end
 
       if config.keymaps.normal.tool_approve then
@@ -106,14 +106,14 @@ M.setup = function()
           if not ok then
             notify.error(err or messages["ui.tool.approve_failed"]{})
           end
-        end, { buffer = true, desc = "Approve Flemma tool at cursor" })
+        end, { buffer = true, desc = messages["ui.keymap.tool_approve"]{} })
       end
 
       if config.keymaps.normal.tool_reject then
         vim.keymap.set("n", config.keymaps.normal.tool_reject, function()
           local bufnr = vim.api.nvim_get_current_buf()
           rejection.open(bufnr)
-        end, { buffer = true, desc = "Reject Flemma tool at cursor" })
+        end, { buffer = true, desc = messages["ui.keymap.tool_reject"]{} })
       end
 
       if config.keymaps.normal.tool_approve_all then
@@ -124,7 +124,7 @@ M.setup = function()
           if not ok then
             notify.error(err or messages["ui.tool.no_pending_approve"]{})
           end
-        end, { buffer = true, desc = "Approve all pending Flemma tools" })
+        end, { buffer = true, desc = messages["ui.keymap.tool_approve_all"]{} })
       end
 
       if config.keymaps.normal.cancel then
@@ -157,7 +157,7 @@ M.setup = function()
           last_cancel_miss_at = now
           log.debug("keymaps: Ctrl+C miss in buffer " .. bufnr .. ", awaiting double-tap for RAGE cancel")
           notify.info(messages["ui.tool.nothing_to_cancel_retry"]{})
-        end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
+        end, { buffer = true, desc = messages["ui.keymap.cancel"]{} })
       end
 
       -- Message navigation keymaps
@@ -166,7 +166,7 @@ M.setup = function()
           "n",
           config.keymaps.normal.message_next,
           navigation.find_next_message,
-          { buffer = true, desc = "Jump to next message" }
+          { buffer = true, desc = messages["ui.keymap.message_next"]{} }
         )
       end
 
@@ -175,7 +175,7 @@ M.setup = function()
           "n",
           config.keymaps.normal.message_prev,
           navigation.find_prev_message,
-          { buffer = true, desc = "Jump to previous message" }
+          { buffer = true, desc = messages["ui.keymap.message_prev"]{} }
         )
       end
 
@@ -188,7 +188,7 @@ M.setup = function()
             "n",
             fold_toggle_key,
             folding.toggle_message_fold,
-            { buffer = true, desc = "Toggle message fold" }
+            { buffer = true, desc = messages["ui.keymap.fold_toggle"]{} }
           )
         end
       end
@@ -199,7 +199,7 @@ M.setup = function()
           "n",
           config.keymaps.normal.fold_turn,
           folding.fold_turn_at_cursor,
-          { buffer = true, desc = "Fold intermediate messages in current turn" }
+          { buffer = true, desc = messages["ui.keymap.fold_turn"]{} }
         )
       end
 
@@ -208,7 +208,7 @@ M.setup = function()
           "n",
           config.keymaps.normal.fold_turns,
           folding.fold_all_turns,
-          { buffer = true, desc = "Fold intermediate messages in all turns" }
+          { buffer = true, desc = messages["ui.keymap.fold_turns"]{} }
         )
       end
 
@@ -220,9 +220,17 @@ M.setup = function()
         and cfg_for_conceal.editing.conceal ~= false
       if has_conceal then
         local conceal_maps = {
-          { key = config.keymaps.normal.conceal_toggle, fn = ui.toggle_conceal, desc = "Toggle conceal level" },
-          { key = config.keymaps.normal.conceal_on, fn = ui.enable_conceal, desc = "Enable conceal" },
-          { key = config.keymaps.normal.conceal_off, fn = ui.disable_conceal, desc = "Disable conceal" },
+          {
+            key = config.keymaps.normal.conceal_toggle,
+            fn = ui.toggle_conceal,
+            desc = messages["ui.keymap.conceal_toggle"]{},
+          },
+          { key = config.keymaps.normal.conceal_on, fn = ui.enable_conceal, desc = messages["ui.keymap.conceal_on"]{} },
+          {
+            key = config.keymaps.normal.conceal_off,
+            fn = ui.disable_conceal,
+            desc = messages["ui.keymap.conceal_off"]{},
+          },
         }
         for _, m in ipairs(conceal_maps) do
           if m.key then
@@ -277,7 +285,7 @@ M.setup = function()
 
         -- Safety timer: clean up if nothing typed within the window
         vim.defer_fn(cleanup, CANCEL_WINDOW_MS)
-      end, { buffer = true, desc = "Auto-newline after role markers" })
+      end, { buffer = true, desc = messages["ui.keymap.colon_insert"]{} })
 
       -- Insert mode mapping - send and return to insert mode
       if config.keymaps.insert.send then
@@ -295,7 +303,7 @@ M.setup = function()
               end,
             })
           end)
-        end, { buffer = true, desc = "Send to Flemma and continue editing" })
+        end, { buffer = true, desc = messages["ui.keymap.insert_send"]{} })
       end
     end)
   end

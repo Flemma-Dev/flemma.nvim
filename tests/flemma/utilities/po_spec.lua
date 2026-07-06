@@ -443,6 +443,23 @@ describe("flemma.utilities.po", function()
       "ui.config.apply_validation_error",
       "ui.diagnostics.unknown_error",
       "ui.diagnostics.in_role",
+      "ui.keymap.send",
+      "ui.keymap.tool_execute",
+      "ui.keymap.tool_background",
+      "ui.keymap.tool_approve",
+      "ui.keymap.tool_reject",
+      "ui.keymap.tool_approve_all",
+      "ui.keymap.cancel",
+      "ui.keymap.message_next",
+      "ui.keymap.message_prev",
+      "ui.keymap.fold_toggle",
+      "ui.keymap.fold_turn",
+      "ui.keymap.fold_turns",
+      "ui.keymap.conceal_toggle",
+      "ui.keymap.conceal_on",
+      "ui.keymap.conceal_off",
+      "ui.keymap.colon_insert",
+      "ui.keymap.insert_send",
     })
 
     it("keeps keys unique across the shipped catalogues", function()

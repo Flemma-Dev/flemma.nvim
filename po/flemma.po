@@ -408,6 +408,58 @@ msgstr "unknown error"
 msgid "ui.diagnostics.in_role"
 msgstr "in @{{ role }}"
 
+#. Keymap descriptions — shown in :map, which-key, telescope keymaps.
+msgid "ui.keymap.send"
+msgstr "Send to Flemma"
+
+msgid "ui.keymap.tool_execute"
+msgstr "Execute Flemma tool at cursor"
+
+msgid "ui.keymap.tool_background"
+msgstr "Move Flemma tool to background"
+
+msgid "ui.keymap.tool_approve"
+msgstr "Approve Flemma tool at cursor"
+
+msgid "ui.keymap.tool_reject"
+msgstr "Reject Flemma tool at cursor"
+
+msgid "ui.keymap.tool_approve_all"
+msgstr "Approve all pending Flemma tools"
+
+msgid "ui.keymap.cancel"
+msgstr "Cancel Flemma Request or Tool"
+
+msgid "ui.keymap.message_next"
+msgstr "Jump to next message"
+
+msgid "ui.keymap.message_prev"
+msgstr "Jump to previous message"
+
+msgid "ui.keymap.fold_toggle"
+msgstr "Toggle message fold"
+
+msgid "ui.keymap.fold_turn"
+msgstr "Fold intermediate messages in current turn"
+
+msgid "ui.keymap.fold_turns"
+msgstr "Fold intermediate messages in all turns"
+
+msgid "ui.keymap.conceal_toggle"
+msgstr "Toggle conceal level"
+
+msgid "ui.keymap.conceal_on"
+msgstr "Enable conceal"
+
+msgid "ui.keymap.conceal_off"
+msgstr "Disable conceal"
+
+msgid "ui.keymap.colon_insert"
+msgstr "Auto-newline after role markers"
+
+msgid "ui.keymap.insert_send"
+msgstr "Send to Flemma and continue editing"
+
 #. Migration notices (buffer open).
 #. Variables: {{ count }} — number of orphaned jobs resolved.
 msgid "ui.migration.orphaned_jobs_resolved"
