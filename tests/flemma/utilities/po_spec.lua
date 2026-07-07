@@ -552,6 +552,7 @@ describe("flemma.utilities.po", function()
       "ui.template.circular_include",
       "ui.template.unknown_personality_suggestion",
       "ui.template.emit_error",
+      "ui.template.expression_parse_error",
       "ui.template.file_open_failed",
       "ui.template.file_read_failed",
       "ui.parse.tool_result_unclosed_fence",

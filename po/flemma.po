@@ -560,6 +560,11 @@ msgstr "Circular include detected (requested by '{{ filename }}')"
 msgid "ui.template.emit_error"
 msgstr "Error during emit: {{ detail }}"
 
+#. Variables: {{ filename }} — the .chat file being evaluated; {{ expression }}
+#. — the expression source; {{ detail }} — the Lua parser error (not translated).
+msgid "ui.template.expression_parse_error"
+msgstr "Parse error in '{{ filename }}' for expression '{{ expression }}': {{ detail }}"
+
 #. @file / include() read failures. Variables: {{ detail }} — the underlying
 #. io.open error (not translated); our wrapper prose is the translatable part.
 msgid "ui.template.file_open_failed"

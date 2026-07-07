@@ -390,7 +390,15 @@ function M.eval_expression(expr, env)
 
   local compiled_fn, parse_err = load(expr, "expression", "t", env)
   if not compiled_fn then
-    error(string.format("Parse error in '%s' for expression '{{%s}}': %s", (env.__filename or "N/A"), expr, parse_err))
+    error({
+      type = "expression",
+      severity = "error",
+      error = messages["ui.template.expression_parse_error"]{
+        filename = env.__filename or "N/A",
+        expression = expr,
+        detail = parse_err,
+      },
+    })
   end
 
   local ok, eval_result = pcall(compiled_fn)
