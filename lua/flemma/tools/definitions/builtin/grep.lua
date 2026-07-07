@@ -130,12 +130,8 @@ M.definitions = {
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Search file contents for patterns using ripgrep or grep",
-        guidelines = {
-          "Use grep to find specific patterns, symbols, or text across the codebase",
-          "Prefer specific patterns over broad ones to reduce noise",
-          "Use glob filter to narrow search to relevant file types",
-        },
+        snippet = messages["tool.grep.personality.snippet"]{},
+        guidelines = messages["tool.grep.personality.guidelines"]{},
       },
     },
     async = true,

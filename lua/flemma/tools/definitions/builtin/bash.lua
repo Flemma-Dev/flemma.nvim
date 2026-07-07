@@ -486,11 +486,8 @@ M.definitions = {
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Execute shell commands in the user's project directory",
-        guidelines = {
-          "Prefer dedicated tools (read, edit, write) over bash for file operations",
-          "Never run destructive commands (rm -rf, git reset --hard) without user confirmation",
-        },
+        snippet = messages["tool.bash.personality.snippet"]{},
+        guidelines = messages["tool.bash.personality.guidelines"]{},
       },
     },
     async = true,

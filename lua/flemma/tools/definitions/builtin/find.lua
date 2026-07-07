@@ -156,11 +156,8 @@ M.definitions = {
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Find files matching a glob pattern in the project",
-        guidelines = {
-          "Use find to discover file locations before reading or editing",
-          "Use specific patterns to narrow results (e.g., '*.test.lua' not '*')",
-        },
+        snippet = messages["tool.find.personality.snippet"]{},
+        guidelines = messages["tool.find.personality.guidelines"]{},
       },
     },
     async = true,

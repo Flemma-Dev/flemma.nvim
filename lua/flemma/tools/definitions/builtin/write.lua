@@ -23,10 +23,8 @@ M.definitions = {
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Create new files or completely overwrite existing ones",
-        guidelines = {
-          "Prefer edit over write for modifying existing files",
-        },
+        snippet = messages["tool.write.personality.snippet"]{},
+        guidelines = messages["tool.write.personality.guidelines"]{},
       },
     },
     async = false,

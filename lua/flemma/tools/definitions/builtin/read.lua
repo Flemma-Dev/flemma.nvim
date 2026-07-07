@@ -30,10 +30,8 @@ M.definitions = {
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Read file contents with optional offset and line limit",
-        guidelines = {
-          "Use read to examine files before editing",
-        },
+        snippet = messages["tool.read.personality.snippet"]{},
+        guidelines = messages["tool.read.personality.guidelines"]{},
       },
     },
     async = false,

@@ -92,11 +92,8 @@ M.definitions = {
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "List directory contents with optional depth and entry limit",
-        guidelines = {
-          "Use ls to explore project structure before reading individual files",
-          "Prefer max_depth=1 for broad overviews, increase depth for targeted exploration",
-        },
+        snippet = messages["tool.ls.personality.snippet"]{},
+        guidelines = messages["tool.ls.personality.guidelines"]{},
       },
     },
     async = false,

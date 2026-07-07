@@ -131,6 +131,19 @@ msgstr "The bash command to execute"
 msgid "tool.bash.input.timeout"
 msgstr "Timeout in seconds (default: 30)"
 
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.bash.personality.snippet"
+msgstr "Execute shell commands in the user's project directory"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.bash.personality.guidelines"
+msgstr ""
+"Prefer dedicated tools (read, edit, write) over bash for file operations\n"
+"Never run destructive commands (rm -rf, git reset --hard) without user confirmation"
+
 #. Runtime result strings (model-facing output/errors).
 msgid "tool.bash.error.no_command"
 msgstr "No command provided"
@@ -159,6 +172,19 @@ msgstr "Exact text to find and replace (must match exactly)"
 
 msgid "tool.edit.input.newText"
 msgstr "New text to replace the old text with"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.edit.personality.snippet"
+msgstr "Make surgical edits to files (find exact text and replace)"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.edit.personality.guidelines"
+msgstr ""
+"Use edit for precise, targeted changes — old text must match exactly\n"
+"Use write only for new files or complete rewrites, not for modifications"
 
 #. Runtime result strings (model-facing output/errors).
 msgid "tool.edit.error.no_old_text"
@@ -207,6 +233,19 @@ msgstr "Directory to search in (default: working directory)"
 #. Variables: {{ default_limit }} — the default result cap.
 msgid "tool.find.input.limit"
 msgstr "Maximum number of results (default: {{ default_limit }})"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.find.personality.snippet"
+msgstr "Find files matching a glob pattern in the project"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.find.personality.guidelines"
+msgstr ""
+"Use find to discover file locations before reading or editing\n"
+"Use specific patterns to narrow results (e.g., '*.test.lua' not '*')"
 
 #. Runtime result strings (model-facing output/errors).
 msgid "tool.find.error.no_backend"
@@ -270,6 +309,20 @@ msgstr "File glob filter (e.g., '*.lua', '*.{ts,tsx}')"
 msgid "tool.grep.input.limit"
 msgstr "Maximum number of matches (default: {{ default_limit }})"
 
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.grep.personality.snippet"
+msgstr "Search file contents for patterns using ripgrep or grep"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.grep.personality.guidelines"
+msgstr ""
+"Use grep to find specific patterns, symbols, or text across the codebase\n"
+"Prefer specific patterns over broad ones to reduce noise\n"
+"Use glob filter to narrow search to relevant file types"
+
 #. Result summary footer appended to grep output. count selects singular/plural.
 #. Variables: {{ count }} — match count.
 msgid "tool.grep.footer"
@@ -319,6 +372,19 @@ msgstr "Maximum recursion depth (default: 1, max: 10)"
 msgid "tool.ls.input.limit"
 msgstr "Maximum number of entries (default: 500)"
 
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.ls.personality.snippet"
+msgstr "List directory contents with optional depth and entry limit"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.ls.personality.guidelines"
+msgstr ""
+"Use ls to explore project structure before reading individual files\n"
+"Prefer max_depth=1 for broad overviews, increase depth for targeted exploration"
+
 #. Result summary footer appended to ls output. count selects singular/plural.
 #. Variables: {{ count }} — entry count.
 msgid "tool.ls.footer"
@@ -351,6 +417,17 @@ msgstr "Line number to start reading from (1-indexed)"
 
 msgid "tool.read.input.limit"
 msgstr "Maximum number of lines to read"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.read.personality.snippet"
+msgstr "Read file contents with optional offset and line limit"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.read.personality.guidelines"
+msgstr "Use read to examine files before editing"
 
 #. Runtime result strings (model-facing output/errors).
 #. Variables: {{ offset }}, {{ total }}.
@@ -386,6 +463,17 @@ msgstr "Path to the file to write (relative or absolute)"
 
 msgid "tool.write.input.content"
 msgstr "Content to write to the file"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.write.personality.snippet"
+msgstr "Create new files or completely overwrite existing ones"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.write.personality.guidelines"
+msgstr "Prefer edit over write for modifying existing files"
 
 #. Runtime result strings (model-facing output/errors).
 msgid "tool.write.error.no_content"
