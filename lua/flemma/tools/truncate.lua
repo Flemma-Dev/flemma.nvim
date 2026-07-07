@@ -41,15 +41,17 @@ M.MAX_LINE_CHARS = base.MAX_LINE_CHARS
 ---@param overflow_path string|nil
 ---@return string
 local function build_notice(trunc_result, direction, overflow_path)
-  local full_output_note = overflow_path and (". Full output: " .. overflow_path) or ""
-
   if trunc_result.first_line_exceeds_limit then
-    return string.format(
-      "[Output too large: %s in a single line, exceeds %s limit%s]",
-      M.format_size(trunc_result.total_bytes),
-      M.format_size(M.MAX_BYTES),
-      full_output_note
-    )
+    local size = M.format_size(trunc_result.total_bytes)
+    local limit = M.format_size(M.MAX_BYTES)
+    if overflow_path then
+      return messages["tool.truncate.output_too_large_with_overflow"]{
+        size = size,
+        limit = limit,
+        path = overflow_path,
+      }
+    end
+    return messages["tool.truncate.output_too_large"]{ size = size, limit = limit }
   end
 
   local start_line, end_line
@@ -63,32 +65,45 @@ local function build_notice(trunc_result, direction, overflow_path)
 
   -- last_line_partial only occurs with truncate_tail (never truncate_head)
   if trunc_result.last_line_partial then
-    return string.format(
-      "[Showing last %s of line %d%s]",
-      M.format_size(trunc_result.output_bytes),
-      end_line,
-      full_output_note
-    )
+    local size = M.format_size(trunc_result.output_bytes)
+    if overflow_path then
+      return messages["tool.truncate.showing_last_with_overflow"]{ size = size, line = end_line, path = overflow_path }
+    end
+    return messages["tool.truncate.showing_last"]{ size = size, line = end_line }
   end
 
   if trunc_result.truncated_by == "lines" then
-    return string.format(
-      "[Showing lines %d-%d of %d%s]",
-      start_line,
-      end_line,
-      trunc_result.total_lines,
-      full_output_note
-    )
+    if overflow_path then
+      return messages["tool.truncate.showing_lines_with_overflow"]{
+        start = start_line,
+        end_line = end_line,
+        total = trunc_result.total_lines,
+        path = overflow_path,
+      }
+    end
+    return messages["tool.truncate.showing_lines"]{
+      start = start_line,
+      end_line = end_line,
+      total = trunc_result.total_lines,
+    }
   end
 
-  return string.format(
-    "[Showing lines %d-%d of %d (%s limit)%s]",
-    start_line,
-    end_line,
-    trunc_result.total_lines,
-    M.format_size(M.MAX_BYTES),
-    full_output_note
-  )
+  local limit = M.format_size(M.MAX_BYTES)
+  if overflow_path then
+    return messages["tool.truncate.showing_lines_byte_limit_with_overflow"]{
+      start = start_line,
+      end_line = end_line,
+      total = trunc_result.total_lines,
+      limit = limit,
+      path = overflow_path,
+    }
+  end
+  return messages["tool.truncate.showing_lines_byte_limit"]{
+    start = start_line,
+    end_line = end_line,
+    total = trunc_result.total_lines,
+    limit = limit,
+  }
 end
 
 ---Truncate tool output with overflow handling.
