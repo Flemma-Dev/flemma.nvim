@@ -1,0 +1,22 @@
+# ast-grep rule: flag notify.* calls that embed a translatable string literal.
+# User-facing notifications must route through flemma.messages so they stay
+# translatable. A string literal with two or more letters is prose; the
+# `not inside bracket_index_expression` clause excludes catalogue keys
+# (messages["ui.x"]), matching only literals spliced directly into the call.
+# Pure-punctuation separators ("\n", "; ") have no letters and are ignored.
+id: notify-string-literal
+language: lua
+rule:
+  any:
+    - pattern: notify.warn($$$ARGS)
+    - pattern: notify.error($$$ARGS)
+    - pattern: notify.info($$$ARGS)
+    - pattern: notify.notify($$$ARGS)
+  has:
+    kind: string_content
+    stopBy: end
+    regex: '[A-Za-z]{2}'
+    not:
+      inside:
+        kind: bracket_index_expression
+        stopBy: end

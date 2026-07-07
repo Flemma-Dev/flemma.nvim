@@ -30,10 +30,13 @@ local Node = {}
 Node.__index = Node
 
 --- Attach a human-readable description (emitted as EmmyLua field comment).
----@param text string
+--- Accepts a plain string or an unrendered `flemma.messages` catalogue proxy —
+--- `tostring()` is a no-op on an already-plain string, so both forms
+--- normalize to a real string here.
+---@param text flemma.Message
 ---@return flemma.schema.Node self
 function Node:describe(text)
-  self._description = text
+  self._description = tostring(text)
   return self
 end
 

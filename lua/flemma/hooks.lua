@@ -11,6 +11,7 @@
 local M = {}
 
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 
 ---@alias flemma.hooks.Name
@@ -208,7 +209,7 @@ local function fire(name, payload)
     for _, entry in ipairs(list) do
       local ok, err = pcall(entry.callback, payload)
       if not ok then
-        local message = string.format("hook '%s' subscriber error: %s", name, tostring(err))
+        local message = messages["ui.hook.subscriber_error"]{ hook = name, reason = tostring(err) }
         log.warn(message)
         notify.warn(message)
       end
@@ -220,7 +221,7 @@ local function fire(name, payload)
     data = payload,
   })
   if not ok then
-    local message = string.format("hook '%s' handler error: %s", name, tostring(err))
+    local message = messages["ui.hook.handler_error"]{ hook = name, reason = tostring(err) }
     log.warn(message)
     notify.warn(message)
   end

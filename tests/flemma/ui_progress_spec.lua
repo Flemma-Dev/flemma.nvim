@@ -51,6 +51,35 @@ describe("progress line", function()
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("renders the externalized waiting label in the spinner extmark", function()
+      local messages = require("flemma.messages")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      activity.start_progress(bufnr, { timeout = 600 }, ui.update_ui)
+      vim.wait(200, function()
+        return buffer_state.progress_extmark_id ~= nil
+      end)
+
+      local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, spinner_ns, 0, -1, { details = true })
+      local text = ""
+      for _, mark in ipairs(marks) do
+        for _, chunk in ipairs(mark[4].virt_text or {}) do
+          text = text .. chunk[1]
+        end
+      end
+      assert.is_truthy(
+        text:find(messages["ui.progress.waiting"]{}, 1, true),
+        "spinner should render the waiting label; got: " .. text
+      )
+
+      activity.cleanup_progress(bufnr, ui.update_ui)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("phase transitions", function()

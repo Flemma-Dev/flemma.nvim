@@ -293,11 +293,10 @@ end
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
   -- Validate provider
   if not registry.has(provider_name) then
-    local err = string.format(
-      "Unknown provider '%s'. Supported providers are: %s",
-      tostring(provider_name),
-      table.concat(registry.supported_providers(), ", ")
-    )
+    local err = messages["ui.provider.unknown"]{
+      provider = tostring(provider_name),
+      providers = table.concat(registry.supported_providers(), ", "),
+    }
     log.error("initialize_provider(): " .. err)
     notify.error(err)
     return false, {}
@@ -311,12 +310,11 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   ---@type string|nil
   local model_fallback_warning
   if validated_model ~= model_name and model_name ~= nil then
-    model_fallback_warning = string.format(
-      "Model '%s' is not valid for provider '%s'. Using default: '%s'.",
-      tostring(model_name),
-      tostring(resolved_provider),
-      tostring(validated_model)
-    )
+    model_fallback_warning = messages["ui.provider.model_fallback"]{
+      model = tostring(model_name),
+      provider = tostring(resolved_provider),
+      fallback = tostring(validated_model),
+    }
   end
 
   -- Write to facade
@@ -364,8 +362,13 @@ function M.initialize_provider(provider_name, model_name, explicit_params, layer
     -- Same multi-line format as switch_provider: header + bullet lines
     local resolved = registry.resolve(provider_name) or provider_name
     local validated_model = config_facade.get().model
-    local model_desc = validated_model and (" with model '" .. validated_model .. "'") or ""
-    local lines = { "Initialized '" .. resolved .. "'" .. model_desc }
+    local header
+    if validated_model then
+      header = messages["ui.provider.initialized_with_model"]{ provider = resolved, model = validated_model }
+    else
+      header = messages["ui.provider.initialized"]{ provider = resolved }
+    end
+    local lines = { header }
     if model_fallback then
       table.insert(lines, "  ⚠ " .. model_fallback)
     end
@@ -387,7 +390,7 @@ end
 ---@return true|nil success True on success, nil on failure
 function M.switch_provider(provider_name, model_name, parameters, opts)
   if not provider_name then
-    notify.error("Provider name is required")
+    notify.error(messages["ui.provider.name_missing"]{})
     return
   end
 
@@ -421,8 +424,13 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Notify the user. Header line + optional bullet lines for warnings/overrides.
   local global_config = config_facade.get()
   local buffer_config = config_facade.get(bufnr)
-  local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
-  local header = "Switched to '" .. global_config.provider .. "'" .. model_info
+  local header
+  if global_config.model then
+    header =
+      messages["ui.provider.switched_with_model"]{ provider = global_config.provider, model = global_config.model }
+  else
+    header = messages["ui.provider.switched"]{ provider = global_config.provider }
+  end
   ---@type string[]
   local lines = {}
   local notify_level = vim.log.levels.INFO
@@ -436,7 +444,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Billing / cost warning
   local billing = registry.get_metadata(global_config.provider, "billing")
   if billing == "subscription" then
-    table.insert(lines, "  ⓘ Flemma draws from your subscription usage limit")
+    table.insert(lines, "  ⓘ " .. messages["ui.provider.subscription_notice"]{})
   else
     local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
     local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
@@ -445,21 +453,31 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
       and model_entry.pricing
       and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
     then
-      table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
+      table.insert(
+        lines,
+        "  ⚠ " .. messages["ui.provider.billed_at"]{ pricing = str.format_pricing_suffix(model_entry.pricing) }
+      )
       notify_level = vim.log.levels.WARN
     end
   end
 
-  -- Frontmatter override notice (provider, model, or both)
-  if buffer_config.provider ~= global_config.provider or buffer_config.model ~= global_config.model then
-    local parts = {}
-    if buffer_config.provider ~= global_config.provider then
-      table.insert(parts, "'" .. buffer_config.provider .. "'")
+  -- Frontmatter override notice (provider, model, or both). Full-sentence keys
+  -- per case — fragment concatenation reorders wrong once translated.
+  local provider_overridden = buffer_config.provider ~= global_config.provider
+  local model_overridden = buffer_config.model ~= global_config.model
+  if provider_overridden or model_overridden then
+    local notice
+    if provider_overridden and model_overridden then
+      notice = messages["ui.provider.frontmatter_override_both"]{
+        provider = buffer_config.provider,
+        model = buffer_config.model,
+      }
+    elseif provider_overridden then
+      notice = messages["ui.provider.frontmatter_override_provider"]{ provider = buffer_config.provider }
+    else
+      notice = messages["ui.provider.frontmatter_override_model"]{ model = buffer_config.model }
     end
-    if buffer_config.model ~= global_config.model then
-      table.insert(parts, "model '" .. buffer_config.model .. "'")
-    end
-    table.insert(lines, "  • This buffer uses " .. table.concat(parts, " / ") .. " (frontmatter)")
+    table.insert(lines, "  • " .. notice)
   end
 
   -- Parameter validation warnings
@@ -490,7 +508,7 @@ function M.cancel_request(opts)
     buffer_state.resume_delay_timer:close()
     buffer_state.resume_delay_timer = nil
     hooks.dispatch("autopilot:resume-cancelled", { bufnr = bufnr })
-    notify.info("Cancelled pending auto-continue.")
+    notify.info(messages["ui.request.autocontinue_cancelled"]{})
     return
   end
 
@@ -498,7 +516,7 @@ function M.cancel_request(opts)
     buffer_state.pending_send.subscription:cancel()
     buffer_state.pending_send = nil
     state.unlock_buffer(bufnr)
-    notify.info("Cancelled queued send.")
+    notify.info(messages["ui.request.queued_send_cancelled"]{})
     return
   end
 
@@ -538,7 +556,7 @@ function M.cancel_request(opts)
             line_count,
             line_count,
             false,
-            vim.list_extend(separator, { "<!-- flemma:aborted: " .. messages.render("request-aborted") .. " -->" })
+            vim.list_extend(separator, { "<!-- flemma:aborted: " .. messages["request.aborted"] .. " -->" })
           )
         end)
         editing.auto_write(bufnr)
@@ -550,9 +568,11 @@ function M.cancel_request(opts)
       autopilot.disarm(bufnr)
       cursor.untail(bufnr)
 
-      local msg = "Request cancelled"
+      local msg = messages["ui.request.cancelled"]{}
       if log.is_enabled() then
-        msg = msg .. ". See " .. log.get_path() .. " for details"
+        -- Newline join keeps each catalogue string a complete, independently
+        -- translatable sentence — no language-specific punctuation joiner.
+        msg = msg .. "\n" .. messages["ui.request.see_log"]{ path = log.get_path() }
       end
       notify.info(msg)
       -- Force UI update after cancellation
@@ -628,7 +648,7 @@ local function advance_phase2(opts)
   for _, ctx in ipairs(aborted) do
     injector.inject_result(bufnr, ctx.tool_id, {
       success = false,
-      error = ctx.aborted_message or messages.render("request-aborted"),
+      error = ctx.aborted_message or messages["request.aborted"]{},
     }, compact_opts)
   end
 
@@ -651,7 +671,7 @@ local function advance_phase2(opts)
     end
     local ok, err = executor.execute(bufnr, ctx)
     if not ok then
-      notify.error(err or "Execution failed")
+      notify.error(err or messages["ui.tool.execute_failed"]{})
     else
       executed_count = executed_count + 1
     end
@@ -659,16 +679,12 @@ local function advance_phase2(opts)
 
   if throttled and opts.user_initiated then
     local queued = #approved - executed_count
-    notify.info(
-      queued
-        .. " tool"
-        .. (queued == 1 and "" or "s")
-        .. " queued — max_concurrent limit reached ("
-        .. executor.count_running(bufnr)
-        .. "/"
-        .. max_concurrent
-        .. " running)"
-    )
+    notify.info(messages["ui.request.tools_queued"]{
+      count = queued,
+      queued = queued,
+      running = executor.count_running(bufnr),
+      limit = max_concurrent,
+    })
   end
 
   -- Collect truly-pending blocks (empty content — user-filled ones were already resolved).
@@ -790,7 +806,7 @@ local function attempt_advance_phase2(opts)
       current_state.pending_send = nil
       state.unlock_buffer(bufnr)
       local diagnostic_message = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
-      notify.error("Could not satisfy dependency: " .. (diagnostic_message or err.message))
+      notify.error(messages["ui.request.dependency_failed"]{ reason = diagnostic_message or err.message })
       return
     end
     pending_entry.opts.evaluated_frontmatter = nil
@@ -818,7 +834,7 @@ function M.send_or_execute(opts)
   -- Early guard: reject immediately if a provider request is already in flight.
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
+    notify.warn(messages["ui.request.in_progress"]{})
     return
   end
 
@@ -979,15 +995,11 @@ function M.build_prompt_and_provider(bufnr, opts)
 
   local doc = parser.get_parsed_document(bufnr)
   if #doc.messages == 0 and not doc.frontmatter then
-    return nil, nil, nil, nil, { code = "empty_buffer", message = "Empty buffer — nothing to send." }
+    return nil, nil, nil, nil, { code = "empty_buffer", message = messages["ui.request.empty_buffer"]{} }
   end
 
   if not config_facade.get(bufnr).provider then
-    return nil,
-      nil,
-      nil,
-      nil,
-      { code = "no_provider", message = "No provider configured. Use :Flemma switch to select one." }
+    return nil, nil, nil, nil, { code = "no_provider", message = messages["ui.usage.no_provider"]{} }
   end
 
   local context = context_module.from_buffer(bufnr)
@@ -1000,7 +1012,7 @@ function M.build_prompt_and_provider(bufnr, opts)
   })
 
   if #prompt.history == 0 then
-    return nil, nil, nil, nil, { code = "no_messages", message = "No messages found in buffer." }
+    return nil, nil, nil, nil, { code = "no_messages", message = messages["ui.request.no_messages"]{} }
   end
 
   local effective_bufnr = prompt.bufnr
@@ -1017,7 +1029,7 @@ function M.build_prompt_and_provider(bufnr, opts)
       nil,
       {
         code = "unknown_provider",
-        message = "Unknown provider '" .. tostring(provider_key) .. "'.",
+        message = messages["ui.request.unknown_provider"]{ provider = tostring(provider_key) },
       }
   end
 
@@ -1035,14 +1047,14 @@ function M.send_to_provider(opts)
 
   -- Check if there's already a request in progress
   if buffer_state.current_request then
-    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
+    notify.warn(messages["ui.request.in_progress"]{})
     return
   end
 
   -- Check if tool executions are in progress (mutually exclusive with API requests)
   local pending_tools = executor.get_pending(bufnr)
   if #pending_tools > 0 then
-    notify.warn("Cannot send while tool execution is in progress.")
+    notify.warn(messages["ui.request.tool_in_progress"]{})
     return
   end
 
@@ -1072,7 +1084,7 @@ function M.send_to_provider(opts)
         buffer_state.pending_send = nil
         state.unlock_buffer(bufnr)
         local diag_msg = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
-        notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
+        notify.error(messages["ui.request.dependency_failed"]{ reason = diag_msg or err.message })
         return
       end
       if buffer_state.pending_send then
@@ -1152,7 +1164,10 @@ function M._run_send_pipeline(bufnr, opts)
     local rendered = 0
     for _, d in ipairs(sorted) do
       if rendered >= MAX_DIAGNOSTICS then
-        table.insert(diagnostic_lines, string.format(" …and %d more", #sorted - MAX_DIAGNOSTICS))
+        table.insert(
+          diagnostic_lines,
+          " " .. messages["ui.diagnostics.and_more"]{ count = #sorted - MAX_DIAGNOSTICS }
+        )
         break
       end
 
@@ -1178,7 +1193,7 @@ function M._run_send_pipeline(bufnr, opts)
     -- Footer: clarify whether the request was blocked
     if has_errors then
       table.insert(diagnostic_lines, "")
-      table.insert(diagnostic_lines, "Request blocked — fix errors to send.")
+      table.insert(diagnostic_lines, messages["ui.diagnostics.request_blocked"]{})
     end
 
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
@@ -1299,22 +1314,20 @@ function M._run_send_pipeline(bufnr, opts)
 
         local notify_msg = msg
         if current_provider:is_context_overflow(msg) then
-          notify_msg = notify_msg
-            .. "\n\nYour conversation is too long for this model."
-            .. " Remove earlier messages or start a new conversation."
+          notify_msg = notify_msg .. "\n\n" .. messages["ui.request.context_overflow"]{}
         elseif current_provider:is_auth_error(msg) then
           local cred = current_provider:get_credential()
           secrets.invalidate(cred.kind, cred.service)
-          notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
+          notify_msg = notify_msg .. "\n\n" .. messages["ui.request.auth_expired"]{}
         elseif current_provider:is_rate_limit_error(msg) then
           local details = current_provider:format_rate_limit_details()
           if details then
             notify_msg = notify_msg .. "\n\n" .. details
           end
-          notify_msg = notify_msg .. "\n\nTry again in a moment."
+          notify_msg = notify_msg .. "\n\n" .. messages["ui.request.rate_limited"]{}
         end
         if log.is_enabled() then
-          notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
+          notify_msg = notify_msg .. "\n" .. messages["ui.request.see_log"]{ path = log.get_path() }
         end
         notify.error(notify_msg)
       end)
@@ -1622,7 +1635,7 @@ function M._run_send_pipeline(bufnr, opts)
             log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
-            notify.warn("Request completed but no response was received.")
+            notify.warn(messages["ui.request.no_response"]{})
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
@@ -1693,26 +1706,17 @@ function M._run_send_pipeline(bufnr, opts)
 
           local error_msg
           if effective_code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
-            error_msg =
-              string.format("cURL could not resolve host (exit code %d). Check network or hostname.", effective_code)
+            error_msg = messages["ui.request.curl_resolve_failed"]{ code = effective_code }
           elseif effective_code == 7 then -- CURLE_COULDNT_CONNECT
-            error_msg = string.format(
-              "cURL could not connect to host (exit code %d). Check network or if the host is up.",
-              effective_code
-            )
+            error_msg = messages["ui.request.curl_connect_failed"]{ code = effective_code }
           elseif effective_code == 28 then -- cURL timeout error
-            local timeout_value = effective_timeout -- Captured before async callback
-            error_msg = string.format(
-              "cURL request timed out (exit code %d). Timeout is %s seconds.",
-              effective_code,
-              tostring(timeout_value)
-            )
+            error_msg = messages["ui.request.curl_timeout"]{ code = effective_code, timeout = effective_timeout }
           else -- Other cURL errors
-            error_msg = string.format("cURL request failed (exit code %d).", effective_code)
+            error_msg = messages["ui.request.curl_failed"]{ code = effective_code }
           end
 
           if log.is_enabled() then
-            error_msg = error_msg .. " See " .. log.get_path() .. " for details."
+            error_msg = error_msg .. "\n" .. messages["ui.request.see_log"]{ path = log.get_path() }
           end
           notify.error(error_msg)
 

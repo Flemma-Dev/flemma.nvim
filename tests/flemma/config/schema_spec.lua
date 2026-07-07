@@ -59,6 +59,14 @@ describe("flemma.schema", function()
       assert.equals("MyType", node._type_as)
       assert.equals("x", node:materialize())
     end)
+
+    it(":describe() normalizes a bare messages catalogue proxy via tostring()", function()
+      package.loaded["flemma.messages"] = nil
+      local messages = require("flemma.messages")
+      local node = s.string():describe(messages["tool.denied"])
+      assert.is_string(node._description)
+      assert.equals("The tool was denied by a policy.", node._description)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------

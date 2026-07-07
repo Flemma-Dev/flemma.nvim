@@ -1,0 +1,688 @@
+# Flemma UI catalogue — user-facing strings that never reach the model:
+# notifications, prompts, picker titles. This is the translatable surface.
+# Model-facing strings live in po/flemma-harness.po and are not translation
+# material. Keys must stay unique across both files; flemma.messages
+# enforces this at load time.
+# All keys are namespaced under ui.* — the call-site marker that a string
+# is user-facing; harness keys never use this prefix.
+msgid ""
+msgstr ""
+"Project-Id-Version: flemma\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "ui.usage.no_data"
+msgstr "No usage data for this buffer."
+
+msgid "ui.rejection.prompt"
+msgstr "Flemma: Rejection reason (optional): "
+
+msgid "ui.rejection.reject_failed"
+msgstr "Reject failed"
+
+msgid "ui.rejection.no_tool_call"
+msgstr "No tool call found"
+
+#. Variables: {{ tool_id }} — the tool call's identifier.
+msgid "ui.rejection.no_result_placeholder"
+msgstr "No tool result placeholder for {{ tool_id }}"
+
+#. Variables: {{ tool_id }} — the tool call's identifier.
+msgid "ui.rejection.already_completed"
+msgstr "Tool {{ tool_id }} has already completed"
+
+#. Variables: {{ tool_id }} — the tool call's identifier.
+msgid "ui.rejection.no_fence"
+msgstr "No fence found in tool result for {{ tool_id }}"
+
+#. Tool-action feedback, shared by the keymaps and the :Flemma sub-commands.
+msgid "ui.tool.execute_failed"
+msgstr "Execution failed"
+
+msgid "ui.tool.background_failed"
+msgstr "Failed to move tool to background"
+
+msgid "ui.tool.backgrounded"
+msgstr "Tool moved to background."
+
+msgid "ui.tool.approve_failed"
+msgstr "Approve failed"
+
+msgid "ui.tool.no_pending_approve"
+msgstr "No pending tools to approve"
+
+#. Shown on a cancel keypress that cancelled nothing; a second press within
+#. the double-tap window cancels every tool in the buffer.
+msgid "ui.tool.nothing_to_cancel_retry"
+msgstr "Nothing to cancel (press again to cancel all)"
+
+msgid "ui.tool.nothing_to_cancel"
+msgstr "Nothing to cancel"
+
+msgid "ui.tool.cancelled"
+msgstr "Tool execution cancelled"
+
+msgid "ui.tool.none_pending"
+msgstr "No pending tool executions"
+
+msgid "ui.tool.all_cancelled"
+msgstr "All tool executions cancelled"
+
+msgid "ui.tool.list_header"
+msgstr "Pending tool executions:"
+
+#. Variables: {{ tool_name }}, {{ tool_id }}, {{ seconds }} — one pending row.
+msgid "ui.tool.list_row"
+msgstr "  {{ tool_name }} ({{ tool_id }}) — started {{ seconds }}s ago"
+
+#. :Flemma command dispatch and sub-command feedback.
+#. Variables: {{ commands }} — comma-separated list of available commands.
+msgid "ui.command.available"
+msgstr "Available commands → {{ commands }}"
+
+#. Variables: {{ command }} — the unrecognized command token.
+msgid "ui.command.unknown"
+msgstr "Unknown command '{{ command }}'"
+
+#. Variables: {{ command }}, {{ suggestion }} — the closest known command.
+msgid "ui.command.unknown_suggestion"
+msgstr "Unknown command '{{ command }}'. Did you mean '{{ suggestion }}'?"
+
+#. Variables: {{ command }} — a namespace node that has no action of its own.
+msgid "ui.command.not_invokable"
+msgstr "'{{ command }}' is not invokable"
+
+#. Variables: {{ command }}, {{ subcommands }} — its available child commands.
+msgid "ui.command.expects_subcommand"
+msgstr "'{{ command }}' expects a sub-command ({{ subcommands }})"
+
+#. Config action callbacks (on_request_start, on_request_complete, …).
+#. Variables: {{ label }}, {{ reason }} — the callback name and failure detail.
+msgid "ui.callback.failed"
+msgstr "{{ label }} callback failed: {{ reason }}"
+
+#. Variables: {{ label }}, {{ received }} — the callback name and the Lua type given.
+msgid "ui.callback.invalid_type"
+msgstr "{{ label }} expects a string or function, received {{ received }}"
+
+#. Variables: {{ label }}, {{ reason }} — the callback name and failure detail.
+msgid "ui.callback.command_failed"
+msgstr "{{ label }} command failed: {{ reason }}"
+
+#. :Flemma logging.
+#. Variables: {{ level }} — the rejected level string.
+msgid "ui.logging.invalid_level"
+msgstr "Invalid log level '{{ level }}'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR"
+
+#. Variables: {{ level }}, {{ path }} — the active level and the log file path.
+msgid "ui.logging.enabled"
+msgstr "Logging enabled (level: {{ level }}) — {{ path }}"
+
+msgid "ui.logging.disabled"
+msgstr "Logging disabled"
+
+msgid "ui.logging.currently_disabled"
+msgstr "Logging is currently disabled"
+
+#. :Flemma switch — provider and model selection.
+msgid "ui.provider.select_prompt"
+msgstr "Select Provider:"
+
+msgid "ui.provider.select_cancelled"
+msgstr "Provider selection cancelled"
+
+#. Variables: {{ provider }} — the selected provider name.
+msgid "ui.provider.no_models"
+msgstr "No models found for provider {{ provider }}"
+
+#. Variables: {{ provider }} — the selected provider name.
+msgid "ui.provider.select_model_prompt"
+msgstr "Select Model for {{ provider }}:"
+
+msgid "ui.provider.model_select_cancelled"
+msgstr "Model selection cancelled"
+
+#. Variables: {{ preset }} — the unknown preset token (e.g. '$fast').
+msgid "ui.provider.unknown_preset"
+msgstr "Unknown preset '{{ preset }}'"
+
+#. Variables: {{ preset }}, {{ args }} — the preset and the ignored positionals.
+msgid "ui.provider.ignoring_positionals_preset"
+msgstr "Ignoring extra positional arguments for preset '{{ preset }}': {{ args }}"
+
+msgid "ui.provider.name_required"
+msgstr "Provider name required (use :Flemma switch <provider>)"
+
+msgid "ui.provider.name_missing"
+msgstr "Provider name is required"
+
+#. Variables: {{ args }} — the ignored positional arguments.
+msgid "ui.provider.ignoring_positionals"
+msgstr "Ignoring extra positional arguments: {{ args }}"
+
+#. Provider validation errors and the switch/initialize result notice
+#. (core.lua) — a conditional header line followed by ⚠/ⓘ/• bullet lines.
+#. Variables: {{ provider }}, {{ providers }} — the unknown name and the
+#. comma-separated list of supported providers.
+msgid "ui.provider.unknown"
+msgstr "Unknown provider '{{ provider }}'. Supported providers are: {{ providers }}"
+
+#. Variables: {{ model }}, {{ provider }}, {{ fallback }} — the rejected model,
+#. its provider, and the default substituted in its place.
+msgid "ui.provider.model_fallback"
+msgstr "Model '{{ model }}' is not valid for provider '{{ provider }}'. Using default: '{{ fallback }}'."
+
+#. Header after :Flemma switch. Paired forms: model resolved or not.
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.switched"
+msgstr "Switched to '{{ provider }}'"
+
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.switched_with_model"
+msgstr "Switched to '{{ provider }}' with model '{{ model }}'"
+
+#. Header after initial provider setup. Paired forms: model resolved or not.
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.initialized"
+msgstr "Initialized '{{ provider }}'"
+
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.initialized_with_model"
+msgstr "Initialized '{{ provider }}' with model '{{ model }}'"
+
+#. ⓘ bullet: the active provider bills against a subscription, not per-token.
+msgid "ui.provider.subscription_notice"
+msgstr "Flemma draws from your subscription usage limit"
+
+#. ⚠ bullet: per-token pricing for a model over the high-cost threshold.
+#. Variables: {{ pricing }} — the formatted input/output rate suffix.
+msgid "ui.provider.billed_at"
+msgstr "Billed at {{ pricing }}"
+
+#. • bullet: buffer frontmatter overrides the session provider and/or model.
+#. Three forms by which fields differ. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.frontmatter_override_provider"
+msgstr "This buffer uses '{{ provider }}' (frontmatter)"
+
+#. Variables: {{ model }}.
+msgid "ui.provider.frontmatter_override_model"
+msgstr "This buffer uses model '{{ model }}' (frontmatter)"
+
+#. Variables: {{ provider }}, {{ model }}.
+msgid "ui.provider.frontmatter_override_both"
+msgstr "This buffer uses '{{ provider }}' / model '{{ model }}' (frontmatter)"
+
+#. :Flemma diagnostics.
+msgid "ui.diagnostics.enabled"
+msgstr "Diagnostics enabled"
+
+msgid "ui.diagnostics.disabled"
+msgstr "Diagnostics disabled"
+
+#. Send-pipeline diagnostics summary — shown when a send surfaces buffer
+#. diagnostics (parse/frontmatter errors). Variables: {{ count }} — the
+#. number of diagnostics beyond the display cap.
+msgid "ui.diagnostics.and_more"
+msgstr "…and {{ count }} more"
+
+#. Footer when the send is blocked by critical errors.
+msgid "ui.diagnostics.request_blocked"
+msgstr "Request blocked — fix errors to send."
+
+#. :Flemma usage estimate.
+msgid "ui.usage.no_provider"
+msgstr "No provider configured. Use :Flemma switch to select one."
+
+msgid "ui.usage.estimate_unsupported"
+msgstr "Current provider does not support usage estimates."
+
+#. Variables: {{ reason }} — the failure detail.
+msgid "ui.usage.estimate_failed"
+msgstr "Estimate failed: {{ reason }}"
+
+#. :Flemma autopilot.
+msgid "ui.autopilot.enabled"
+msgstr "Autopilot enabled"
+
+msgid "ui.autopilot.disabled"
+msgstr "Autopilot disabled"
+
+#. :Flemma sandbox.
+#. Variables: {{ reason }} — why the backend cannot be enabled.
+msgid "ui.sandbox.enable_failed"
+msgstr "Cannot enable sandbox: {{ reason }}"
+
+msgid "ui.sandbox.enabled"
+msgstr "Sandbox enabled"
+
+msgid "ui.sandbox.disabled"
+msgstr "Sandbox disabled"
+
+#. core.lua request lifecycle — send guards and cancellations.
+msgid "ui.request.in_progress"
+msgstr "A request is already in progress. Use <C-c> to cancel it first."
+
+msgid "ui.request.tool_in_progress"
+msgstr "Cannot send while tool execution is in progress."
+
+msgid "ui.request.no_response"
+msgstr "Request completed but no response was received."
+
+msgid "ui.request.autocontinue_cancelled"
+msgstr "Cancelled pending auto-continue."
+
+msgid "ui.request.queued_send_cancelled"
+msgstr "Cancelled queued send."
+
+#. Variables: {{ reason }} — the dependency failure detail (e.g. a secret).
+msgid "ui.request.dependency_failed"
+msgstr "Could not satisfy dependency: {{ reason }}"
+
+#. build_prompt_and_provider structured errors — propagated to send_to_provider
+#. and to provider adapters via on_result({ err = ... }).
+msgid "ui.request.empty_buffer"
+msgstr "Empty buffer — nothing to send."
+
+msgid "ui.request.no_messages"
+msgstr "No messages found in buffer."
+
+#. Variables: {{ provider }} — the unrecognized provider key from config/frontmatter.
+msgid "ui.request.unknown_provider"
+msgstr "Unknown provider '{{ provider }}'."
+
+msgid "ui.request.already_completed"
+msgstr "Request already completed or terminated"
+
+#. Autopilot safety limit — exceeded the configured max consecutive turns.
+#. Variables: {{ max_turns }} — the configured turn limit.
+msgid "ui.autopilot.max_turns_exceeded"
+msgstr "Autopilot stopped — exceeded {{ max_turns }} consecutive turns."
+
+#. Tool subsystem warnings.
+#. Variables: {{ reason }} — the store write failure detail.
+msgid "ui.tool.store_failed"
+msgstr "Could not save full tool output: {{ reason }}"
+
+#. Variables: {{ reason }} — the async tool source failure detail.
+msgid "ui.tool.source_failed"
+msgstr "Async tool source failed: {{ reason }}"
+
+#. Variables: {{ count }} — number of conflicting tool results.
+msgid "ui.tool.edit_conflict"
+msgstr "{{ count }} tool result(s) have edited content inside an approved tool block — skipping execution to protect your edits. Remove the (approved) status from the header to send your content."
+
+#. Variables: {{ tool_name }} — the tool being redefined.
+msgid "ui.tool.redefined"
+msgstr "tool '{{ tool_name }}' redefined (previously registered, now overwritten)"
+
+#. Provider response truncation notices.
+msgid "ui.provider.response_truncated"
+msgstr "Response truncated — model reached max output tokens"
+
+#. Variables: {{ reason }} — the truncation reason from the response.
+msgid "ui.provider.response_truncated_reason"
+msgstr "Response was truncated (reason: {{ reason }})"
+
+#. max_tokens clamping — value exceeds model limit or falls below minimum.
+#. Variables: {{ value }}, {{ model }}, {{ limit }}.
+msgid "ui.provider.max_tokens_exceeds"
+msgstr "max_tokens {{ value }} exceeds {{ model }} limit ({{ limit }}), clamping."
+
+#. Variables: {{ value }}, {{ model }}, {{ limit }}.
+msgid "ui.provider.max_tokens_below"
+msgstr "max_tokens {{ value }} below {{ model }} minimum ({{ limit }}), raising."
+
+#. Unknown preset with optional did-you-mean suggestion.
+#. Variables: {{ preset }}, {{ suggestion }}.
+msgid "ui.provider.unknown_preset_suggestion"
+msgstr "Unknown preset '{{ preset }}' — did you mean '{{ suggestion }}'?"
+
+#. Config setup diagnostics (init.lua, config/).
+#. Variables: {{ keys }} — comma-separated list of unrecognized config paths.
+msgid "ui.config.unknown_keys"
+msgstr "unknown config keys: {{ keys }}"
+
+#. Variables: {{ path }}, {{ reason }} — the module base path and the failure.
+msgid "ui.config.module_defaults_failed"
+msgstr "Failed to register configuration defaults for {{ path }}: {{ reason }}"
+
+#. Sandbox backend validation — shown once on first .chat buffer entry.
+msgid "ui.sandbox.no_backend"
+msgstr "Tool execution is not sandboxed — no compatible backend found. Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable."
+
+#. Hook dispatch errors.
+#. Variables: {{ hook }}, {{ reason }}.
+msgid "ui.hook.subscriber_error"
+msgstr "hook '{{ hook }}' subscriber error: {{ reason }}"
+
+#. Variables: {{ hook }}, {{ reason }}.
+msgid "ui.hook.handler_error"
+msgstr "hook '{{ hook }}' handler error: {{ reason }}"
+
+#. Diagnostics comparison (diagnostics:diff).
+msgid "ui.diagnostics.no_request_data"
+msgstr "No request data available. Send at least one request with diagnostics enabled."
+
+msgid "ui.diagnostics.insufficient_data"
+msgstr "Only one request recorded. Send another request to compare."
+
+msgid "ui.diagnostics.diff_hint"
+msgstr "Run :Flemma diagnostics:diff for full diff"
+
+#. Secrets resolver setup errors.
+#. Variables: {{ source }} — the module path that failed to load.
+msgid "ui.secrets.load_failed"
+msgstr "failed to load secrets resolver: {{ source }}"
+
+#. Variables: {{ source }}.
+msgid "ui.secrets.missing_name"
+msgstr "secrets resolver module missing 'name' field: {{ source }}"
+
+#. Suspense messages — shown when the send pipeline blocks on a dependency.
+#. Variables: {{ description }} — what is being resolved (credential label or fallback).
+msgid "ui.secrets.resolving"
+msgstr "Resolving {{ description }}…"
+
+#. Fallback credential label when no description is set.
+#. Variables: {{ kind }}, {{ service }}.
+msgid "ui.secrets.credential_description"
+msgstr "{{ kind }} for {{ service }}"
+
+msgid "ui.tool.loading"
+msgstr "Waiting for tool definitions to load…"
+
+#. config.apply validation errors — prefixed with "config.apply: " at call site.
+#. Variables: {{ key }} — the unrecognized config path.
+msgid "ui.config.apply_unknown_key"
+msgstr "unknown key '{{ key }}'"
+
+#. Variables: {{ index }}, {{ path }}, {{ reason }}.
+msgid "ui.config.apply_list_item_error"
+msgstr "list item[{{ index }}] at '{{ path }}': {{ reason }}"
+
+#. Variables: {{ path }}, {{ reason }}.
+msgid "ui.config.apply_validation_error"
+msgstr "validation error at '{{ path }}': {{ reason }}"
+
+#. Diagnostic formatting fallbacks.
+msgid "ui.diagnostics.unknown_error"
+msgstr "unknown error"
+
+#. Variables: {{ role }} — the @Role marker.
+msgid "ui.diagnostics.in_role"
+msgstr "in @{{ role }}"
+
+#. Request lifecycle — cancellation, error advice, cURL failures.
+msgid "ui.request.cancelled"
+msgstr "Request cancelled"
+
+#. Variables: {{ path }} — the log file path.
+msgid "ui.request.see_log"
+msgstr "See {{ path }} for details"
+
+#. Variables: {{ queued }}, {{ running }}, {{ limit }}.
+msgid "ui.request.tools_queued"
+msgid_plural "ui.request.tools_queued"
+msgstr[0] "{{ queued }} tool queued — max_concurrent limit reached ({{ running }}/{{ limit }} running)"
+msgstr[1] "{{ queued }} tools queued — max_concurrent limit reached ({{ running }}/{{ limit }} running)"
+
+msgid "ui.request.context_overflow"
+msgstr "Your conversation is too long for this model. Remove earlier messages or start a new conversation."
+
+msgid "ui.request.auth_expired"
+msgstr "Authentication expired. Send again to generate a fresh token."
+
+msgid "ui.request.rate_limited"
+msgstr "Try again in a moment."
+
+#. Variables: {{ code }} — the cURL exit code.
+msgid "ui.request.curl_resolve_failed"
+msgstr "cURL could not resolve host (exit code {{ code }}). Check network or hostname."
+
+#. Variables: {{ code }}.
+msgid "ui.request.curl_connect_failed"
+msgstr "cURL could not connect to host (exit code {{ code }}). Check network or if the host is up."
+
+#. Variables: {{ code }}, {{ timeout }}.
+msgid "ui.request.curl_timeout"
+msgstr "cURL request timed out (exit code {{ code }}). Timeout is {{ timeout }} seconds."
+
+#. Variables: {{ code }}.
+msgid "ui.request.curl_failed"
+msgstr "cURL request failed (exit code {{ code }})."
+
+#. Diagnostics comparison prefix.
+msgid "ui.diagnostics.prefix"
+msgstr "[diagnostics]: "
+
+#. Usage estimate formatting (utilities/string.lua).
+#. Variables: {{ input_rate }}, {{ output_rate }}.
+msgid "ui.usage.pricing_suffix"
+msgstr "{{ input_rate }} input / {{ output_rate }} output per MTok"
+
+#. Variables: {{ count }}, {{ model }}.
+msgid "ui.usage.estimate_tokens_only"
+msgstr "{{ count }} input tokens · {{ model }}"
+
+#. Variables: {{ count }}, {{ cost }}, {{ model }}, {{ pricing }}.
+msgid "ui.usage.estimate_with_cost"
+msgstr "{{ count }} input tokens · {{ cost }} · {{ model }} ({{ pricing }})"
+
+#. Keymap descriptions — shown in :map, which-key, telescope keymaps.
+msgid "ui.keymap.send"
+msgstr "Send to Flemma"
+
+msgid "ui.keymap.tool_execute"
+msgstr "Execute Flemma tool at cursor"
+
+msgid "ui.keymap.tool_background"
+msgstr "Move Flemma tool to background"
+
+msgid "ui.keymap.tool_approve"
+msgstr "Approve Flemma tool at cursor"
+
+msgid "ui.keymap.tool_reject"
+msgstr "Reject Flemma tool at cursor"
+
+msgid "ui.keymap.tool_approve_all"
+msgstr "Approve all pending Flemma tools"
+
+msgid "ui.keymap.cancel"
+msgstr "Cancel Flemma Request or Tool"
+
+msgid "ui.keymap.message_next"
+msgstr "Jump to next message"
+
+msgid "ui.keymap.message_prev"
+msgstr "Jump to previous message"
+
+msgid "ui.keymap.fold_toggle"
+msgstr "Toggle message fold"
+
+msgid "ui.keymap.fold_turn"
+msgstr "Fold intermediate messages in current turn"
+
+msgid "ui.keymap.fold_turns"
+msgstr "Fold intermediate messages in all turns"
+
+msgid "ui.keymap.conceal_toggle"
+msgstr "Toggle conceal level"
+
+msgid "ui.keymap.conceal_on"
+msgstr "Enable conceal"
+
+msgid "ui.keymap.conceal_off"
+msgstr "Disable conceal"
+
+msgid "ui.keymap.colon_insert"
+msgstr "Auto-newline after role markers"
+
+msgid "ui.keymap.insert_send"
+msgstr "Send to Flemma and continue editing"
+
+#. Template evaluation diagnostics — shown when a user's {{ }} expression or
+#. @file reference fails. Lua/libuv stdlib error details stay as {{ detail }}.
+msgid "ui.template.file_drift_label"
+msgstr "File drift detected (content changed since last request)"
+
+#. Variables: {{ path }} — the file whose content changed.
+msgid "ui.template.file_changed"
+msgstr "File changed since last request: {{ path }}"
+
+#. Variables: {{ received }} — the type actually passed to include().
+msgid "ui.template.include_expects_string"
+msgstr "include() expects a string path, got {{ received }}"
+
+#. Variables: {{ name }} — the unknown personality name.
+msgid "ui.template.unknown_personality"
+msgstr "Unknown personality: '{{ name }}'"
+
+#. Variables: {{ name }}, {{ suggestion }}.
+msgid "ui.template.unknown_personality_suggestion"
+msgstr "Unknown personality: '{{ name }}' — did you mean '{{ suggestion }}'?"
+
+#. Variables: {{ path }} — the resolved file path.
+msgid "ui.template.file_not_found"
+msgstr "File not found: {{ path }}"
+
+#. Variables: {{ path }} — the resolved file path.
+msgid "ui.template.mime_undetermined"
+msgstr "Could not determine MIME type for: {{ path }}"
+
+#. Variables: {{ filename }} — the file requesting the circular include.
+msgid "ui.template.circular_include"
+msgstr "Circular include detected (requested by '{{ filename }}')"
+
+#. Variables: {{ detail }} — the underlying Lua error (not translated).
+msgid "ui.template.emit_error"
+msgstr "Error during emit: {{ detail }}"
+
+#. Variables: {{ filename }} — the .chat file being evaluated; {{ expression }}
+#. — the expression source; {{ detail }} — the Lua parser error (not translated).
+msgid "ui.template.expression_parse_error"
+msgstr "Parse error in '{{ filename }}' for expression '{{ expression }}': {{ detail }}"
+
+#. @file / include() read failures. Variables: {{ detail }} — the underlying
+#. io.open error (not translated); our wrapper prose is the translatable part.
+msgid "ui.template.file_open_failed"
+msgstr "Failed to open file: {{ detail }}"
+
+msgid "ui.template.file_read_failed"
+msgstr "Failed to read content"
+
+#. Buffer parse diagnostics — malformed tool-use/tool-result blocks in
+#. user-authored .chat content, surfaced through the same diagnostics display
+#. as the template diagnostics above.
+msgid "ui.parse.tool_result_unclosed_fence"
+msgstr "Unclosed fenced code block in tool result (missing closing fence)"
+
+msgid "ui.parse.tool_result_no_fence"
+msgstr "Tool result requires a fenced code block"
+
+#. Variables: {{ detail }} — the underlying codeblock/JSON parse error (not translated).
+msgid "ui.parse.tool_input_failed"
+msgstr "Failed to parse tool input: {{ detail }}"
+
+msgid "ui.parse.tool_use_unclosed_fence"
+msgstr "Unclosed fenced code block in tool use (missing closing fence)"
+
+msgid "ui.parse.tool_use_no_fence"
+msgstr "Tool use requires a fenced code block with JSON input"
+
+#. Preprocessor rewriter load failure.
+#. Variables: {{ module }}, {{ reason }}.
+msgid "ui.preprocessor.rewriter_load_failed"
+msgstr "Failed to load built-in rewriter {{ module }}: {{ reason }}"
+
+#. Migration notices (buffer open).
+#. Variables: {{ count }} — number of orphaned jobs resolved.
+msgid "ui.migration.orphaned_jobs_resolved"
+msgid_plural "ui.migration.orphaned_jobs_resolved"
+msgstr[0] "{{ count }} orphaned job resolved."
+msgstr[1] "{{ count }} orphaned jobs resolved."
+
+msgid "ui.migration.tool_names_migrated"
+msgstr "Tool names were migrated from ':' to '.' in Tool Use headers and frontmatter. Review the frontmatter to confirm the changes are correct."
+
+#. Preset validation errors (presets.lua).
+#. Variables: {{ preset }}, {{ received }} — the preset name and the offending type.
+msgid "ui.preset.invalid_type"
+msgstr "Preset '{{ preset }}' must be a table or string, received {{ received }}"
+
+#. Variables: {{ preset }}, {{ received }}.
+msgid "ui.preset.invalid_auto_approve"
+msgstr "Preset '{{ preset }}' auto_approve must be a string[], got {{ received }}"
+
+#. Variables: {{ preset }}, {{ received }}.
+msgid "ui.preset.invalid_tools"
+msgstr "Preset '{{ preset }}' tools must be a string[], got {{ received }}"
+
+#. Variables: {{ preset }}.
+msgid "ui.preset.invalid_provider"
+msgstr "Preset '{{ preset }}' has an invalid provider field"
+
+#. Variables: {{ preset }}.
+msgid "ui.preset.invalid_model"
+msgstr "Preset '{{ preset }}' has an invalid model field"
+
+#. Variables: {{ preset }}.
+msgid "ui.preset.invalid_string_format"
+msgstr "Preset '{{ preset }}' string definitions must start with '<provider> <model>'"
+
+#. Variables: {{ preset }}, {{ args }} — the preset name and the extra positionals.
+msgid "ui.preset.unexpected_positional"
+msgstr "Preset '{{ preset }}' contains unexpected positional argument: {{ args }}"
+
+#. Variables: {{ preset }}, {{ args }}.
+msgid "ui.preset.extra_positionals"
+msgstr "Preset '{{ preset }}' ignores additional positional values ({{ args }}) beyond provider/model"
+
+#. Variables: {{ preset }} — the naming convention violation.
+msgid "ui.preset.invalid_name"
+msgstr "Preset '{{ preset }}' ignored — name must start with '$' followed by a lowercase letter"
+
+#. Variables: {{ preset }}, {{ tool_name }}, {{ field }} — the preset, tool, and field.
+msgid "ui.preset.unknown_tool"
+msgstr "Preset '{{ preset }}' references unknown tool '{{ tool_name }}' in {{ field }}"
+
+#. Variables: {{ preset }} — the default model preset reference.
+msgid "ui.preset.not_found"
+msgstr "Default preset '{{ preset }}' not found. Provider not initialized."
+
+#. Variables: {{ provider_explicit }}, {{ preset }}, {{ provider_preset }}.
+msgid "ui.preset.provider_conflict"
+msgstr "Explicit provider '{{ provider_explicit }}' conflicts with preset '{{ preset }}' (provider: '{{ provider_preset }}'). Provider not initialized."
+
+#. Inline request-progress spinner (virt_text on the @Assistant: line). The
+#. spinner glyph and " · " separators are layout added in code, not translated.
+msgid "ui.progress.waiting"
+msgstr "Waiting…"
+
+#. Variables: {{ duration }} — formatted time remaining (e.g. "5s"), not translated.
+msgid "ui.progress.timeout_in"
+msgstr "timeout in {{ duration }}"
+
+#. Streamed-output counter. count drives plural selection; formatted is the
+#. displayed number (e.g. "1.2K"). Variables: {{ formatted }}.
+msgid "ui.progress.characters"
+msgid_plural "ui.progress.characters"
+msgstr[0] "{{ formatted }} character"
+msgstr[1] "{{ formatted }} characters"
+
+#. Tool execution status labels — virt_text after the tool/job result header.
+#. The status icons (⏸ ✔ ⚠ and the animated spinner) and spacing are layout
+#. prepended in code; only the words are translated.
+msgid "ui.tool.status_pending"
+msgstr "Pending"
+
+msgid "ui.tool.status_executing"
+msgstr "Executing…"
+
+msgid "ui.tool.status_complete"
+msgstr "Complete"
+
+msgid "ui.tool.status_failed"
+msgstr "Failed"

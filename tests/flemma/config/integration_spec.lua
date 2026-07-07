@@ -968,4 +968,60 @@ describe("flemma.config — integration", function()
       assert.are.same({ "bash", "ls", "search" }, config.get(2).items)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- register_module_defaults() called before init()
+  -- ---------------------------------------------------------------------------
+
+  describe("register_module_defaults() called before init()", function()
+    -- A module can self-register as a require()-time side effect (e.g. the
+    -- experimental Codex provider adapter's top-level `secrets.register(...)`
+    -- call) and end up required before flemma.setup() has run config.init() —
+    -- e.g. a packaging tool that require()s every module in isolation. The
+    -- registration must queue rather than crash, then flush once init() supplies
+    -- the schema.
+    it("queues rather than errors, then flushes once init() runs", function()
+      local registry = {}
+      local schema = s.object({
+        extensions = s.object({
+          [symbols.DISCOVER] = function(key)
+            return registry[key]
+          end,
+        }),
+      })
+      registry.custom = s.object({ value = s.string("default-value") })
+
+      assert.has_no.errors(function()
+        config.register_module_defaults("extensions", "custom", registry.custom)
+      end)
+
+      config.init(schema)
+
+      assert.equals("default-value", config.materialize().extensions.custom.value)
+    end)
+
+    it("flushes multiple queued registrations in call order", function()
+      local registry = {}
+      local schema = s.object({
+        extensions = s.object({
+          [symbols.DISCOVER] = function(key)
+            return registry[key]
+          end,
+        }),
+      })
+      registry.first = s.object({ value = s.string("first-value") })
+      registry.second = s.object({ value = s.string("second-value") })
+
+      assert.has_no.errors(function()
+        config.register_module_defaults("extensions", "first", registry.first)
+        config.register_module_defaults("extensions", "second", registry.second)
+      end)
+
+      config.init(schema)
+
+      local result = config.materialize()
+      assert.equals("first-value", result.extensions.first.value)
+      assert.equals("second-value", result.extensions.second.value)
+    end)
+  end)
 end)

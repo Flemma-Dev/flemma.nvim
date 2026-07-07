@@ -7,6 +7,7 @@ local M = {}
 
 local bridge = require("flemma.bridge")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local modeline = require("flemma.utilities.modeline")
 local notify = require("flemma.notify")
 local registry = require("flemma.provider.registry")
@@ -52,7 +53,7 @@ local function normalize_definition(name, definition)
   elseif definition_type == "table" then
     definition = vim.deepcopy(definition)
   else
-    return nil, ("Preset '%s' must be a table or string, received %s"):format(name, definition_type)
+    return nil, messages["ui.preset.invalid_type"]{ preset = name, received = definition_type }
   end
 
   -- Extract auto_approve and tools before extract_switch_arguments consumes
@@ -62,7 +63,7 @@ local function normalize_definition(name, definition)
     auto_approve = definition.auto_approve
     definition.auto_approve = nil
   elseif definition_type == "table" and definition.auto_approve ~= nil then
-    return nil, ("Preset '%s' auto_approve must be a string[], got %s"):format(name, type(definition.auto_approve))
+    return nil, messages["ui.preset.invalid_auto_approve"]{ preset = name, received = type(definition.auto_approve) }
   end
 
   local tools = nil
@@ -70,7 +71,7 @@ local function normalize_definition(name, definition)
     tools = definition.tools
     definition.tools = nil
   elseif definition_type == "table" and definition.tools ~= nil then
-    return nil, ("Preset '%s' tools must be a string[], got %s"):format(name, type(definition.tools))
+    return nil, messages["ui.preset.invalid_tools"]{ preset = name, received = type(definition.tools) }
   end
 
   local extracted = registry.extract_switch_arguments(definition)
@@ -79,32 +80,30 @@ local function normalize_definition(name, definition)
 
   -- Provider is optional for approval-only presets (e.g. $standard, $readonly)
   if provider ~= nil and (type(provider) ~= "string" or provider == "") then
-    return nil, ("Preset '%s' has an invalid provider field"):format(name)
+    return nil, messages["ui.preset.invalid_provider"]{ preset = name }
   end
 
   if model ~= nil and (type(model) ~= "string" or model == "") then
-    return nil, ("Preset '%s' has an invalid model field"):format(name)
+    return nil, messages["ui.preset.invalid_model"]{ preset = name }
   end
 
   -- String definitions require positional <provider> <model>
   if definition_type == "string" then
     if not extracted.positionals[1] or not extracted.positionals[2] then
-      return nil, ("Preset '%s' string definitions must start with '<provider> <model>'"):format(name)
+      return nil, messages["ui.preset.invalid_string_format"]{ preset = name }
     end
     if #extracted.extra_positionals > 0 then
       return nil,
-        ("Preset '%s' contains unexpected positional argument: %s"):format(
-          name,
-          table.concat(extracted.extra_positionals, ", ")
-        )
+        messages["ui.preset.unexpected_positional"]{
+          preset = name,
+          args = table.concat(extracted.extra_positionals, ", "),
+        }
     end
   elseif #extracted.extra_positionals > 0 then
-    warn(
-      ("Preset '%s' ignores additional positional values (%s) beyond provider/model"):format(
-        name,
-        table.concat(extracted.extra_positionals, ", ")
-      )
-    )
+    warn(messages["ui.preset.extra_positionals"]{
+      preset = name,
+      args = table.concat(extracted.extra_positionals, ", "),
+    })
   end
 
   local parameters = vim.deepcopy(extracted.parameters)
@@ -141,7 +140,7 @@ function M.setup(user_presets)
     if not vim.startswith(name, "$") then
       log.warn(("presets: preset '%s' ignored — keys must start with '$'"):format(name))
     elseif not name:sub(2, 2):match("[a-z]") then
-      warn(("Preset '%s' ignored — name must start with '$' followed by a lowercase letter"):format(name))
+      warn(messages["ui.preset.invalid_name"]{ preset = name })
     else
       local normalized, err = normalize_definition(name, definition)
       if not normalized then
@@ -176,7 +175,7 @@ function M.finalize()
             end
           end
           if type(tool_name) == "string" and not tool_name:find("*", 1, true) and not tools_registry.has(tool_name) then
-            warn(("Preset '%s' references unknown tool '%s' in %s"):format(name, tool_name, field.label))
+            warn(messages["ui.preset.unknown_tool"]{ preset = name, tool_name = tool_name, field = field.label })
           end
           ::continue::
         end
@@ -215,7 +214,7 @@ function M.resolve_default(model_field, explicit_provider)
 
   local preset = M.get(model_field)
   if not preset then
-    return nil, "Default preset '" .. model_field .. "' not found. Provider not initialized."
+    return nil, messages["ui.preset.not_found"]{ preset = model_field }
   end
 
   -- Conflict check: only when the user explicitly set a provider
@@ -224,13 +223,11 @@ function M.resolve_default(model_field, explicit_provider)
     local resolved_preset = registry.resolve(preset.provider)
     if resolved_user ~= resolved_preset then
       return nil,
-        "Explicit provider '"
-          .. explicit_provider
-          .. "' conflicts with preset '"
-          .. model_field
-          .. "' (provider: '"
-          .. preset.provider
-          .. "'). Provider not initialized."
+        messages["ui.preset.provider_conflict"]{
+          provider_explicit = explicit_provider,
+          preset = model_field,
+          provider_preset = preset.provider,
+        }
     end
   end
 

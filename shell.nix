@@ -29,13 +29,17 @@ pkgs-stable.mkShell {
 
   buildInputs = with pkgs-unstable; [
     actionlint
+    ast-grep
     bubblewrap
+    gettext
     gh
     google-cloud-sdk
+    jq
     libsecret
     links2
     mcporter
     nodejs-stable.pkgs.pnpm
+    shellcheck
     socat
     tree-sitter
     vhs

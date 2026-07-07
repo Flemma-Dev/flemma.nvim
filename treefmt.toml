@@ -32,3 +32,8 @@ excludes = ["pnpm-lock.yaml"]
 command = "taplo"
 options = ["format"]
 includes = ["*.toml"]
+
+[formatter.po]
+command = "bash"
+options = ["contrib/scripts/format-po.sh"]
+includes = ["*.po"]

@@ -10,6 +10,7 @@ default:
 # Format the entire codebase
 format:
 	treefmt
+	bash contrib/scripts/format-messages-brace-call.sh
 
 # Run all quality gates — parallel, bail on first failure
 qa:
@@ -32,6 +33,12 @@ qa:
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
 	bash contrib/scripts/lint-pcall-rethrow.sh \
 		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
+	bash contrib/scripts/lint-messages.sh \
+		>"$$d/messages" 2>&1 & gate[$$!]=messages; \
+	bash contrib/scripts/lint-shell.sh \
+		>"$$d/shell" 2>&1 & gate[$$!]=shell; \
+	bash contrib/scripts/lint-require-isolation.sh \
+		>"$$d/require-isolation" 2>&1 & gate[$$!]=require-isolation; \
 	jobs=$${JOBS:-$$(nproc)}; \
 	nver=$$(echo $$NVIM_VERSIONS | wc -w); \
 	per_version_jobs=$$(( jobs / nver )); \

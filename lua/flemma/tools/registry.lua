@@ -68,6 +68,7 @@ local M = {}
 ---@field output? string|table Result output (string or JSON-encodable table)
 ---@field error? string Error message (when success=false)
 
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local registry_utils = require("flemma.utilities.registry")
 local string_utils = require("flemma.utilities.string")
@@ -84,7 +85,7 @@ local module_schemas = {}
 function M.register(name, definition)
   registry_utils.validate_name(name, "tool")
   if tools[name] and tools[name] ~= definition then
-    notify.warn(string.format("tool '%s' redefined (previously registered, now overwritten)", name))
+    notify.warn(messages["ui.tool.redefined"]{ tool_name = name })
   end
   tools[name] = definition
 end

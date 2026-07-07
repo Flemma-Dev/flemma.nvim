@@ -63,44 +63,218 @@ describe("flemma.messages", function()
     messages = require("flemma.messages")
   end)
 
-  describe("render", function()
-    it("renders job-executing--tracked template with variables", function()
-      local result = messages.render("job-executing--tracked", { job_id = "job_test1" })
+  describe("catalogue access", function()
+    it("renders with variables via __call", function()
+      local result = messages["job.executing.tracked"]{ job_id = "job_test1" }
       assert.is_string(result)
       assert.truthy(result:match("job_test1"))
       assert.truthy(result:match("flemma%.jobs%.status"))
       assert.truthy(result:match("Do not retry"))
     end)
 
-    it("renders job-executing--untracked template without job_id", function()
-      local result = messages.render("job-executing--untracked")
+    it("renders without variables via __call", function()
+      local result = messages["job.executing.untracked"]{}
       assert.is_string(result)
       assert.truthy(result:match("Do not retry"))
-      assert.is_falsy(result:match("flemma%.jobs%.status"))
       assert.is_falsy(result:match("job_id"))
     end)
 
-    it("errors for non-existent template", function()
-      assert.has_error(function()
-        messages.render("nonexistent_template")
-      end, nil)
+    it("renders via tostring()", function()
+      assert.are.equal("The tool was denied by a policy.", tostring(messages["tool.denied"]))
     end)
 
-    it("uses the templating engine for expression evaluation", function()
-      local result = messages.render("job-executing--tracked", { job_id = "job_expr" })
-      assert.is_string(result)
+    it("renders via concatenation on either side", function()
+      assert.are.equal("<<The tool was denied by a policy.", "<<" .. messages["tool.denied"])
+      assert.are.equal("The tool was denied by a policy.>>", messages["tool.denied"] .. ">>")
+    end)
+
+    it("leaves no unrendered expressions", function()
+      local result = messages["job.executing.tracked"]{ job_id = "job_expr" }
       assert.truthy(result:match("job_expr"))
       assert.is_falsy(result:match("{{"))
     end)
 
-    it("substitutes different job_ids correctly", function()
-      local result_a = messages.render("job-executing--tracked", { job_id = "job_aaa" })
-      local result_b = messages.render("job-executing--tracked", { job_id = "job_bbb" })
+    it("substitutes different variables per call", function()
+      local result_a = messages["job.executing.tracked"]{ job_id = "job_aaa" }
+      local result_b = messages["job.executing.tracked"]{ job_id = "job_bbb" }
       assert.truthy(result_a:match("job_aaa"))
       assert.is_falsy(result_a:match("job_bbb"))
       assert.truthy(result_b:match("job_bbb"))
       assert.is_falsy(result_b:match("job_aaa"))
     end)
+
+    it("errors for unknown catalogue keys", function()
+      assert.has_error(function()
+        return messages["does.not.exist"]
+      end)
+    end)
+  end)
+
+  describe("catalogue loading", function()
+    it("reports cross-catalogue key collisions at load time", function()
+      -- Shadow both shipped catalogues with minimal files defining the same
+      -- key, by prepending a temp root to the runtimepath.
+      local shadow_root = vim.fn.tempname()
+      vim.fn.mkdir(shadow_root .. "/po", "p")
+      local header = 'msgid ""\nmsgstr ""\n"Content-Type: text/plain; charset=UTF-8\\n"\n\n'
+      for name, value in pairs({ ["flemma-harness.po"] = "from harness", ["flemma.po"] = "from ui" }) do
+        local file = assert(io.open(shadow_root .. "/po/" .. name, "w"))
+        file:write(header .. 'msgid "duplicate.key"\nmsgstr "' .. value .. '"\n')
+        file:close()
+      end
+
+      vim.opt.runtimepath:prepend(shadow_root)
+      package.loaded["flemma.messages"] = nil
+      local ok, err = pcall(require, "flemma.messages")
+      vim.opt.runtimepath:remove(shadow_root)
+      package.loaded["flemma.messages"] = nil
+
+      assert.is_false(ok)
+      assert.truthy(tostring(err):match("duplicate%.key"))
+    end)
+  end)
+
+  describe("tool definition descriptions", function()
+    it("render fully from the catalogue with no leftover placeholders", function()
+      -- Each builtin/harness tool wires its description to a catalogue key and
+      -- renders it at definition time. Assert the result is a non-empty, fully
+      -- substituted string instead of re-typing the English here — the PO file
+      -- is the single source of truth for the copy. A missing key errors on
+      -- require; an unfilled variable leaves "{{" behind. Both fail here.
+      local module_paths = {
+        "flemma.tools.definitions.builtin.bash",
+        "flemma.tools.definitions.builtin.edit",
+        "flemma.tools.definitions.builtin.read",
+        "flemma.tools.definitions.builtin.write",
+        "flemma.tools.definitions.builtin.find",
+        "flemma.tools.definitions.builtin.grep",
+        "flemma.tools.definitions.builtin.ls",
+        "flemma.tools.definitions.harness.jobs",
+      }
+      for _, module_path in ipairs(module_paths) do
+        package.loaded[module_path] = nil
+        local module = require(module_path)
+        local description = module.definitions[1].description
+        assert.is_string(description, module_path)
+        assert.is_true(#description > 0, module_path)
+        assert.is_nil(description:match("{{"), module_path .. " left an unrendered placeholder")
+      end
+    end)
+  end)
+
+  describe("rejection popup prefill", function()
+    it("is the harness feedback template rendered with an empty reason", function()
+      -- ui/rejection.lua seeds the popup with this exact prefix so the popup
+      -- and the vim.ui.input fallback both yield "User feedback: <text>".
+      -- Guards the one deliberate coupling between the two catalogues.
+      assert.are.equal("User feedback: ", messages["tool.rejected.feedback"]{ reason = "" })
+    end)
+  end)
+end)
+
+describe("messages brace-call formatter", function()
+  -- Exercises contrib/scripts/format-messages-brace-call.sh, the post-stylua
+  -- step that rewrites `messages["key"]({ ... })` to the brace-call house style
+  -- `messages["key"]{ ... }`. `f{ ... }` and `f({ ... })` are equivalent Lua, so
+  -- the rewrite is cosmetic — the point is that it strips *only* the call
+  -- parentheses of a `messages[<string>]` index, tracks paren depth so nested
+  -- parentheses survive, and touches nothing else (bare refs, strings, comments,
+  -- unrelated calls).
+  local formatter = (vim.env.PROJECT_ROOT or vim.fn.getcwd()) .. "/contrib/scripts/format-messages-brace-call.sh"
+
+  local function write_temp(content)
+    local path = vim.fn.tempname() .. ".lua"
+    local file = assert(io.open(path, "w"))
+    file:write(content)
+    file:close()
+    return path
+  end
+
+  local function read_all(path)
+    local file = assert(io.open(path, "r"))
+    local content = file:read("*a")
+    file:close()
+    return content
+  end
+
+  local function run_formatter(path)
+    local result = vim.system({ "bash", formatter, path }, { text = true }):wait()
+    assert.are.equal(0, result.code, "formatter exited non-zero: " .. (result.stderr or ""))
+  end
+
+  --- Format `source`, assert it becomes `expected`, then format again and
+  --- assert the second pass changes nothing (every rewrite must be idempotent).
+  local function assert_transforms(source, expected)
+    local path = write_temp(source)
+    run_formatter(path)
+    assert.are.equal(expected, read_all(path), "first pass produced the wrong output")
+    run_formatter(path)
+    assert.are.equal(expected, read_all(path), "second pass was not idempotent")
+  end
+
+  it("strips the parens around an empty-table call", function()
+    assert_transforms('local a = messages["job.lost"]({})\n', 'local a = messages["job.lost"]{}\n')
+  end)
+
+  it("strips the parens around a single-line table with a variable", function()
+    assert_transforms(
+      'local b = messages["job.executing.tracked"]({ job_id = id })\n',
+      'local b = messages["job.executing.tracked"]{ job_id = id }\n'
+    )
+  end)
+
+  it("preserves the body of a multi-line table", function()
+    local source = table.concat({
+      'local c = messages["tool.read.description"]({',
+      "  max_lines = 2000,",
+      "  max_bytes = 100,",
+      "})",
+      "",
+    }, "\n")
+    local expected = table.concat({
+      'local c = messages["tool.read.description"]{',
+      "  max_lines = 2000,",
+      "  max_bytes = 100,",
+      "}",
+      "",
+    }, "\n")
+    assert_transforms(source, expected)
+  end)
+
+  it("strips only the outer paren when the table nests a parenthesized call", function()
+    assert_transforms(
+      'local d = messages["tool.bash.description"]({ max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024) })\n',
+      'local d = messages["tool.bash.description"]{ max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024) }\n'
+    )
+  end)
+
+  it("strips only the messages paren when the whole call nests inside another call", function()
+    assert_transforms(
+      'local e = s.number():nullable():describe(messages["tool.find.input.limit"]({ default_limit = LIMIT }))\n',
+      'local e = s.number():nullable():describe(messages["tool.find.input.limit"]{ default_limit = LIMIT })\n'
+    )
+  end)
+
+  it("leaves a bare (uncalled) proxy reference untouched", function()
+    local source = table.concat({
+      'local bare = messages["tool.denied"]',
+      'local desc = schema:describe(messages["tool.denied"])',
+      "",
+    }, "\n")
+    assert_transforms(source, source)
+  end)
+
+  it("leaves messages references inside comments and strings untouched", function()
+    local source = table.concat({
+      '-- messages["tool.denied"]({ reason = x }) stays put in a comment',
+      [[local literal = 'messages["job.lost"]({})']],
+      "",
+    }, "\n")
+    assert_transforms(source, source)
+  end)
+
+  it("leaves unrelated single-table calls untouched", function()
+    assert_transforms("bridge.send_or_execute({ bufnr = 1 })\n", "bridge.send_or_execute({ bufnr = 1 })\n")
   end)
 end)
 

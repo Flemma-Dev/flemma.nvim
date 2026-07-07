@@ -1,0 +1,26 @@
+# ast-grep rule driving contrib/scripts/format-messages-brace-call.sh.
+#
+# Rewrites `messages[<string>]( <table> )` to the brace-call form
+# `messages[<string>]<table>`, stripping exactly the call parentheses. ast-grep
+# matches structurally, so paren depth is tracked for free: parenthesized
+# expressions nested inside the table argument (e.g. `math.floor(...)`) and an
+# outer call wrapping the whole thing (e.g. `describe(messages[...](...))`) keep
+# their own parentheses.
+#
+# Constraints keep the match tight:
+#   - K must be a string-literal index, never `messages[some_var]`.
+#   - ARG must be a table constructor, never a bare argument that would become
+#     invalid Lua once its parentheses are removed.
+# The pattern requires the parenthesized form, so bare `messages["k"]` proxy
+# references (used directly in `:describe()`/`..`) are skipped and re-running
+# the rule is a no-op.
+id: messages-brace-call
+language: lua
+rule:
+  pattern: messages[$K]($ARG)
+constraints:
+  K:
+    kind: string
+  ARG:
+    kind: table_constructor
+fix: messages[$K]$ARG

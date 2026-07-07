@@ -9,6 +9,7 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local normalize = require("flemma.provider.normalize")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local provider_registry = require("flemma.provider.registry")
 local sink = require("flemma.sink")
@@ -649,7 +650,7 @@ function M._process_data(self, data, _parsed, callbacks)
 
     local reason = data.response and data.response.incomplete_details and data.response.incomplete_details.reason
       or "unknown"
-    notify.warn("Response was truncated (reason: " .. reason .. ")")
+    notify.warn(messages["ui.provider.response_truncated_reason"]{ reason = reason })
     -- Emit any accumulated reasoning before completing
     self:emit_reasoning(callbacks)
 

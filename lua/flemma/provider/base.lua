@@ -84,6 +84,7 @@ local bridge = require("flemma.bridge")
 local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
@@ -874,7 +875,7 @@ end
 ---@param callbacks flemma.provider.Callbacks
 function M._warn_truncated(self, callbacks)
   log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
-  notify.warn("Response truncated – model reached max output tokens")
+  notify.warn(messages["ui.provider.response_truncated"]{})
   if callbacks.on_response_complete then
     callbacks.on_response_complete()
   end

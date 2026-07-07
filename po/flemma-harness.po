@@ -1,0 +1,515 @@
+# Flemma harness catalogue — strings the model sees.
+# Everything here is prompt surface: conversation-injected text (tool
+# results, job placeholders) and request-payload text (tool descriptions,
+# harness parameters). English-only by design — edits here are prompt
+# engineering, not translation. Never translate this file.
+# User-facing UI strings live in po/flemma.po. Keys must stay unique across
+# both files; flemma.messages enforces this at load time.
+msgid ""
+msgstr ""
+"Project-Id-Version: flemma\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "tool.denied"
+msgstr "The tool was denied by a policy."
+
+msgid "tool.rejected"
+msgstr "This tool has been rejected by the user."
+
+#. Variables: {{ reason }} — the user's feedback text.
+msgid "tool.rejected.feedback"
+msgstr "User feedback: {{ reason }}"
+
+msgid "tool.aborted"
+msgstr "User aborted tool execution."
+
+msgid "tool.error.unknown"
+msgstr "Unknown error"
+
+#. Shared tool errors — byte-identical text reused across builtin tools.
+msgid "tool.error.no_path"
+msgstr "No path provided"
+
+msgid "tool.error.no_pattern"
+msgstr "No pattern provided"
+
+#. Variables: {{ detail }} — the sandbox backend's reason (not translated).
+msgid "tool.error.sandbox"
+msgstr "Sandbox error: {{ detail }}"
+
+msgid "tool.error.timer"
+msgstr "Failed to create timer"
+
+msgid "tool.error.job_start"
+msgstr "Failed to start job"
+
+#. Variables: {{ path }} — the file path.
+msgid "tool.error.file_not_found"
+msgstr "File not found: {{ path }}"
+
+#. Variables: {{ detail }} — the io error (not translated).
+msgid "tool.error.write_failed"
+msgstr "Cannot write file: {{ detail }}"
+
+#. Variables: {{ code }} — the subprocess exit code.
+msgid "tool.error.exit_code"
+msgstr "Command exited with code {{ code }}"
+
+#. Variables: {{ reason }} — why the save-to redirect failed.
+msgid "tool.output.not_saved"
+msgstr "[Output not saved: {{ reason }}. Showing the full output instead.]"
+
+#. Shared truncation notices appended to head/tail-truncated tool output
+#. (lua/flemma/tools/truncate.lua). Each case has a plain and a
+#. "_with_overflow" variant — the latter used when the full output was
+#. saved to a file the model can read.
+#. Variables: {{ size }}, {{ limit }} — formatted byte sizes.
+msgid "tool.truncate.output_too_large"
+msgstr "[Output too large: {{ size }} in a single line, exceeds {{ limit }} limit]"
+
+#. Variables: {{ size }}, {{ limit }} — formatted byte sizes; {{ path }} — overflow file path.
+msgid "tool.truncate.output_too_large_with_overflow"
+msgstr "[Output too large: {{ size }} in a single line, exceeds {{ limit }} limit. Full output: {{ path }}]"
+
+#. Variables: {{ size }} — formatted byte size; {{ line }} — line number.
+msgid "tool.truncate.showing_last"
+msgstr "[Showing last {{ size }} of line {{ line }}]"
+
+#. Variables: {{ size }}, {{ line }}; {{ path }} — overflow file path.
+msgid "tool.truncate.showing_last_with_overflow"
+msgstr "[Showing last {{ size }} of line {{ line }}. Full output: {{ path }}]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }} — line range shown vs total.
+msgid "tool.truncate.showing_lines"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }}]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}; {{ path }} — overflow file path.
+msgid "tool.truncate.showing_lines_with_overflow"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }}. Full output: {{ path }}]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}, {{ limit }} — formatted byte limit.
+msgid "tool.truncate.showing_lines_byte_limit"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }} ({{ limit }} limit)]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}, {{ limit }}; {{ path }} — overflow file path.
+msgid "tool.truncate.showing_lines_byte_limit_with_overflow"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }} ({{ limit }} limit). Full output: {{ path }}]"
+
+msgid "tool.parameter.background"
+msgstr "Set to true to run this tool in the background. The conversation continues immediately with a placeholder; the actual result is delivered as a separate message later — you cannot access it until then. Default to foreground. Use background only when you have other meaningful work to do while waiting and no upcoming tool call or decision depends on this result, even indirectly. Avoid backgrounding all tool calls in a single response — keep at least one foreground result to act on."
+
+msgid "tool.parameter.save_to"
+msgstr "Save the full tool output to this file path instead of returning it in the conversation. You will receive a short preview of the output along with the file path where the complete content was saved. Use this when the output is large and would clutter the conversation, or when you need the output saved to a specific location for later use. Absolute paths and ~/... paths are supported. Use $FLEMMA_TOOLS_STORE_PATH/<filename> to save into the conversation's store directory (the same directory where truncated tool results are automatically saved)."
+
+#. Variables: {{ job_id }} — the background job identifier.
+msgid "job.executing.tracked"
+msgstr "Running as a background job `{{ job_id }}`. Use `flemma.jobs.status` with this job ID to check progress. Do not retry — the result will be delivered to you automatically when the job completes."
+
+msgid "job.executing.untracked"
+msgstr "Running as a background job. Do not retry or attempt to check progress — the result will be delivered to you automatically when the job completes."
+
+msgid "job.lost"
+msgstr "Job lost: session ended before completion."
+
+msgid "request.aborted"
+msgstr "Response interrupted by the user."
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
+msgid "tool.bash.description"
+msgstr "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last {{ max_lines }} lines or {{ max_bytes_kb }}KB (whichever is hit first). If truncated, full output is saved to a file. $FLEMMA_TOOLS_STORE_PATH is set in the environment and points to a directory where saved tool results for this conversation are stored. Optionally provide a timeout in seconds."
+
+msgid "tool.bash.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'running tests')"
+
+msgid "tool.bash.input.command"
+msgstr "The bash command to execute"
+
+msgid "tool.bash.input.timeout"
+msgstr "Timeout in seconds (default: 30)"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.bash.personality.snippet"
+msgstr "Execute shell commands in the user's project directory"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.bash.personality.guidelines"
+msgstr ""
+"Prefer dedicated tools (read, edit, write) over bash for file operations\n"
+"Never run destructive commands (rm -rf, git reset --hard) without user confirmation"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.bash.error.no_command"
+msgstr "No command provided"
+
+#. Empty-output placeholder shown when a command produces no output.
+msgid "tool.bash.no_output"
+msgstr "(no output)"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.bash.timeout"
+msgid_plural "tool.bash.timeout"
+msgstr[0] "Command timed out after {{ count }} second."
+msgstr[1] "Command timed out after {{ count }} seconds."
+
+msgid "tool.edit.description"
+msgstr "Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits."
+
+msgid "tool.edit.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'fixing typo in config.lua')"
+
+msgid "tool.edit.input.path"
+msgstr "Path to the file to edit (relative or absolute)"
+
+msgid "tool.edit.input.oldText"
+msgstr "Exact text to find and replace (must match exactly)"
+
+msgid "tool.edit.input.newText"
+msgstr "New text to replace the old text with"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.edit.personality.snippet"
+msgstr "Make surgical edits to files (find exact text and replace)"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.edit.personality.guidelines"
+msgstr ""
+"Use edit for precise, targeted changes — old text must match exactly\n"
+"Use write only for new files or complete rewrites, not for modifications"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.edit.error.no_old_text"
+msgstr "No oldText provided"
+
+msgid "tool.edit.error.no_new_text"
+msgstr "No newText provided"
+
+#. Variables: {{ path }} — the path denied by the sandbox.
+msgid "tool.edit.error.sandbox_denied"
+msgstr "Sandbox: edit denied – path is outside writable directories: {{ path }}"
+
+#. Variables: {{ detail }} — the io error (not translated).
+msgid "tool.edit.error.read_failed"
+msgstr "Cannot read file: {{ detail }}"
+
+#. Variables: {{ path }} — the file searched.
+msgid "tool.edit.error.text_not_found"
+msgstr "Could not find the exact text in {{ path }}. The old text must match exactly including all whitespace and newlines."
+
+#. Variables: {{ count }} — match count (always >1); {{ path }}.
+msgid "tool.edit.error.not_unique"
+msgstr "Found {{ count }} occurrences of the text in {{ path }}. The text must be unique. Please provide more context to make it unique."
+
+#. Variables: {{ path }}.
+msgid "tool.edit.error.no_changes"
+msgstr "No changes made to {{ path }}. The replacement produced identical content."
+
+#. Variables: {{ path }}.
+msgid "tool.edit.output.success"
+msgstr "Successfully replaced text in {{ path }}."
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
+msgid "tool.find.description"
+msgstr "Find files by glob pattern. Uses fd, git ls-files, or GNU find (whichever is available). Output is truncated to {{ max_lines }} lines or {{ max_bytes_kb }}KB. Returns sorted relative paths, one per line."
+
+msgid "tool.find.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'finding test files')"
+
+msgid "tool.find.input.pattern"
+msgstr "Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')"
+
+msgid "tool.find.input.path"
+msgstr "Directory to search in (default: working directory)"
+
+#. Variables: {{ default_limit }} — the default result cap.
+msgid "tool.find.input.limit"
+msgstr "Maximum number of results (default: {{ default_limit }})"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.find.personality.snippet"
+msgstr "Find files matching a glob pattern in the project"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.find.personality.guidelines"
+msgstr ""
+"Use find to discover file locations before reading or editing\n"
+"Use specific patterns to narrow results (e.g., '*.test.lua' not '*')"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.find.error.no_backend"
+msgstr "No file-finding tool available (install fd, git, or find)"
+
+msgid "tool.find.no_matches"
+msgstr "No files found matching pattern."
+
+#. count = result limit. Variables: {{ count }}.
+msgid "tool.find.footer_limited"
+msgid_plural "tool.find.footer_limited"
+msgstr[0] "[Results limited to {{ count }} entry. Narrow your pattern for more specific results.]"
+msgstr[1] "[Results limited to {{ count }} entries. Narrow your pattern for more specific results.]"
+
+#. Variables: {{ shown }}, {{ total }} — lines shown vs total.
+msgid "tool.find.footer_truncated"
+msgstr "[Showing {{ shown }} of {{ total }} results (truncated). Narrow your pattern for more specific results.]"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.find.timeout"
+msgid_plural "tool.find.timeout"
+msgstr[0] "Find timed out after {{ count }} second."
+msgstr[1] "Find timed out after {{ count }} seconds."
+
+msgid "tool.flemma.jobs.status.description"
+msgstr "Check the status of a background job. Returns \"running\" while the job is executing, \"completed (delivery pending)\" once it has finished and its result is queued to be injected into the conversation automatically (do not re-run the tool or keep polling — the result is on its way), or \"completed\" when the result is already in the conversation. Use this to check on long-running background tasks instead of retrying them."
+
+msgid "tool.flemma.jobs.status.input.job_id"
+msgstr "The job ID (e.g., 'job_xxx') from the tool result placeholder."
+
+#. Job status values (the model reads these inside the JSON status field).
+msgid "tool.flemma.jobs.status.state_running"
+msgstr "running"
+
+msgid "tool.flemma.jobs.status.state_delivery_pending"
+msgstr "completed (delivery pending)"
+
+msgid "tool.flemma.jobs.status.state_completed"
+msgstr "completed"
+
+msgid "tool.flemma.jobs.status.state_removed"
+msgstr "completed (removed from conversation)"
+
+#. Variables: {{ default_limit }} — the default match cap.
+msgid "tool.grep.description"
+msgstr "Search file contents using ripgrep (rg) or grep. Returns matching lines with file paths and line numbers. Output is limited to {{ default_limit }} matches by default. Supports regex patterns. When using grep -E fallback, \\d, \\w, \\s are automatically translated to POSIX equivalents."
+
+msgid "tool.grep.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'searching for TODO comments')"
+
+msgid "tool.grep.input.pattern"
+msgstr "Regular expression pattern to search for"
+
+msgid "tool.grep.input.path"
+msgstr "Directory to search in (default: working directory)"
+
+msgid "tool.grep.input.glob"
+msgstr "File glob filter (e.g., '*.lua', '*.{ts,tsx}')"
+
+#. Variables: {{ default_limit }} — the default match cap.
+msgid "tool.grep.input.limit"
+msgstr "Maximum number of matches (default: {{ default_limit }})"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.grep.personality.snippet"
+msgstr "Search file contents for patterns using ripgrep or grep"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.grep.personality.guidelines"
+msgstr ""
+"Use grep to find specific patterns, symbols, or text across the codebase\n"
+"Prefer specific patterns over broad ones to reduce noise\n"
+"Use glob filter to narrow search to relevant file types"
+
+#. Result summary footer appended to grep output. count selects singular/plural.
+#. Variables: {{ count }} — match count.
+msgid "tool.grep.footer"
+msgid_plural "tool.grep.footer"
+msgstr[0] "[{{ count }} match]"
+msgstr[1] "[{{ count }} matches]"
+
+#. Variables: {{ count }} — match count (the configured limit was hit).
+msgid "tool.grep.footer_limit_reached"
+msgid_plural "tool.grep.footer_limit_reached"
+msgstr[0] "[{{ count }} match, limit reached]"
+msgstr[1] "[{{ count }} matches, limit reached]"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.grep.error.no_backend"
+msgstr "No search backend available (install rg or grep)"
+
+#. Variables: {{ code }} — the search process exit code.
+msgid "tool.grep.error.exit_code"
+msgstr "Search failed with exit code {{ code }}"
+
+msgid "tool.grep.no_matches"
+msgstr "No matches found."
+
+msgid "tool.grep.error.job_start"
+msgstr "Failed to start search process"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.grep.timeout"
+msgid_plural "tool.grep.timeout"
+msgstr[0] "Search timed out after {{ count }} second."
+msgstr[1] "Search timed out after {{ count }} seconds."
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }}, {{ default_limit }}.
+msgid "tool.ls.description"
+msgstr "List directory contents. Output is truncated to {{ max_lines }} lines or {{ max_bytes_kb }}KB. Directories appear first (suffixed with /), then files, both sorted case-insensitively. Use max_depth > 1 to recurse into subdirectories (max 10). Use limit to cap the number of entries (default {{ default_limit }})."
+
+msgid "tool.ls.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'listing project root')"
+
+msgid "tool.ls.input.path"
+msgstr "Directory path to list (relative or absolute)"
+
+msgid "tool.ls.input.max_depth"
+msgstr "Maximum recursion depth (default: 1, max: 10)"
+
+msgid "tool.ls.input.limit"
+msgstr "Maximum number of entries (default: 500)"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.ls.personality.snippet"
+msgstr "List directory contents with optional depth and entry limit"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.ls.personality.guidelines"
+msgstr ""
+"Use ls to explore project structure before reading individual files\n"
+"Prefer max_depth=1 for broad overviews, increase depth for targeted exploration"
+
+#. Result summary footer appended to ls output. count selects singular/plural.
+#. Variables: {{ count }} — entry count.
+msgid "tool.ls.footer"
+msgid_plural "tool.ls.footer"
+msgstr[0] "[{{ count }} entry]"
+msgstr[1] "[{{ count }} entries]"
+
+#. Variables: {{ count }} — entry count; {{ depth }} — recursion depth used.
+msgid "tool.ls.footer_with_depth"
+msgid_plural "tool.ls.footer_with_depth"
+msgstr[0] "[{{ count }} entry, depth={{ depth }}]"
+msgstr[1] "[{{ count }} entries, depth={{ depth }}]"
+
+#. Runtime result string (model-facing). Variables: {{ path }}.
+msgid "tool.ls.error.not_found"
+msgstr "Directory not found: {{ path }}"
+
+#. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
+msgid "tool.read.description"
+msgstr "Read the contents of a file. Output is truncated to {{ max_lines }} lines or {{ max_bytes_kb }}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete."
+
+msgid "tool.read.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'reading config.lua')"
+
+msgid "tool.read.input.path"
+msgstr "Path to the file to read (relative or absolute)"
+
+msgid "tool.read.input.offset"
+msgstr "Line number to start reading from (1-indexed)"
+
+msgid "tool.read.input.limit"
+msgstr "Maximum number of lines to read"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.read.personality.snippet"
+msgstr "Read file contents with optional offset and line limit"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.read.personality.guidelines"
+msgstr "Use read to examine files before editing"
+
+#. Runtime result strings (model-facing output/errors).
+#. Variables: {{ offset }}, {{ total }}.
+msgid "tool.read.offset_beyond_eof"
+msgstr "Offset {{ offset }} is beyond end of file ({{ total }} lines total)"
+
+#. Variables: {{ line }}, {{ size }}, {{ limit }}, {{ path }}, {{ bytes }}.
+msgid "tool.read.line_exceeds_limit"
+msgstr "[Line {{ line }} is {{ size }}, exceeds {{ limit }} limit. Use bash: sed -n '{{ line }}p' {{ path }} | head -c {{ bytes }}]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}, {{ next_offset }}.
+msgid "tool.read.truncated_lines"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }}. Use offset={{ next_offset }} to continue.]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}, {{ limit }}, {{ next_offset }}.
+msgid "tool.read.truncated_bytes"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }} ({{ limit }} limit). Use offset={{ next_offset }} to continue.]"
+
+#. count = remaining lines. Variables: {{ count }}, {{ next_offset }}.
+msgid "tool.read.more_lines"
+msgid_plural "tool.read.more_lines"
+msgstr[0] "[{{ count }} more line in file. Use offset={{ next_offset }} to continue.]"
+msgstr[1] "[{{ count }} more lines in file. Use offset={{ next_offset }} to continue.]"
+
+msgid "tool.write.description"
+msgstr "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories."
+
+msgid "tool.write.input.label"
+msgstr "A short human-readable label for this operation (e.g., 'creating config.lua')"
+
+msgid "tool.write.input.path"
+msgstr "Path to the file to write (relative or absolute)"
+
+msgid "tool.write.input.content"
+msgstr "Content to write to the file"
+
+#. Personality snippet (coding-assistant): the one-line tool description
+#. shown in the system prompt's tool list.
+msgid "tool.write.personality.snippet"
+msgstr "Create new files or completely overwrite existing ones"
+
+#. Personality guidelines (coding-assistant): one guideline per line, split on
+#. newlines at prompt-build time. Blank lines are ignored — add, remove, or
+#. reword lines freely; the count is not fixed anywhere in the code.
+msgid "tool.write.personality.guidelines"
+msgstr "Prefer edit over write for modifying existing files"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.write.error.no_content"
+msgstr "No content provided"
+
+#. Variables: {{ path }} — the path denied by the sandbox.
+msgid "tool.write.error.sandbox_denied"
+msgstr "Sandbox: write denied – path is outside writable directories: {{ path }}"
+
+#. count = bytes written. Variables: {{ count }}, {{ path }}.
+msgid "tool.write.success"
+msgid_plural "tool.write.success"
+msgstr[0] "Successfully wrote {{ count }} byte to {{ path }}"
+msgstr[1] "Successfully wrote {{ count }} bytes to {{ path }}"
+
+#. mcporter (MCP bridge) runtime result strings. Descriptions come from the
+#. MCP server, not this catalogue; only Flemma's own error prose lives here.
+msgid "tool.mcporter.empty_output"
+msgstr "mcporter returned empty output"
+
+#. Variables: {{ code }} — the mcporter exit code.
+msgid "tool.mcporter.call_failed"
+msgstr "mcporter call failed with exit code {{ code }}"
+
+msgid "tool.mcporter.parse_failed"
+msgstr "Failed to parse response"
+
+#. Variables: {{ detail }} — the captured stderr (not translated).
+msgid "tool.mcporter.stderr"
+msgstr "stderr: {{ detail }}"
+
+msgid "tool.mcporter.start_failed"
+msgstr "Failed to start mcporter call"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.mcporter.timeout"
+msgid_plural "tool.mcporter.timeout"
+msgstr[0] "mcporter call timed out after {{ count }} second"
+msgstr[1] "mcporter call timed out after {{ count }} seconds"

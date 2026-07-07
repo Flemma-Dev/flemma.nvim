@@ -6,6 +6,7 @@
 ---@field _build_command fun(backend: "fd"|"git"|"find", pattern: string, search_path: string, exclude: string[]): string[] Build command array for the given backend (exposed for testing)
 local M = {}
 
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
@@ -140,28 +141,23 @@ M.definitions = {
         ),
       }),
     },
-    description = "Find files by glob pattern. "
-      .. "Uses fd, git ls-files, or GNU find (whichever is available). "
-      .. "Output is truncated to "
-      .. truncate.MAX_LINES
-      .. " lines or "
-      .. math.floor(truncate.MAX_BYTES / 1024)
-      .. "KB. "
-      .. "Returns sorted relative paths, one per line.",
+    description = messages["tool.find.description"]{
+      max_lines = truncate.MAX_LINES,
+      max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024),
+    },
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'finding test files')"),
-      pattern = s.string():describe("Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')"),
-      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
-      limit = s.number():nullable():describe("Maximum number of results (default: " .. DEFAULT_RESULT_LIMIT .. ")"),
+      label = s.string():describe(messages["tool.find.input.label"]),
+      pattern = s.string():describe(messages["tool.find.input.pattern"]),
+      path = s.string():nullable():describe(messages["tool.find.input.path"]),
+      limit = s.number()
+        :nullable()
+        :describe(messages["tool.find.input.limit"]{ default_limit = DEFAULT_RESULT_LIMIT }),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Find files matching a glob pattern in the project",
-        guidelines = {
-          "Use find to discover file locations before reading or editing",
-          "Use specific patterns to narrow results (e.g., '*.test.lua' not '*')",
-        },
+        snippet = messages["tool.find.personality.snippet"]{},
+        guidelines = messages["tool.find.personality.guidelines"]{},
       },
     },
     async = true,
@@ -180,13 +176,13 @@ M.definitions = {
       ---@cast callback -nil
       local pattern = input.pattern
       if not pattern or pattern == "" then
-        callback({ success = false, error = "No pattern provided" })
+        callback({ success = false, error = messages["tool.error.no_pattern"]{} })
         return nil
       end
 
       local backend = detect_backend()
       if not backend then
-        callback({ success = false, error = "No file-finding tool available (install fd, git, or find)" })
+        callback({ success = false, error = messages["tool.find.error.no_backend"]{} })
         return nil
       end
 
@@ -212,7 +208,7 @@ M.definitions = {
       -- Sandbox wrapping
       local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(cmd)
       if not wrapped_cmd then
-        callback({ success = false, error = "Sandbox error: " .. (sandbox_err or "unknown") })
+        callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err or "unknown" } })
         return nil
       end
 
@@ -289,13 +285,13 @@ M.definitions = {
 
             if is_error and #results == 0 then
               local error_text = #stderr_lines > 0 and table.concat(stderr_lines, "\n")
-                or string.format("Command exited with code %d", code)
+                or messages["tool.error.exit_code"]{ code = code }
               callback({ success = false, error = error_text })
               return
             end
 
             if #results == 0 then
-              callback({ success = true, output = "No files found matching pattern." })
+              callback({ success = true, output = messages["tool.find.no_matches"]{} })
               return
             end
 
@@ -330,18 +326,14 @@ M.definitions = {
 
             -- Add summary
             if limit_reached or was_limited then
-              output_text = output_text
-                .. string.format(
-                  "\n\n[Results limited to %d entries. Narrow your pattern for more specific results.]",
-                  result_limit
-                )
+              output_text = output_text .. "\n\n" .. messages["tool.find.footer_limited"]{ count = result_limit }
             elseif truncation_result.truncated then
               output_text = output_text
-                .. string.format(
-                  "\n\n[Showing %d of %d results (truncated). Narrow your pattern for more specific results.]",
-                  truncation_result.output_lines,
-                  truncation_result.total_lines
-                )
+                .. "\n\n"
+                .. messages["tool.find.footer_truncated"]{
+                  shown = truncation_result.output_lines,
+                  total = truncation_result.total_lines,
+                }
             end
 
             callback({ success = true, output = output_text })
@@ -353,7 +345,7 @@ M.definitions = {
 
       if job_id <= 0 then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to start job" })
+        callback({ success = false, error = messages["tool.error.job_start"]{} })
         return nil
       end
 
@@ -363,7 +355,7 @@ M.definitions = {
       timer = vim.uv.new_timer()
       if not timer then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to create timer" })
+        callback({ success = false, error = messages["tool.error.timer"]{} })
         return nil
       end
       timer:start(
@@ -380,7 +372,7 @@ M.definitions = {
 
             local partial_output = output_sink:read():gsub("%s+$", "")
             output_sink:destroy()
-            local error_msg = string.format("Find timed out after %d seconds.", timeout)
+            local error_msg = messages["tool.find.timeout"]{ count = timeout }
             if partial_output ~= "" then
               error_msg = partial_output .. "\n\n" .. error_msg
             end

@@ -119,6 +119,9 @@ end
 ---Dispatches on arguments:
 ---  register("module.path")      — load module, read .metadata, register
 ---  register("name", entry)      — direct definition with entry table
+---
+---A module-path registration may export an optional `on_register()` function;
+---the registry invokes it once after the provider is live (see the call site).
 ---@param source string Module path (single arg) or provider name (with entry)
 ---@param entry? flemma.provider.RegistrationEntry Registration entry (when source is a name)
 function M.register(source, entry)
@@ -129,6 +132,9 @@ function M.register(source, entry)
 
   ---@type flemma.provider.Metadata
   local metadata
+
+  ---@type table? The loaded module table (module-path form only), for on_register
+  local mod
 
   if entry then
     -- Two-arg form: register("name", entry)
@@ -144,7 +150,7 @@ function M.register(source, entry)
     }
   else
     -- Single-arg form: register("module.path") — load module and read metadata
-    local mod = loader.load(source)
+    mod = loader.load(source)
     if not mod.metadata then
       error("Provider module " .. source .. " does not export metadata", 2)
     end
@@ -186,6 +192,16 @@ function M.register(source, entry)
   -- Materialize config_schema defaults into the DEFAULTS layer
   if metadata.config_schema then
     config_facade.register_module_defaults("parameters", name, metadata.config_schema)
+  end
+
+  -- A module-path provider may export an on_register() lifecycle hook — the
+  -- registry's chance to register resources the adapter needs (e.g. a secrets
+  -- resolver whose config schema must exist before setup validates it) at
+  -- registration time, not as a require()-time side effect. Runs once, after
+  -- the provider is live.
+  local on_register = mod and mod.on_register
+  if type(on_register) == "function" then
+    on_register()
   end
 end
 

@@ -15,6 +15,7 @@ local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
 local injector = require("flemma.tools.injector")
 local indicators = require("flemma.ui.indicators")
+local messages = require("flemma.messages")
 
 -- Access the tool_exec namespace (nvim_create_namespace returns same ID if already created)
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
@@ -446,6 +447,10 @@ describe("Tool Indicator Extmark Placement", function()
       assert.is_not_nil(parts.eol, "Should have EOL status extmark")
       assert.is_truthy(parts.eol:match("⏸"), "EOL should contain ⏸")
       assert.is_truthy(parts.eol:match("Pending"), "EOL should contain Pending")
+      assert.is_truthy(
+        parts.eol:find(messages["ui.tool.status_pending"]{}, 1, true),
+        "EOL renders the externalized pending label"
+      )
       assert.are.equal("FlemmaToolPending", parts.eol_hl)
 
       indicators.clear_all_tool_indicators(bufnr)
@@ -466,6 +471,10 @@ describe("Tool Indicator Extmark Placement", function()
       assert.is_nil(parts.prefix, "Should NOT have inline prefix during execution")
       assert.is_not_nil(parts.eol, "Should have EOL status extmark")
       assert.is_truthy(parts.eol:match("Executing"), "EOL should contain Executing")
+      assert.is_truthy(
+        parts.eol:find(messages["ui.tool.status_executing"]{}, 1, true),
+        "EOL renders the externalized executing label"
+      )
       assert.are.equal("FlemmaToolExecuting", parts.eol_hl)
 
       indicators.clear_all_tool_indicators(bufnr)
@@ -490,6 +499,10 @@ describe("Tool Indicator Extmark Placement", function()
       assert.is_not_nil(parts.eol, "Should have EOL status")
       assert.is_truthy(parts.eol:match("✔"), "EOL should contain ✔")
       assert.is_truthy(parts.eol:match("Complete"), "EOL should contain Complete")
+      assert.is_truthy(
+        parts.eol:find(messages["ui.tool.status_complete"]{}, 1, true),
+        "EOL renders the externalized complete label"
+      )
       assert.are.equal("FlemmaToolSuccess", parts.eol_hl)
 
       indicators.clear_all_tool_indicators(bufnr)
@@ -514,6 +527,10 @@ describe("Tool Indicator Extmark Placement", function()
       assert.is_not_nil(parts.eol, "Should have EOL status")
       assert.is_truthy(parts.eol:match("⚠"), "EOL should contain ⚠")
       assert.is_truthy(parts.eol:match("Failed"), "EOL should contain Failed")
+      assert.is_truthy(
+        parts.eol:find(messages["ui.tool.status_failed"]{}, 1, true),
+        "EOL renders the externalized failed label"
+      )
       assert.are.equal("FlemmaToolError", parts.eol_hl)
 
       indicators.clear_all_tool_indicators(bufnr)

@@ -17,9 +17,31 @@ local DEFAULT_TARGETS = {
   ".github/copilot-instructions.md",
 }
 
+--- Split a multi-line personality part into a clean list of lines.
+--- Any run of CR/LF characters is one break (so CRLF, lone CR, and blank lines
+--- all collapse regardless of the platform the catalogue was edited on), each
+--- line is trimmed, and whitespace-only lines are dropped. This lets a single
+--- catalogue entry hold a free-form, newline-delimited list — a prompt engineer
+--- adds, removes, or rewords guidelines without the count being baked into the
+--- code or the key names.
+---@param text string
+---@return string[]
+local function split_lines(text)
+  ---@type string[]
+  local lines = {}
+  for _, line in ipairs(vim.split(text, "[\r\n]+", { trimempty = true })) do
+    local trimmed = vim.trim(line)
+    if trimmed ~= "" then
+      lines[#lines + 1] = trimmed
+    end
+  end
+  return lines
+end
+
 --- Build tool entries for a personality from a sorted tool definition array.
 --- Each entry has { name, parts } where parts is keyed by part name.
---- Single string values are normalized to { value }.
+--- String values are split into trimmed, non-empty lines (a single-line value
+--- yields a one-element list); array values are taken verbatim.
 ---@param personality_name string
 ---@param tool_definitions flemma.tools.ToolDefinition[]
 ---@return flemma.personalities.ToolEntry[]
@@ -32,7 +54,7 @@ function M.build_tools(personality_name, tool_definitions)
     if definition.personalities and definition.personalities[personality_name] then
       for part_name, value in pairs(definition.personalities[personality_name]) do
         if type(value) == "string" then
-          parts[part_name] = { value }
+          parts[part_name] = split_lines(value)
         elseif type(value) == "table" then
           parts[part_name] = value
         end

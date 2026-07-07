@@ -3,6 +3,8 @@
 ---@class flemma.utilities.String
 local M = {}
 
+local messages = require("flemma.messages")
+
 --- Token counts below this threshold are shown as full comma-separated numbers;
 --- at or above it they collapse to a compact K suffix.
 local TOKEN_COMPACT_THRESHOLD = 4000
@@ -124,7 +126,10 @@ end
 ---@param pricing { input: number, output: number }
 ---@return string
 function M.format_pricing_suffix(pricing)
-  return M.format_money(pricing.input) .. " input / " .. M.format_money(pricing.output) .. " output per MTok"
+  return messages["ui.usage.pricing_suffix"]{
+    input_rate = M.format_money(pricing.input),
+    output_rate = M.format_money(pricing.output),
+  }
 end
 
 ---Build the single-line estimate string shown by `:Flemma usage:estimate`.
@@ -137,16 +142,15 @@ end
 ---@return string
 function M.format_estimate(input_tokens, model, pricing)
   if not pricing then
-    return M.format_number(input_tokens) .. " input tokens · " .. model
+    return messages["ui.usage.estimate_tokens_only"]{ count = M.format_number(input_tokens), model = model }
   end
   local cost = input_tokens * pricing.input / 1000000
-  return string.format(
-    "%s input tokens · %s · %s (%s)",
-    M.format_number(input_tokens),
-    M.format_money(cost),
-    model,
-    M.format_pricing_suffix(pricing)
-  )
+  return messages["ui.usage.estimate_with_cost"]{
+    count = M.format_number(input_tokens),
+    cost = M.format_money(cost),
+    model = model,
+    pricing = M.format_pricing_suffix(pricing),
+  }
 end
 
 ---Format a byte size for human-readable display using binary divisors.

@@ -11,10 +11,19 @@ set -euo pipefail
 #                    to avoid coupling the schema definition to heavy modules at load time
 # tools/init.lua:    facade delegates to executor inline to avoid circular dependency
 #                    (executor already requires tools/init)
+# ast/init.lua:      dump is lazy-required via metatable __index to break the
+#                    ast↔dump circular dependency (ast imports dump, dump imports
+#                    parser, parser imports ast) — see the file's header note.
+# messages.lua:      renderer is lazy-required to break the
+#                    messages↔renderer↔compiler cycle (compiler emits a catalogue
+#                    diagnostic); keeps flemma.messages safe to require() at file
+#                    top everywhere.
 ALLOWED_INLINE=(
   "lua/flemma/commands.lua=*"
   "lua/flemma/config/schema.lua=*"
   "lua/flemma/tools/init.lua=flemma.tools.executor"
+  "lua/flemma/ast/init.lua=flemma.ast.dump"
+  "lua/flemma/messages.lua=flemma.templating.renderer"
 )
 
 # Build a lookup function from the allowlist.
@@ -33,45 +42,47 @@ is_allowed() {
   return 1
 }
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Pass 1: an inline require is a require("flemma.…") inside a function body.
+# ast-grep matches this structurally (inline-require.yml) — correctly catching
+# the assignment/anonymous-style functions the old line-position heuristic
+# skipped — and emits each match as JSON. We pull file + line + module out with
+# jq and apply the ALLOWED_INLINE allowlist here; whatever is left is a violation.
 violations=0
 
-for file in $(find lua/flemma -name '*.lua' -type f | sort); do
-  # Find line number of first function definition
-  first_fn=$(grep -n -m1 -E '^\s*(local\s+)?function\s' "$file" || true)
-  if [ -z "$first_fn" ]; then
+# Run detection up front and capture it. A process substitution (< <(…)) hides
+# the pipeline's exit status from the parent shell even under pipefail, so an
+# ast-grep/jq failure (missing or malformed rule, a crash) would yield no output
+# and be silently reported as "no violations". Capturing lets pipefail + || turn
+# any such tooling failure into a gate error instead of a false pass.
+if ! matches=$(
+  ast-grep scan --rule "${script_dir}/ast-grep/rules/inline-require.yml" --json=compact lua/flemma/ |
+    jq -r '.[] | [.file, (.range.start.line + 1), .metaVariables.single.ARG.text] | @tsv'
+); then
+  echo "ERROR: inline-require detection failed (ast-grep or jq errored above)." >&2
+  exit 1
+fi
+
+while IFS=$'\t' read -r file line module; do
+  [ -z "$file" ] && continue
+  # metaVariables.single.ARG.text arrives as the quoted string literal, e.g.
+  # "flemma.foo"; strip the surrounding quotes to match the allowlist format.
+  module="${module#\"}"
+  module="${module%\"}"
+
+  if is_allowed "$file" "$module"; then
     continue
   fi
-  first_fn=$(echo "$first_fn" | cut -d: -f1)
 
-  # Search for require("flemma. after the first function
-  while IFS= read -r match; do
-    [ -z "$match" ] && continue
-    line_num=$(echo "$match" | cut -d: -f1)
-    content=$(echo "$match" | cut -d: -f2-)
-    abs_line=$((first_fn + line_num - 1))
-
-    # Skip vim string-context requires (inside single-quoted strings)
-    if echo "$content" | grep -qE "^[^']*'[^']*require\(\"flemma\."; then
-      continue
-    fi
-
-    # Skip dynamic requires (no string literal — require(variable))
-    if echo "$content" | grep -qE 'require\([^"'"'"']'; then
-      continue
-    fi
-
-    # Extract the module name from require("flemma.foo.bar")
-    module=$(echo "$content" | grep -oE 'require\("flemma\.[^"]*"' | head -1 | sed 's/require("//;s/"$//')
-
-    # Check against the allowlist
-    if [ -n "$module" ] && is_allowed "$file" "$module"; then
-      continue
-    fi
-
-    echo "  $file:$abs_line: $(echo "$content" | sed 's/^[[:space:]]*//')"
-    violations=$((violations + 1))
-  done < <(tail -n +"$first_fn" "$file" | grep -n -E 'require\(?"flemma\.' || true)
-done
+  # Print the whole source statement: ast-grep's match text is just the
+  # require(...) call, but the house format shows the full line (e.g. the
+  # enclosing assignment). Keep sed: a leading-only whitespace strip can't
+  # anchor to ^ with ${var//search/replace}.
+  # shellcheck disable=SC2001
+  echo "  $file:$line: $(sed -n "${line}p" "$file" | sed 's/^[[:space:]]*//')"
+  violations=$((violations + 1))
+done <<<"$matches"
 
 if [ "$violations" -gt 0 ]; then
   echo ""
@@ -80,5 +91,5 @@ if [ "$violations" -gt 0 ]; then
   exit 1
 fi
 
-echo "lint-inline-requires: OK (no inline requires found)"
+echo "lint-inline-requires: OK"
 exit 0
