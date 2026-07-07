@@ -142,9 +142,9 @@ M.definitions = {
       -- Build summary footer
       local footer
       if depth > 1 then
-        footer = string.format("[%d entries, depth=%d]", entry_count, depth)
+        footer = messages["tool.ls.footer_with_depth"]{ count = entry_count, depth = depth }
       else
-        footer = string.format("[%d entries]", entry_count)
+        footer = messages["tool.ls.footer"]{ count = entry_count }
       end
 
       local output_text

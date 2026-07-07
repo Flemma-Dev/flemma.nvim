@@ -309,9 +309,9 @@ M.definitions = {
             -- Add summary footer
             local footer
             if limit_reached then
-              footer = string.format("[%d matches, limit reached]", match_count)
+              footer = messages["tool.grep.footer_limit_reached"]{ count = match_count }
             else
-              footer = string.format("[%d matches]", match_count)
+              footer = messages["tool.grep.footer"]{ count = match_count }
             end
 
             if result.truncated then

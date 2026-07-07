@@ -12,6 +12,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "tool.denied"
 msgstr "The tool was denied by a policy."
@@ -123,6 +124,19 @@ msgstr "File glob filter (e.g., '*.lua', '*.{ts,tsx}')"
 msgid "tool.grep.input.limit"
 msgstr "Maximum number of matches (default: {{ default_limit }})"
 
+#. Result summary footer appended to grep output. count selects singular/plural.
+#. Variables: {{ count }} — match count.
+msgid "tool.grep.footer"
+msgid_plural "tool.grep.footer"
+msgstr[0] "[{{ count }} match]"
+msgstr[1] "[{{ count }} matches]"
+
+#. Variables: {{ count }} — match count (the configured limit was hit).
+msgid "tool.grep.footer_limit_reached"
+msgid_plural "tool.grep.footer_limit_reached"
+msgstr[0] "[{{ count }} match, limit reached]"
+msgstr[1] "[{{ count }} matches, limit reached]"
+
 #. Variables: {{ max_lines }}, {{ max_bytes_kb }}, {{ default_limit }}.
 msgid "tool.ls.description"
 msgstr "List directory contents. Output is truncated to {{ max_lines }} lines or {{ max_bytes_kb }}KB. Directories appear first (suffixed with /), then files, both sorted case-insensitively. Use max_depth > 1 to recurse into subdirectories (max 10). Use limit to cap the number of entries (default {{ default_limit }})."
@@ -138,6 +152,19 @@ msgstr "Maximum recursion depth (default: 1, max: 10)"
 
 msgid "tool.ls.input.limit"
 msgstr "Maximum number of entries (default: 500)"
+
+#. Result summary footer appended to ls output. count selects singular/plural.
+#. Variables: {{ count }} — entry count.
+msgid "tool.ls.footer"
+msgid_plural "tool.ls.footer"
+msgstr[0] "[{{ count }} entry]"
+msgstr[1] "[{{ count }} entries]"
+
+#. Variables: {{ count }} — entry count; {{ depth }} — recursion depth used.
+msgid "tool.ls.footer_with_depth"
+msgid_plural "tool.ls.footer_with_depth"
+msgstr[0] "[{{ count }} entry, depth={{ depth }}]"
+msgstr[1] "[{{ count }} entries, depth={{ depth }}]"
 
 #. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
 msgid "tool.read.description"

@@ -568,6 +568,25 @@ msgstr "Failed to open file: {{ detail }}"
 msgid "ui.template.file_read_failed"
 msgstr "Failed to read content"
 
+#. Buffer parse diagnostics — malformed tool-use/tool-result blocks in
+#. user-authored .chat content, surfaced through the same diagnostics display
+#. as the template diagnostics above.
+msgid "ui.parse.tool_result_unclosed_fence"
+msgstr "Unclosed fenced code block in tool result (missing closing fence)"
+
+msgid "ui.parse.tool_result_no_fence"
+msgstr "Tool result requires a fenced code block"
+
+#. Variables: {{ detail }} — the underlying codeblock/JSON parse error (not translated).
+msgid "ui.parse.tool_input_failed"
+msgstr "Failed to parse tool input: {{ detail }}"
+
+msgid "ui.parse.tool_use_unclosed_fence"
+msgstr "Unclosed fenced code block in tool use (missing closing fence)"
+
+msgid "ui.parse.tool_use_no_fence"
+msgstr "Tool use requires a fenced code block with JSON input"
+
 #. Preprocessor rewriter load failure.
 #. Variables: {{ module }}, {{ reason }}.
 msgid "ui.preprocessor.rewriter_load_failed"
