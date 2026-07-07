@@ -70,6 +70,44 @@ describe("provider registration", function()
     end)
   end)
 
+  describe("register() on_register hook", function()
+    -- A module-path registration may export an on_register() lifecycle hook —
+    -- the registry invokes it after the provider is live so the module can
+    -- register associated resources (e.g. a secrets resolver) at registration
+    -- time rather than as a require()-time side effect.
+    local FIXTURE = "flemma.provider.adapters._on_register_fixture"
+
+    after_each(function()
+      package.loaded[FIXTURE] = nil
+    end)
+
+    it("invokes a registered module's on_register() once, after the provider is live", function()
+      local observed = {}
+      package.loaded[FIXTURE] = {
+        metadata = { name = "hook_probe", display_name = "Hook Probe", capabilities = {} },
+        on_register = function()
+          observed[#observed + 1] = registry.has("hook_probe")
+        end,
+      }
+
+      registry.register(FIXTURE)
+
+      -- Called exactly once, and only after the provider was registered.
+      assert.are.same({ true }, observed)
+    end)
+
+    it("is optional — a module without the hook registers normally", function()
+      package.loaded[FIXTURE] = {
+        metadata = { name = "hook_probe", display_name = "No Hook", capabilities = {} },
+      }
+
+      assert.has_no.errors(function()
+        registry.register(FIXTURE)
+      end)
+      assert.is_true(registry.has("hook_probe"))
+    end)
+  end)
+
   describe("is_provider_model() without models", function()
     it("accepts any model string for a registered provider with no model list", function()
       registry.register("minimal", {

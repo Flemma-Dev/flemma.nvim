@@ -467,8 +467,9 @@ describe("secrets resolver config schemas", function()
   end)
 
   describe("experimental resolver (chatgpt)", function()
-    -- chatgpt is not a built-in: it self-registers only when the experimental
-    -- Codex adapter loads. Until then its key is unknown (no generated type).
+    -- chatgpt is not a built-in: it registers only when the experimental Codex
+    -- adapter is registered (via its on_register hook). Until then its key is
+    -- unknown (no generated type).
     it("is absent until its resolver is registered", function()
       assert.is_nil(config_secrets.get_config_schema("chatgpt"))
 
@@ -495,6 +496,60 @@ describe("secrets resolver config schemas", function()
       assert.is_nil(failures)
       assert.equals(0, #validation_failures)
       assert.equals("/x/auth.json", config_facade.materialize().secrets.chatgpt.auth_file)
+    end)
+
+    it("registering before config.init() still resolves correctly once init() runs", function()
+      -- Reproduces codex.lua's top-level `secrets.register(...)` executing as a
+      -- require()-time side effect before config.init() has run — e.g. a module-
+      -- isolation require check (nixpkgs' nvimRequireCheck), or any other module
+      -- merely requiring codex.lua ahead of flemma.setup(). Registration must not
+      -- throw, and the resolver must still resolve normally once init() runs.
+      for _, mod in ipairs({
+        "flemma.config",
+        "flemma.config.store",
+        "flemma.config.proxy",
+        "flemma.config.schema",
+        "flemma.secrets",
+        "flemma.secrets.registry",
+        "flemma.secrets.context",
+        "flemma.secrets.cache",
+        "flemma.secrets.resolvers.chatgpt",
+      }) do
+        package.loaded[mod] = nil
+      end
+
+      config_facade = require("flemma.config")
+      config_secrets = require("flemma.secrets")
+
+      assert.has_no.errors(function()
+        config_secrets.register("flemma.secrets.resolvers.chatgpt")
+      end)
+
+      config_facade.init(require("flemma.config.schema"))
+      assert.is_not_nil(config_secrets.get_config_schema("chatgpt"))
+
+      local _, _, deferred = config_facade.apply(
+        config_facade.LAYERS.SETUP,
+        { secrets = { chatgpt = { auth_file = "/x/auth.json" } } },
+        { defer_discover = true }
+      )
+      local failures, validation_failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+      assert.is_nil(failures)
+      assert.equals(0, #validation_failures)
+      assert.equals("/x/auth.json", config_facade.materialize().secrets.chatgpt.auth_file)
+    end)
+
+    it("registers only via the Codex adapter's on_register() hook, not on require()", function()
+      -- Requiring the Codex adapter must be pure: it must NOT self-register the
+      -- chatgpt resolver as a load-time side effect (that coupled module-load
+      -- order to config init order). The provider registry invokes on_register()
+      -- when it registers the adapter, and that is what registers the resolver.
+      package.loaded["flemma.provider.adapters.experimental.codex"] = nil
+      local codex = require("flemma.provider.adapters.experimental.codex")
+      assert.is_nil(config_secrets.get_config_schema("chatgpt"))
+
+      codex.on_register()
+      assert.is_not_nil(config_secrets.get_config_schema("chatgpt"))
     end)
   end)
 end)

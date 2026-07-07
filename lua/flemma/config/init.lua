@@ -27,6 +27,19 @@ M.LAYERS = store.LAYERS
 ---@type flemma.schema.Node?
 local root_schema = nil
 
+--- A module's config schema defaults registered via `register_module_defaults()`
+--- before `init()` has assigned `root_schema` — e.g. a module that self-registers
+--- as a `require()`-time side effect (see `provider/adapters/experimental/codex.lua`)
+--- and gets required in isolation, ahead of `flemma.setup()`. Flushed once `init()`
+--- runs — see `register_module_defaults()`.
+---@class flemma.config.PendingModuleDefaults
+---@field parent_path string
+---@field name string
+---@field config_schema flemma.schema.Node
+
+---@type flemma.config.PendingModuleDefaults[]
+local pending_module_defaults = {}
+
 -- ---------------------------------------------------------------------------
 -- Internal: schema helpers
 -- ---------------------------------------------------------------------------
@@ -225,12 +238,38 @@ local function materialize_resolved(schema, base_path, bufnr)
 end
 
 -- ---------------------------------------------------------------------------
+-- Internal: module defaults
+-- ---------------------------------------------------------------------------
+
+--- Materialize a module's config schema defaults onto the DEFAULTS layer.
+--- Assumes `root_schema` is already set — callers (`register_module_defaults()`
+--- and `init()`'s pending-queue flush) are responsible for that invariant.
+---@param parent_path string Dot-delimited path to the parent object
+---@param name string Module name (the DISCOVER key)
+---@param config_schema flemma.schema.Node Module's config schema
+local function apply_module_defaults(parent_path, name, config_schema)
+  assert(root_schema, "apply_module_defaults: root_schema must already be set")
+  local defaults = config_schema:materialize()
+  if not defaults then
+    return
+  end
+  local base_path = parent_path .. "." .. name
+  ---@type flemma.config.ApplyContext
+  local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
+  local ok, err = apply_recursive(ctx, base_path, defaults)
+  if not ok then
+    notify.warn(messages["ui.config.module_defaults_failed"]{ path = base_path, reason = err })
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Initialization
 -- ---------------------------------------------------------------------------
 
 --- Initialize the config system with a root schema.
---- Stores the schema reference, resets the layer store, and materializes
---- schema defaults into the DEFAULTS layer.
+--- Stores the schema reference, resets the layer store, materializes schema
+--- defaults into the DEFAULTS layer, then flushes any module defaults that
+--- registered before this call (see `register_module_defaults()`).
 ---@param schema flemma.schema.Node Root schema node
 function M.init(schema)
   root_schema = schema
@@ -243,6 +282,16 @@ function M.init(schema)
     local ok, err = apply_recursive(ctx, "", defaults)
     if not ok then
       error("config.init: failed to materialize defaults: " .. err)
+    end
+  end
+
+  -- Flush module defaults registered before init() supplied the schema (e.g.
+  -- a module self-registering as a require()-time side effect).
+  if #pending_module_defaults > 0 then
+    local pending = pending_module_defaults
+    pending_module_defaults = {}
+    for _, entry in ipairs(pending) do
+      apply_module_defaults(entry.parent_path, entry.name, entry.config_schema)
     end
   end
 end
@@ -291,25 +340,23 @@ function M.record_default(op, path, value)
 end
 
 --- Materialize a discovered module's schema defaults into the DEFAULTS layer.
---- Called by registries (providers, tools, sandbox backends) after module
---- registration so that DISCOVER-resolved schemas contribute their defaults
---- to L10.
+--- Called by registries (providers, tools, sandbox backends, secrets resolvers)
+--- after module registration so that DISCOVER-resolved schemas contribute their
+--- defaults to L10.
+---
+--- May be called before `init()` — some modules self-register as a `require()`-
+--- time side effect (see `provider/adapters/experimental/codex.lua`) and can be
+--- required in isolation, ahead of `flemma.setup()`. When that happens the
+--- registration is queued and flushed once `init()` assigns the root schema.
 ---@param parent_path string Dot-delimited path to the parent object (e.g., "parameters", "tools", "sandbox.backends")
 ---@param name string Module name (the DISCOVER key, e.g., "anthropic", "bash", "bwrap")
 ---@param config_schema flemma.schema.Node Module's config schema
 function M.register_module_defaults(parent_path, name, config_schema)
-  assert(root_schema, "config.init() must be called before register_module_defaults()")
-  local defaults = config_schema:materialize()
-  if not defaults then
+  if not root_schema then
+    table.insert(pending_module_defaults, { parent_path = parent_path, name = name, config_schema = config_schema })
     return
   end
-  local base_path = parent_path .. "." .. name
-  ---@type flemma.config.ApplyContext
-  local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
-  local ok, err = apply_recursive(ctx, base_path, defaults)
-  if not ok then
-    notify.warn(messages["ui.config.module_defaults_failed"]{ path = base_path, reason = err })
-  end
+  apply_module_defaults(parent_path, name, config_schema)
 end
 
 --- Replay deferred writes from a previous `apply()` call.

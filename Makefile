@@ -37,6 +37,8 @@ qa:
 		>"$$d/messages" 2>&1 & gate[$$!]=messages; \
 	bash contrib/scripts/lint-shell.sh \
 		>"$$d/shell" 2>&1 & gate[$$!]=shell; \
+	bash contrib/scripts/lint-require-isolation.sh \
+		>"$$d/require-isolation" 2>&1 & gate[$$!]=require-isolation; \
 	jobs=$${JOBS:-$$(nproc)}; \
 	nver=$$(echo $$NVIM_VERSIONS | wc -w); \
 	per_version_jobs=$$(( jobs / nver )); \
