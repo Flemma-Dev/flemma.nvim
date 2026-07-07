@@ -13,6 +13,7 @@
 local M = {}
 
 local bridge = require("flemma.bridge")
+local str = require("flemma.utilities.string")
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local messages = require("flemma.messages")
@@ -474,17 +475,25 @@ end
 
 --- Materialize the current resolved config into a plain Lua table.
 --- Walks the schema tree (static fields + DISCOVER-cached fields) and resolves
---- every path from the store, then expands any $-prefixed model preset into its
---- concrete provider/model/parameters. Returns a deep copy safe for external
---- mutation. Use when consumers need the effective config as a plain table
---- (`pairs()`, `vim.deepcopy()`); the raw accessors `get`/`inspect` deliberately
---- preserve preset aliases.
+--- every path from the store, then expands any $-prefixed model preset and any
+--- "provider/model" shorthand into their concrete fields. Returns a deep copy
+--- safe for external mutation. Use when consumers need the effective config as a
+--- plain table (`pairs()`, `vim.deepcopy()`); the raw accessors `get`/`inspect`
+--- deliberately preserve preset aliases.
 ---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return table
 function M.materialize(bufnr)
   assert(root_schema, "config.init() must be called before materialize()")
   local resolved = vim.deepcopy(materialize_resolved(root_schema, "", bufnr) or {})
-  return expand_model_preset(resolved)
+  resolved = expand_model_preset(resolved)
+  if type(resolved.model) == "string" then
+    local model, provider = str.split_provider_model(resolved.model)
+    if provider then
+      resolved.provider = provider
+      resolved.model = model
+    end
+  end
+  return resolved
 end
 
 -- ---------------------------------------------------------------------------

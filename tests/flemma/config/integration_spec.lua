@@ -705,6 +705,30 @@ describe("flemma.config — integration", function()
       local result = config.materialize()
       assert.are.same({ "$default", "bash" }, result.tools.auto_approve)
     end)
+
+    it("splits provider/model shorthand in setup layer", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { model = "anthropic/claude-opus-4-8" })
+      local result = config.materialize()
+      assert.equals("anthropic", result.provider)
+      assert.equals("claude-opus-4-8", result.model)
+    end)
+
+    it("splits provider/model shorthand in frontmatter layer", function()
+      config.init(make_schema())
+      config.writer(1, L.FRONTMATTER).model = "openai/gpt-5.5"
+      local result = config.materialize(1)
+      assert.equals("openai", result.provider)
+      assert.equals("gpt-5.5", result.model)
+    end)
+
+    it("does not split a plain model name", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { model = "claude-opus-4-8" })
+      local result = config.materialize()
+      assert.equals("anthropic", result.provider)
+      assert.equals("claude-opus-4-8", result.model)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------

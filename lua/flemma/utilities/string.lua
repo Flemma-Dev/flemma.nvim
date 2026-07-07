@@ -281,4 +281,30 @@ function M.escape_pattern(str)
   return (str:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1"))
 end
 
+---Split a "provider/model" or "provider model" shorthand into its parts.
+---Returns `(model, provider)` when a separator is found, or `(value, nil)`
+---when the input contains no separator.
+---@param value string
+---@return string model
+---@return string|nil provider
+function M.split_provider_model(value)
+  local slash_pos = value:find("/", 1, true)
+  local space_pos = value:find(" ", 1, true)
+  local split_pos
+  if slash_pos and space_pos then
+    split_pos = math.min(slash_pos, space_pos)
+  else
+    split_pos = slash_pos or space_pos
+  end
+  if not split_pos then
+    return value, nil
+  end
+  local left = value:sub(1, split_pos - 1)
+  local right = value:sub(split_pos + 1)
+  if #left == 0 or #right == 0 then
+    return value, nil
+  end
+  return right, left
+end
+
 return M
