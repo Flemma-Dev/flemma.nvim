@@ -90,12 +90,13 @@ local function read_file(path, opts)
   local mode = (opts and opts.binary) and "rb" or "r"
   local f, err = io.open(path, mode)
   if not f then
-    return nil, ("Failed to open file: " .. (err or "unknown"))
+    return nil,
+      messages["ui.template.file_open_failed"]{ detail = err or messages["ui.diagnostics.unknown_error"]({}) }
   end
   local data = f:read("*a")
   f:close()
   if not data then
-    return nil, "Failed to read content"
+    return nil, messages["ui.template.file_read_failed"]{}
   end
   return data, nil
 end
@@ -177,7 +178,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
           type = "file",
           filename = target_path,
           raw = relative_path,
-          error = read_err or "read error",
+          error = read_err,
           include_stack = { unpack(include_stack) },
         })
       end
@@ -207,7 +208,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         type = "file",
         filename = target_path,
         raw = relative_path,
-        error = read_err or "Failed to read file",
+        error = read_err,
         include_stack = { unpack(include_stack) },
       })
     end

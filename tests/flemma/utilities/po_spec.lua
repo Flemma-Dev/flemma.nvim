@@ -478,6 +478,15 @@ describe("flemma.utilities.po", function()
       "ui.template.circular_include",
       "ui.template.unknown_personality_suggestion",
       "ui.template.emit_error",
+      "ui.template.file_open_failed",
+      "ui.template.file_read_failed",
+      "ui.progress.waiting",
+      "ui.progress.timeout_in",
+      "ui.progress.characters",
+      "ui.tool.status_pending",
+      "ui.tool.status_executing",
+      "ui.tool.status_complete",
+      "ui.tool.status_failed",
     })
 
     it("keeps keys unique across the shipped catalogues", function()
@@ -499,6 +508,26 @@ describe("flemma.utilities.po", function()
       for key in pairs(po.parse(harness_content)) do
         assert.is_nil(key:match("^ui%."), "harness catalogue key inside the ui. namespace: " .. key)
       end
+    end)
+
+    it("pluralizes the streamed-character counter by count", function()
+      local _, content = read_shipped("po/flemma.po")
+      local entry = po.parse(content)["ui.progress.characters"]
+      assert.is_table(entry, "missing catalogue key: ui.progress.characters")
+      assert.are.same({ "{{ formatted }} character", "{{ formatted }} characters" }, entry.forms)
+      assert.are.equal(0, entry.plural(1)) -- singular
+      assert.are.equal(1, entry.plural(0)) -- English rule: n != 1
+      assert.are.equal(1, entry.plural(2))
+    end)
+
+    it("keeps the stdlib error a {{ detail }} slot in the file-open wrapper", function()
+      local _, content = read_shipped("po/flemma.po")
+      local entry = po.parse(content)["ui.template.file_open_failed"]
+      assert.is_table(entry, "missing catalogue key: ui.template.file_open_failed")
+      assert.is_truthy(
+        entry.forms[1]:find("{{ detail }}", 1, true),
+        "wrapper must carry the stdlib text as {{ detail }}"
+      )
     end)
   end)
 end)

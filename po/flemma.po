@@ -560,6 +560,14 @@ msgstr "Circular include detected (requested by '{{ filename }}')"
 msgid "ui.template.emit_error"
 msgstr "Error during emit: {{ detail }}"
 
+#. @file / include() read failures. Variables: {{ detail }} — the underlying
+#. io.open error (not translated); our wrapper prose is the translatable part.
+msgid "ui.template.file_open_failed"
+msgstr "Failed to open file: {{ detail }}"
+
+msgid "ui.template.file_read_failed"
+msgstr "Failed to read content"
+
 #. Preprocessor rewriter load failure.
 #. Variables: {{ module }}, {{ reason }}.
 msgid "ui.preprocessor.rewriter_load_failed"
@@ -623,3 +631,34 @@ msgstr "Default preset '{{ preset }}' not found. Provider not initialized."
 #. Variables: {{ provider_explicit }}, {{ preset }}, {{ provider_preset }}.
 msgid "ui.preset.provider_conflict"
 msgstr "Explicit provider '{{ provider_explicit }}' conflicts with preset '{{ preset }}' (provider: '{{ provider_preset }}'). Provider not initialized."
+
+#. Inline request-progress spinner (virt_text on the @Assistant: line). The
+#. spinner glyph and " · " separators are layout added in code, not translated.
+msgid "ui.progress.waiting"
+msgstr "Waiting…"
+
+#. Variables: {{ duration }} — formatted time remaining (e.g. "5s"), not translated.
+msgid "ui.progress.timeout_in"
+msgstr "timeout in {{ duration }}"
+
+#. Streamed-output counter. count drives plural selection; formatted is the
+#. displayed number (e.g. "1.2K"). Variables: {{ formatted }}.
+msgid "ui.progress.characters"
+msgid_plural "ui.progress.characters"
+msgstr[0] "{{ formatted }} character"
+msgstr[1] "{{ formatted }} characters"
+
+#. Tool execution status labels — virt_text after the tool/job result header.
+#. The status icons (⏸ ✔ ⚠ and the animated spinner) and spacing are layout
+#. prepended in code; only the words are translated.
+msgid "ui.tool.status_pending"
+msgstr "Pending"
+
+msgid "ui.tool.status_executing"
+msgstr "Executing…"
+
+msgid "ui.tool.status_complete"
+msgstr "Complete"
+
+msgid "ui.tool.status_failed"
+msgstr "Failed"

@@ -13,14 +13,12 @@ local str = require("flemma.utilities.string")
 local spinners = require("flemma.ui.spinners")
 local Bar = require("flemma.ui.bar")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 
 local PRIORITY_SPINNER = 300
 
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
 local ns_id = vim.api.nvim_create_namespace("flemma")
-
----@type string
-local WAITING_LABEL = "Waiting…"
 
 ---@type string
 local MIDDLE_DOT = " · "
@@ -70,10 +68,12 @@ local function timeout_pressure(bs, base_text)
   local pct = elapsed_seconds / timeout
   if pct >= 0.9 then
     local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
-    return base_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining), "DiagnosticError"
+    return base_text .. MIDDLE_DOT .. messages["ui.progress.timeout_in"]{ duration = str.format_elapsed(remaining) },
+      "DiagnosticError"
   elseif pct >= 0.8 then
     local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
-    return base_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining), "DiagnosticWarn"
+    return base_text .. MIDDLE_DOT .. messages["ui.progress.timeout_in"]{ duration = str.format_elapsed(remaining) },
+      "DiagnosticWarn"
   end
   return base_text, nil
 end
@@ -94,11 +94,10 @@ local function format_progress_body(bs)
   local elapsed_str = str.format_elapsed(elapsed_seconds)
 
   if phase == "waiting" then
-    return WAITING_LABEL .. MIDDLE_DOT .. elapsed_str, nil
+    return messages["ui.progress.waiting"]{} .. MIDDLE_DOT .. elapsed_str, nil
   else
     local count = bs.progress_char_count or 0
-    local suffix = count == 1 and " character" or " characters"
-    local count_str = str.format_text_length(count) .. suffix
+    local count_str = messages["ui.progress.characters"]{ count = count, formatted = str.format_text_length(count) }
     if phase == "buffering" and bs.progress_tool_name then
       local name = bs.progress_tool_name
       return name .. MIDDLE_DOT .. count_str .. MIDDLE_DOT .. elapsed_str, #name
@@ -285,7 +284,7 @@ function M.start_progress(bufnr, progress_opts, update_ui_fn)
       local progress_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
       local frames = spinners.FRAMES.waiting
       local spinner_char = frames[1]
-      local progress_text = spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. "0s"
+      local progress_text = spinner_char .. " " .. messages["ui.progress.waiting"]{} .. MIDDLE_DOT .. "0s"
       local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, progress_line_idx0, 0, {
         virt_text = build_progress_virt_text(progress_text, bufnr),
         virt_text_pos = "eol",

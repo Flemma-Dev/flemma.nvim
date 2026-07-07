@@ -9,12 +9,13 @@ local ast = require("flemma.ast")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
 local spinners = require("flemma.ui.spinners")
+local messages = require("flemma.messages")
 
 local PRIORITY_TOOL_EXECUTION = 250
 local TOOL_RESULT_ICON = "⬢"
-local STATUS_PENDING = " ⏸ Pending"
-local STATUS_COMPLETE = " ✔ Complete"
-local STATUS_FAILED = " ⚠ Failed"
+local STATUS_ICON_PENDING = "⏸"
+local STATUS_ICON_COMPLETE = "✔"
+local STATUS_ICON_FAILED = "⚠"
 
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 
@@ -103,7 +104,7 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
   })
 
   local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { STATUS_PENDING, "FlemmaToolPending" } },
+    virt_text = { { " " .. STATUS_ICON_PENDING .. " " .. messages["ui.tool.status_pending"]{}, "FlemmaToolPending" } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -133,7 +134,9 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   local frame = 1
 
   local status_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolExecuting" } },
+    virt_text = {
+      { " " .. spinners.FRAMES.tool[frame] .. " " .. messages["ui.tool.status_executing"]{}, "FlemmaToolExecuting" },
+    },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -161,7 +164,9 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
     frame = (frame % #spinners.FRAMES.tool) + 1
     pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
       id = ind.status_extmark_id,
-      virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolExecuting" } },
+      virt_text = {
+        { " " .. spinners.FRAMES.tool[frame] .. " " .. messages["ui.tool.status_executing"]{}, "FlemmaToolExecuting" },
+      },
       virt_text_pos = "eol",
       hl_mode = "combine",
       priority = PRIORITY_TOOL_EXECUTION,
@@ -208,11 +213,11 @@ function M.update_tool_indicator(bufnr, tool_id, success)
   local prefix_hl, status_text, status_hl
   if success then
     prefix_hl = "FlemmaToolIconSuccess"
-    status_text = STATUS_COMPLETE
+    status_text = " " .. STATUS_ICON_COMPLETE .. " " .. messages["ui.tool.status_complete"]{}
     status_hl = "FlemmaToolSuccess"
   else
     prefix_hl = "FlemmaToolIconError"
-    status_text = STATUS_FAILED
+    status_text = " " .. STATUS_ICON_FAILED .. " " .. messages["ui.tool.status_failed"]{}
     status_hl = "FlemmaToolError"
   end
 
@@ -264,11 +269,11 @@ function M.show_job_result_indicator(bufnr, job_id, header_line, success)
   local prefix_hl, status_text, status_hl
   if success then
     prefix_hl = "FlemmaToolIconSuccess"
-    status_text = STATUS_COMPLETE
+    status_text = " " .. STATUS_ICON_COMPLETE .. " " .. messages["ui.tool.status_complete"]{}
     status_hl = "FlemmaToolSuccess"
   else
     prefix_hl = "FlemmaToolIconError"
-    status_text = STATUS_FAILED
+    status_text = " " .. STATUS_ICON_FAILED .. " " .. messages["ui.tool.status_failed"]{}
     status_hl = "FlemmaToolError"
   end
 
