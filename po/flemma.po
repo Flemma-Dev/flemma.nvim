@@ -76,7 +76,7 @@ msgstr "Pending tool executions:"
 
 #. Variables: {{ tool_name }}, {{ tool_id }}, {{ seconds }} — one pending row.
 msgid "ui.tool.list_row"
-msgstr "  {{ tool_name }} ({{ tool_id }}) - started {{ seconds }}s ago"
+msgstr "  {{ tool_name }} ({{ tool_id }}) — started {{ seconds }}s ago"
 
 #. :Flemma command dispatch and sub-command feedback.
 #. Variables: {{ commands }} — comma-separated list of available commands.
@@ -119,7 +119,7 @@ msgstr "Invalid log level '{{ level }}'. Valid levels: TRACE, DEBUG, INFO, WARN,
 
 #. Variables: {{ level }}, {{ path }} — the active level and the log file path.
 msgid "ui.logging.enabled"
-msgstr "Logging enabled (level: {{ level }}) - {{ path }}"
+msgstr "Logging enabled (level: {{ level }}) — {{ path }}"
 
 msgid "ui.logging.disabled"
 msgstr "Logging disabled"
@@ -299,7 +299,7 @@ msgstr "Request already completed or terminated"
 #. Autopilot safety limit — exceeded the configured max consecutive turns.
 #. Variables: {{ max_turns }} — the configured turn limit.
 msgid "ui.autopilot.max_turns_exceeded"
-msgstr "Autopilot stopped – exceeded {{ max_turns }} consecutive turns."
+msgstr "Autopilot stopped — exceeded {{ max_turns }} consecutive turns."
 
 #. Tool subsystem warnings.
 #. Variables: {{ reason }} — the store write failure detail.
@@ -312,7 +312,7 @@ msgstr "Async tool source failed: {{ reason }}"
 
 #. Variables: {{ count }} — number of conflicting tool results.
 msgid "ui.tool.edit_conflict"
-msgstr "{{ count }} tool result(s) have edited content inside an approved tool block – skipping execution to protect your edits. Remove the (approved) status from the header to send your content."
+msgstr "{{ count }} tool result(s) have edited content inside an approved tool block — skipping execution to protect your edits. Remove the (approved) status from the header to send your content."
 
 #. Variables: {{ tool_name }} — the tool being redefined.
 msgid "ui.tool.redefined"
@@ -320,7 +320,7 @@ msgstr "tool '{{ tool_name }}' redefined (previously registered, now overwritten
 
 #. Provider response truncation notices.
 msgid "ui.provider.response_truncated"
-msgstr "Response truncated – model reached max output tokens"
+msgstr "Response truncated — model reached max output tokens"
 
 #. Variables: {{ reason }} — the truncation reason from the response.
 msgid "ui.provider.response_truncated_reason"
@@ -347,11 +347,11 @@ msgstr "unknown config keys: {{ keys }}"
 
 #. Variables: {{ path }}, {{ reason }} — the module base path and the failure.
 msgid "ui.config.module_defaults_failed"
-msgstr "register_module_defaults failed for {{ path }}: {{ reason }}"
+msgstr "Failed to register configuration defaults for {{ path }}: {{ reason }}"
 
 #. Sandbox backend validation — shown once on first .chat buffer entry.
 msgid "ui.sandbox.no_backend"
-msgstr "Tool execution is not sandboxed -- no compatible backend found. Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable."
+msgstr "Tool execution is not sandboxed — no compatible backend found. Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable."
 
 #. Hook dispatch errors.
 #. Variables: {{ hook }}, {{ reason }}.
