@@ -38,14 +38,14 @@ M.definitions = {
 
       for tool_id, entry in pairs(pending) do
         if entry.job_id == job_id then
-          local status = "running"
+          local status = messages["tool.flemma.jobs.status.state_running"]{}
           local elapsed = os.time() - entry.started_at
           if entry.completed then
             -- The job has finished; its result sits in the delivery queue.
             -- Report it as completed — a bare "queued" reads as "waiting to
             -- start" to the model — and freeze elapsed at the actual runtime
             -- so it stops growing after completion.
-            status = "completed (delivery pending)"
+            status = messages["tool.flemma.jobs.status.state_delivery_pending"]{}
             for _, delivery in ipairs(buffer_state.delivery_queue or {}) do
               if delivery.job_id == job_id and delivery.completed_at then
                 elapsed = delivery.completed_at - entry.started_at
@@ -74,7 +74,7 @@ M.definitions = {
           return {
             success = true,
             output = json.encode({
-              status = "completed (delivery pending)",
+              status = messages["tool.flemma.jobs.status.state_delivery_pending"]{},
               job_id = job_id,
               tool_id = delivery.tool_id,
               tool_name = delivery.tool_name,
@@ -88,7 +88,8 @@ M.definitions = {
       local doc = ctx:get_parsed_document()
       local found_in_buffer = query.find_job_result(doc, job_id) ~= nil
 
-      local status = found_in_buffer and "completed" or "completed (removed from conversation)"
+      local status = found_in_buffer and messages["tool.flemma.jobs.status.state_completed"]{}
+        or messages["tool.flemma.jobs.status.state_removed"]{}
       log.debug("flemma.jobs.status: job " .. job_id .. " → " .. status)
       return {
         success = true,

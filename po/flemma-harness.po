@@ -30,6 +30,35 @@ msgstr "User aborted tool execution."
 msgid "tool.error.unknown"
 msgstr "Unknown error"
 
+#. Shared tool errors — byte-identical text reused across builtin tools.
+msgid "tool.error.no_path"
+msgstr "No path provided"
+
+msgid "tool.error.no_pattern"
+msgstr "No pattern provided"
+
+#. Variables: {{ detail }} — the sandbox backend's reason (not translated).
+msgid "tool.error.sandbox"
+msgstr "Sandbox error: {{ detail }}"
+
+msgid "tool.error.timer"
+msgstr "Failed to create timer"
+
+msgid "tool.error.job_start"
+msgstr "Failed to start job"
+
+#. Variables: {{ path }} — the file path.
+msgid "tool.error.file_not_found"
+msgstr "File not found: {{ path }}"
+
+#. Variables: {{ detail }} — the io error (not translated).
+msgid "tool.error.write_failed"
+msgstr "Cannot write file: {{ detail }}"
+
+#. Variables: {{ code }} — the subprocess exit code.
+msgid "tool.error.exit_code"
+msgstr "Command exited with code {{ code }}"
+
 #. Variables: {{ reason }} — why the save-to redirect failed.
 msgid "tool.output.not_saved"
 msgstr "[Output not saved: {{ reason }}. Showing the full output instead.]"
@@ -66,6 +95,20 @@ msgstr "The bash command to execute"
 msgid "tool.bash.input.timeout"
 msgstr "Timeout in seconds (default: 30)"
 
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.bash.error.no_command"
+msgstr "No command provided"
+
+#. Empty-output placeholder shown when a command produces no output.
+msgid "tool.bash.no_output"
+msgstr "(no output)"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.bash.timeout"
+msgid_plural "tool.bash.timeout"
+msgstr[0] "Command timed out after {{ count }} second."
+msgstr[1] "Command timed out after {{ count }} seconds."
+
 msgid "tool.edit.description"
 msgstr "Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits."
 
@@ -80,6 +123,37 @@ msgstr "Exact text to find and replace (must match exactly)"
 
 msgid "tool.edit.input.newText"
 msgstr "New text to replace the old text with"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.edit.error.no_old_text"
+msgstr "No oldText provided"
+
+msgid "tool.edit.error.no_new_text"
+msgstr "No newText provided"
+
+#. Variables: {{ path }} — the path denied by the sandbox.
+msgid "tool.edit.error.sandbox_denied"
+msgstr "Sandbox: edit denied – path is outside writable directories: {{ path }}"
+
+#. Variables: {{ detail }} — the io error (not translated).
+msgid "tool.edit.error.read_failed"
+msgstr "Cannot read file: {{ detail }}"
+
+#. Variables: {{ path }} — the file searched.
+msgid "tool.edit.error.text_not_found"
+msgstr "Could not find the exact text in {{ path }}. The old text must match exactly including all whitespace and newlines."
+
+#. Variables: {{ count }} — match count (always >1); {{ path }}.
+msgid "tool.edit.error.not_unique"
+msgstr "Found {{ count }} occurrences of the text in {{ path }}. The text must be unique. Please provide more context to make it unique."
+
+#. Variables: {{ path }}.
+msgid "tool.edit.error.no_changes"
+msgstr "No changes made to {{ path }}. The replacement produced identical content."
+
+#. Variables: {{ path }}.
+msgid "tool.edit.output.success"
+msgstr "Successfully replaced text in {{ path }}."
 
 #. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
 msgid "tool.find.description"
@@ -98,11 +172,47 @@ msgstr "Directory to search in (default: working directory)"
 msgid "tool.find.input.limit"
 msgstr "Maximum number of results (default: {{ default_limit }})"
 
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.find.error.no_backend"
+msgstr "No file-finding tool available (install fd, git, or find)"
+
+msgid "tool.find.no_matches"
+msgstr "No files found matching pattern."
+
+#. count = result limit. Variables: {{ count }}.
+msgid "tool.find.footer_limited"
+msgid_plural "tool.find.footer_limited"
+msgstr[0] "[Results limited to {{ count }} entry. Narrow your pattern for more specific results.]"
+msgstr[1] "[Results limited to {{ count }} entries. Narrow your pattern for more specific results.]"
+
+#. Variables: {{ shown }}, {{ total }} — lines shown vs total.
+msgid "tool.find.footer_truncated"
+msgstr "[Showing {{ shown }} of {{ total }} results (truncated). Narrow your pattern for more specific results.]"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.find.timeout"
+msgid_plural "tool.find.timeout"
+msgstr[0] "Find timed out after {{ count }} second."
+msgstr[1] "Find timed out after {{ count }} seconds."
+
 msgid "tool.flemma.jobs.status.description"
 msgstr "Check the status of a background job. Returns \"running\" while the job is executing, \"completed (delivery pending)\" once it has finished and its result is queued to be injected into the conversation automatically (do not re-run the tool or keep polling — the result is on its way), or \"completed\" when the result is already in the conversation. Use this to check on long-running background tasks instead of retrying them."
 
 msgid "tool.flemma.jobs.status.input.job_id"
 msgstr "The job ID (e.g., 'job_xxx') from the tool result placeholder."
+
+#. Job status values (the model reads these inside the JSON status field).
+msgid "tool.flemma.jobs.status.state_running"
+msgstr "running"
+
+msgid "tool.flemma.jobs.status.state_delivery_pending"
+msgstr "completed (delivery pending)"
+
+msgid "tool.flemma.jobs.status.state_completed"
+msgstr "completed"
+
+msgid "tool.flemma.jobs.status.state_removed"
+msgstr "completed (removed from conversation)"
 
 #. Variables: {{ default_limit }} — the default match cap.
 msgid "tool.grep.description"
@@ -137,6 +247,26 @@ msgid_plural "tool.grep.footer_limit_reached"
 msgstr[0] "[{{ count }} match, limit reached]"
 msgstr[1] "[{{ count }} matches, limit reached]"
 
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.grep.error.no_backend"
+msgstr "No search backend available (install rg or grep)"
+
+#. Variables: {{ code }} — the search process exit code.
+msgid "tool.grep.error.exit_code"
+msgstr "Search failed with exit code {{ code }}"
+
+msgid "tool.grep.no_matches"
+msgstr "No matches found."
+
+msgid "tool.grep.error.job_start"
+msgstr "Failed to start search process"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.grep.timeout"
+msgid_plural "tool.grep.timeout"
+msgstr[0] "Search timed out after {{ count }} second."
+msgstr[1] "Search timed out after {{ count }} seconds."
+
 #. Variables: {{ max_lines }}, {{ max_bytes_kb }}, {{ default_limit }}.
 msgid "tool.ls.description"
 msgstr "List directory contents. Output is truncated to {{ max_lines }} lines or {{ max_bytes_kb }}KB. Directories appear first (suffixed with /), then files, both sorted case-insensitively. Use max_depth > 1 to recurse into subdirectories (max 10). Use limit to cap the number of entries (default {{ default_limit }})."
@@ -166,6 +296,10 @@ msgid_plural "tool.ls.footer_with_depth"
 msgstr[0] "[{{ count }} entry, depth={{ depth }}]"
 msgstr[1] "[{{ count }} entries, depth={{ depth }}]"
 
+#. Runtime result string (model-facing). Variables: {{ path }}.
+msgid "tool.ls.error.not_found"
+msgstr "Directory not found: {{ path }}"
+
 #. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
 msgid "tool.read.description"
 msgstr "Read the contents of a file. Output is truncated to {{ max_lines }} lines or {{ max_bytes_kb }}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete."
@@ -182,6 +316,29 @@ msgstr "Line number to start reading from (1-indexed)"
 msgid "tool.read.input.limit"
 msgstr "Maximum number of lines to read"
 
+#. Runtime result strings (model-facing output/errors).
+#. Variables: {{ offset }}, {{ total }}.
+msgid "tool.read.offset_beyond_eof"
+msgstr "Offset {{ offset }} is beyond end of file ({{ total }} lines total)"
+
+#. Variables: {{ line }}, {{ size }}, {{ limit }}, {{ path }}, {{ bytes }}.
+msgid "tool.read.line_exceeds_limit"
+msgstr "[Line {{ line }} is {{ size }}, exceeds {{ limit }} limit. Use bash: sed -n '{{ line }}p' {{ path }} | head -c {{ bytes }}]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}, {{ next_offset }}.
+msgid "tool.read.truncated_lines"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }}. Use offset={{ next_offset }} to continue.]"
+
+#. Variables: {{ start }}, {{ end_line }}, {{ total }}, {{ limit }}, {{ next_offset }}.
+msgid "tool.read.truncated_bytes"
+msgstr "[Showing lines {{ start }}-{{ end_line }} of {{ total }} ({{ limit }} limit). Use offset={{ next_offset }} to continue.]"
+
+#. count = remaining lines. Variables: {{ count }}, {{ next_offset }}.
+msgid "tool.read.more_lines"
+msgid_plural "tool.read.more_lines"
+msgstr[0] "[{{ count }} more line in file. Use offset={{ next_offset }} to continue.]"
+msgstr[1] "[{{ count }} more lines in file. Use offset={{ next_offset }} to continue.]"
+
 msgid "tool.write.description"
 msgstr "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories."
 
@@ -193,3 +350,42 @@ msgstr "Path to the file to write (relative or absolute)"
 
 msgid "tool.write.input.content"
 msgstr "Content to write to the file"
+
+#. Runtime result strings (model-facing output/errors).
+msgid "tool.write.error.no_content"
+msgstr "No content provided"
+
+#. Variables: {{ path }} — the path denied by the sandbox.
+msgid "tool.write.error.sandbox_denied"
+msgstr "Sandbox: write denied – path is outside writable directories: {{ path }}"
+
+#. count = bytes written. Variables: {{ count }}, {{ path }}.
+msgid "tool.write.success"
+msgid_plural "tool.write.success"
+msgstr[0] "Successfully wrote {{ count }} byte to {{ path }}"
+msgstr[1] "Successfully wrote {{ count }} bytes to {{ path }}"
+
+#. mcporter (MCP bridge) runtime result strings. Descriptions come from the
+#. MCP server, not this catalogue; only Flemma's own error prose lives here.
+msgid "tool.mcporter.empty_output"
+msgstr "mcporter returned empty output"
+
+#. Variables: {{ code }} — the mcporter exit code.
+msgid "tool.mcporter.call_failed"
+msgstr "mcporter call failed with exit code {{ code }}"
+
+msgid "tool.mcporter.parse_failed"
+msgstr "Failed to parse response"
+
+#. Variables: {{ detail }} — the captured stderr (not translated).
+msgid "tool.mcporter.stderr"
+msgstr "stderr: {{ detail }}"
+
+msgid "tool.mcporter.start_failed"
+msgstr "Failed to start mcporter call"
+
+#. count = timeout seconds. Variables: {{ count }}.
+msgid "tool.mcporter.timeout"
+msgid_plural "tool.mcporter.timeout"
+msgstr[0] "mcporter call timed out after {{ count }} second"
+msgstr[1] "mcporter call timed out after {{ count }} seconds"

@@ -161,13 +161,13 @@ M.definitions = {
       ---@cast callback -nil
       local pattern = input.pattern
       if not pattern or pattern == "" then
-        callback({ success = false, error = "No pattern provided" })
+        callback({ success = false, error = messages["tool.error.no_pattern"]{} })
         return nil
       end
 
       local backend = detect_backend()
       if not backend then
-        callback({ success = false, error = "No search backend available (install rg or grep)" })
+        callback({ success = false, error = messages["tool.grep.error.no_backend"]{} })
         return nil
       end
 
@@ -286,7 +286,7 @@ M.definitions = {
             if is_error then
               callback({
                 success = false,
-                error = "Search failed with exit code " .. code,
+                error = messages["tool.grep.error.exit_code"]{ code = code },
               })
               return
             end
@@ -294,7 +294,7 @@ M.definitions = {
             if match_count == 0 then
               callback({
                 success = true,
-                output = "No matches found.",
+                output = messages["tool.grep.no_matches"]{},
               })
               return
             end
@@ -332,7 +332,7 @@ M.definitions = {
       local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(cmd)
       if not wrapped_cmd then
         output_sink:destroy()
-        callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+        callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err } })
         return nil
       end
 
@@ -340,7 +340,7 @@ M.definitions = {
 
       if job_id <= 0 then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to start search process" })
+        callback({ success = false, error = messages["tool.grep.error.job_start"]{} })
         return nil
       end
 
@@ -349,7 +349,7 @@ M.definitions = {
       timer = vim.uv.new_timer()
       if not timer then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to create timer" })
+        callback({ success = false, error = messages["tool.error.timer"]{} })
         return nil
       end
       timer:start(
@@ -366,7 +366,7 @@ M.definitions = {
 
             local partial_output = output_sink:read():gsub("%s+$", "")
             output_sink:destroy()
-            local error_msg = string.format("Search timed out after %d seconds.", timeout)
+            local error_msg = messages["tool.grep.timeout"]{ count = timeout }
             if partial_output ~= "" then
               error_msg = partial_output .. "\n\n" .. error_msg
             end

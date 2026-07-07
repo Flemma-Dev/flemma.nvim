@@ -40,10 +40,10 @@ M.definitions = {
     execute = function(input, ctx)
       local path = input.path
       if not path or path == "" then
-        return { success = false, error = "No path provided" }
+        return { success = false, error = messages["tool.error.no_path"]{} }
       end
       if input.content == nil then
-        return { success = false, error = "No content provided" }
+        return { success = false, error = messages["tool.write.error.no_content"]{} }
       end
 
       -- Resolve relative paths against buffer's directory, falling back to cwd
@@ -53,7 +53,7 @@ M.definitions = {
       if not ctx.sandbox.is_path_writable(path) then
         return {
           success = false,
-          error = "Sandbox: write denied – path is outside writable directories: " .. input.path,
+          error = messages["tool.write.error.sandbox_denied"]{ path = input.path },
         }
       end
 
@@ -64,14 +64,14 @@ M.definitions = {
       -- Write the file
       local f, err = io.open(path, "w")
       if not f then
-        return { success = false, error = "Cannot write file: " .. (err or "unknown error") }
+        return { success = false, error = messages["tool.error.write_failed"]{ detail = err or "unknown error" } }
       end
       f:write(input.content)
       f:close()
 
       return {
         success = true,
-        output = string.format("Successfully wrote %d bytes to %s", #input.content, input.path),
+        output = messages["tool.write.success"]{ count = #input.content, path = input.path },
       }
     end,
   },

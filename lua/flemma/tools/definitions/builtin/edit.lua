@@ -40,13 +40,13 @@ M.definitions = {
     execute = function(input, ctx)
       local path = input.path
       if not path or path == "" then
-        return { success = false, error = "No path provided" }
+        return { success = false, error = messages["tool.error.no_path"]{} }
       end
       if not input.oldText or input.oldText == "" then
-        return { success = false, error = "No oldText provided" }
+        return { success = false, error = messages["tool.edit.error.no_old_text"]{} }
       end
       if input.newText == nil then
-        return { success = false, error = "No newText provided" }
+        return { success = false, error = messages["tool.edit.error.no_new_text"]{} }
       end
 
       -- Resolve relative paths against buffer's directory, falling back to cwd
@@ -56,19 +56,19 @@ M.definitions = {
       if not ctx.sandbox.is_path_writable(path) then
         return {
           success = false,
-          error = "Sandbox: edit denied – path is outside writable directories: " .. input.path,
+          error = messages["tool.edit.error.sandbox_denied"]{ path = input.path },
         }
       end
 
       -- Check file exists
       if vim.fn.filereadable(path) ~= 1 then
-        return { success = false, error = "File not found: " .. input.path }
+        return { success = false, error = messages["tool.error.file_not_found"]{ path = input.path } }
       end
 
       -- Read file content
       local f, err = io.open(path, "r")
       if not f then
-        return { success = false, error = "Cannot read file: " .. (err or "unknown error") }
+        return { success = false, error = messages["tool.edit.error.read_failed"]{ detail = err or "unknown error" } }
       end
       local content = f:read("*a")
       f:close()
@@ -91,21 +91,14 @@ M.definitions = {
       if count == 0 then
         return {
           success = false,
-          error = "Could not find the exact text in "
-            .. input.path
-            .. ". The old text must match exactly including all whitespace and newlines.",
+          error = messages["tool.edit.error.text_not_found"]{ path = input.path },
         }
       end
 
       if count > 1 then
         return {
           success = false,
-          error = string.format(
-            "Found %d occurrences of the text in %s. The text must be unique. "
-              .. "Please provide more context to make it unique.",
-            count,
-            input.path
-          ),
+          error = messages["tool.edit.error.not_unique"]{ count = count, path = input.path },
         }
       end
 
@@ -117,19 +110,19 @@ M.definitions = {
       if content == new_content then
         return {
           success = false,
-          error = "No changes made to " .. input.path .. ". The replacement produced identical content.",
+          error = messages["tool.edit.error.no_changes"]{ path = input.path },
         }
       end
 
       -- Write back
       local wf, werr = io.open(path, "w")
       if not wf then
-        return { success = false, error = "Cannot write file: " .. (werr or "unknown error") }
+        return { success = false, error = messages["tool.error.write_failed"]{ detail = werr or "unknown error" } }
       end
       wf:write(new_content)
       wf:close()
 
-      return { success = true, output = "Successfully replaced text in " .. input.path .. "." }
+      return { success = true, output = messages["tool.edit.output.success"]{ path = input.path } }
     end,
   },
 }

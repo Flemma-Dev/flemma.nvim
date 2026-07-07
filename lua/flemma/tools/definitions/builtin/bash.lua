@@ -105,7 +105,7 @@ end
 local function execute_terminal(input, ctx, callback)
   local cmd = input.command
   if not cmd or cmd == "" then
-    callback({ success = false, error = "No command provided" })
+    callback({ success = false, error = messages["tool.bash.error.no_command"]{} })
     return nil
   end
 
@@ -149,7 +149,7 @@ local function execute_terminal(input, ctx, callback)
   local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
   if not wrapped_cmd then
     vim.api.nvim_buf_delete(term_bufnr, { force = true })
-    callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+    callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err } })
     return nil
   end
 
@@ -169,10 +169,10 @@ local function execute_terminal(input, ctx, callback)
       local result = ctx.truncate.truncate_with_overflow(full_output, {
         direction = "tail",
       })
-      local output_text = result.content ~= "" and result.content or "(no output)"
+      local output_text = result.content ~= "" and result.content or messages["tool.bash.no_output"]{}
 
       if code ~= 0 then
-        output_text = output_text .. string.format("\n\nCommand exited with code %d", code)
+        output_text = output_text .. "\n\n" .. messages["tool.error.exit_code"]{ code = code }
         callback({
           success = false,
           error = output_text,
@@ -224,7 +224,7 @@ local function execute_terminal(input, ctx, callback)
 
   if not job_id or job_id <= 0 then
     vim.api.nvim_buf_delete(term_bufnr, { force = true })
-    callback({ success = false, error = "Failed to start job" })
+    callback({ success = false, error = messages["tool.error.job_start"]{} })
     return nil
   end
 
@@ -260,7 +260,7 @@ local function execute_terminal(input, ctx, callback)
   if not timer then
     pcall(vim.fn.jobstop, job_id)
     vim.api.nvim_buf_delete(term_bufnr, { force = true })
-    callback({ success = false, error = "Failed to create timer" })
+    callback({ success = false, error = messages["tool.error.timer"]{} })
     return nil
   end
   timer:start(
@@ -278,7 +278,7 @@ local function execute_terminal(input, ctx, callback)
         -- Include any partial output collected before the timeout
         local partial_output = read_terminal_output(term_bufnr)
         destroy_terminal_buffer(term_bufnr, label)
-        local error_msg = string.format("Command timed out after %d seconds.", timeout)
+        local error_msg = messages["tool.bash.timeout"]{ count = timeout }
         if partial_output ~= "" then
           error_msg = partial_output .. "\n\n" .. error_msg
         end
@@ -311,7 +311,7 @@ end
 local function execute_jobstart(input, ctx, callback)
   local cmd = input.command
   if not cmd or cmd == "" then
-    callback({ success = false, error = "No command provided" })
+    callback({ success = false, error = messages["tool.bash.error.no_command"]{} })
     return nil
   end
 
@@ -354,10 +354,10 @@ local function execute_jobstart(input, ctx, callback)
         local result = ctx.truncate.truncate_with_overflow(full_output, {
           direction = "tail",
         })
-        local output_text = result.content ~= "" and result.content or "(no output)"
+        local output_text = result.content ~= "" and result.content or messages["tool.bash.no_output"]{}
 
         if code ~= 0 then
-          output_text = output_text .. string.format("\n\nCommand exited with code %d", code)
+          output_text = output_text .. "\n\n" .. messages["tool.error.exit_code"]{ code = code }
           callback({
             success = false,
             error = output_text,
@@ -400,7 +400,7 @@ local function execute_jobstart(input, ctx, callback)
   local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
   if not wrapped_cmd then
     output_sink:destroy()
-    callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+    callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err } })
     return nil
   end
 
@@ -408,7 +408,7 @@ local function execute_jobstart(input, ctx, callback)
 
   if job_id <= 0 then
     output_sink:destroy()
-    callback({ success = false, error = "Failed to start job" })
+    callback({ success = false, error = messages["tool.error.job_start"]{} })
     return nil
   end
 
@@ -417,7 +417,7 @@ local function execute_jobstart(input, ctx, callback)
   if not timer then
     pcall(vim.fn.jobstop, job_id)
     output_sink:destroy()
-    callback({ success = false, error = "Failed to create timer" })
+    callback({ success = false, error = messages["tool.error.timer"]{} })
     return nil
   end
   timer:start(
@@ -436,7 +436,7 @@ local function execute_jobstart(input, ctx, callback)
         local all_lines = output_sink:read_lines()
         local partial_output = table.concat(all_lines, "\n"):gsub("%s+$", "")
         output_sink:destroy()
-        local error_msg = string.format("Command timed out after %d seconds.", timeout)
+        local error_msg = messages["tool.bash.timeout"]{ count = timeout }
         if partial_output ~= "" then
           error_msg = partial_output .. "\n\n" .. error_msg
         end

@@ -11,6 +11,7 @@ local config_facade = require("flemma.config")
 local glob = require("flemma.utilities.glob")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
@@ -116,7 +117,7 @@ end
 ---@return boolean is_error True when the MCP response signals a tool-level error via isError
 function M._parse_call_response(raw)
   if raw == "" then
-    return nil, "mcporter returned empty output", false
+    return nil, messages["tool.mcporter.empty_output"]{}, false
   end
 
   -- Try MCP CallToolResult first
@@ -224,7 +225,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
             local stderr_text = #stderr_lines > 0 and table.concat(stderr_lines, "\n") or nil
 
             if code ~= 0 then
-              local err_msg = stderr_text or ("mcporter call failed with exit code " .. code)
+              local err_msg = stderr_text or messages["tool.mcporter.call_failed"]{ code = code }
               log.warn("mcporter: call " .. selector .. " failed (exit " .. code .. "): " .. err_msg)
               callback({ success = false, error = err_msg })
               return
@@ -232,9 +233,9 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
 
             local text, parse_err, is_error = M._parse_call_response(raw_output)
             if not text then
-              local diagnostic = parse_err or "Failed to parse response"
+              local diagnostic = parse_err or messages["tool.mcporter.parse_failed"]{}
               if stderr_text then
-                diagnostic = diagnostic .. "\nstderr: " .. stderr_text
+                diagnostic = diagnostic .. "\n" .. messages["tool.mcporter.stderr"]{ detail = stderr_text }
               end
               log.warn("mcporter: call " .. selector .. " parse error: " .. diagnostic)
               callback({ success = false, error = diagnostic })
@@ -260,7 +261,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
       local job_id = vim.fn.jobstart(cmd, job_opts)
       if job_id <= 0 then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to start mcporter call" })
+        callback({ success = false, error = messages["tool.mcporter.start_failed"]{} })
         return nil
       end
 
@@ -270,7 +271,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
         finished = true
         pcall(vim.fn.jobstop, job_id)
         output_sink:destroy()
-        callback({ success = false, error = "Failed to create timer" })
+        callback({ success = false, error = messages["tool.error.timer"]{} })
         return nil
       end
 
@@ -288,7 +289,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
             output_sink:destroy()
             callback({
               success = false,
-              error = string.format("mcporter call timed out after %d seconds", call_timeout),
+              error = messages["tool.mcporter.timeout"]{ count = call_timeout },
             })
           end
           close_timer()

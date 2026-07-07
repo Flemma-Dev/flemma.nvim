@@ -57,7 +57,7 @@ M.definitions = {
     execute = function(input, ctx)
       local path = input.path
       if not path or path == "" then
-        return { success = false, error = "No path provided" }
+        return { success = false, error = messages["tool.error.no_path"]{} }
       end
 
       -- Resolve relative paths against buffer's directory, falling back to cwd
@@ -65,7 +65,7 @@ M.definitions = {
 
       -- Check file exists and is readable
       if vim.fn.filereadable(path) ~= 1 then
-        return { success = false, error = "File not found: " .. input.path }
+        return { success = false, error = messages["tool.error.file_not_found"]{ path = input.path } }
       end
 
       -- Check for binary content — emit a file reference instead of raw bytes
@@ -100,7 +100,7 @@ M.definitions = {
       if start_line > total_file_lines then
         return {
           success = false,
-          error = string.format("Offset %d is beyond end of file (%d lines total)", start_line, total_file_lines),
+          error = messages["tool.read.offset_beyond_eof"]{ offset = start_line, total = total_file_lines },
         }
       end
 
@@ -126,15 +126,13 @@ M.definitions = {
       if result.first_line_exceeds_limit then
         -- First line at offset exceeds limit
         local first_line_size = ctx.truncate.format_size(#all_lines[start_line])
-        output_text = string.format(
-          "[Line %d is %s, exceeds %s limit. Use bash: sed -n '%dp' %s | head -c %d]",
-          start_line,
-          first_line_size,
-          ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
-          start_line,
-          input.path,
-          ctx.truncate.MAX_BYTES
-        )
+        output_text = messages["tool.read.line_exceeds_limit"]{
+          line = start_line,
+          size = first_line_size,
+          limit = ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
+          path = input.path,
+          bytes = ctx.truncate.MAX_BYTES,
+        }
       elseif result.truncated then
         local end_line_display = start_line + result.output_lines - 1
         local next_offset = end_line_display + 1
@@ -143,23 +141,23 @@ M.definitions = {
 
         if result.truncated_by == "lines" then
           output_text = output_text
-            .. string.format(
-              "\n\n[Showing lines %d-%d of %d. Use offset=%d to continue.]",
-              start_line,
-              end_line_display,
-              total_file_lines,
-              next_offset
-            )
+            .. "\n\n"
+            .. messages["tool.read.truncated_lines"]{
+              start = start_line,
+              end_line = end_line_display,
+              total = total_file_lines,
+              next_offset = next_offset,
+            }
         else
           output_text = output_text
-            .. string.format(
-              "\n\n[Showing lines %d-%d of %d (%s limit). Use offset=%d to continue.]",
-              start_line,
-              end_line_display,
-              total_file_lines,
-              ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
-              next_offset
-            )
+            .. "\n\n"
+            .. messages["tool.read.truncated_bytes"]{
+              start = start_line,
+              end_line = end_line_display,
+              total = total_file_lines,
+              limit = ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
+              next_offset = next_offset,
+            }
         end
       elseif user_limited_count and (start_line + user_limited_count - 1) < total_file_lines then
         -- User specified limit, there's more content, but no truncation
@@ -168,7 +166,8 @@ M.definitions = {
 
         output_text = result.content
         output_text = output_text
-          .. string.format("\n\n[%d more lines in file. Use offset=%d to continue.]", remaining, next_offset)
+          .. "\n\n"
+          .. messages["tool.read.more_lines"]{ count = remaining, next_offset = next_offset }
       else
         output_text = result.content
       end

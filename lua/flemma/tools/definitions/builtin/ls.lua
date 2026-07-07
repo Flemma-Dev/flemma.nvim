@@ -117,7 +117,7 @@ M.definitions = {
     execute = function(input, ctx)
       local path = input.path
       if not path or path == "" then
-        return { success = false, error = "No path provided" }
+        return { success = false, error = messages["tool.error.no_path"]{} }
       end
 
       -- Resolve relative paths against cwd (not __dirname)
@@ -125,7 +125,7 @@ M.definitions = {
 
       -- Validate directory exists
       if vim.fn.isdirectory(path) ~= 1 then
-        return { success = false, error = "Directory not found: " .. input.path }
+        return { success = false, error = messages["tool.ls.error.not_found"]{ path = input.path } }
       end
 
       local depth = math.min(input.max_depth or 1, MAX_DEPTH)
