@@ -221,6 +221,13 @@ describe("flemma.provider.registry decompose_model()", function()
     assert.equals("gemini-3.1-pro-preview", d.model)
     assert.are.same({ project_id = "stan" }, d.parameters)
   end)
+
+  it("returns extras and honors preserve_nil", function()
+    local d = registry.decompose_model("m;p=nil;api-key=1", { preserve_nil = true })
+    assert.equals("m", d.model)
+    assert.equals(vim.NIL, d.parameters.p)
+    assert.are.same({ "api-key=1" }, d.extras)
+  end)
 end)
 
 describe("flemma.provider.registry model_transform()", function()
@@ -235,13 +242,13 @@ describe("flemma.provider.registry model_transform()", function()
     return ctx
   end
 
-  it("emits model, provider, and provider-scoped parameters", function()
+  it("emits provider-scoped parameters before provider and model", function()
     local ctx = fake_ctx({})
     registry.model_transform("vertex/gemini-3;project_id=stan", ctx)
     assert.are.same({
-      { path = "model", value = "gemini-3" },
-      { path = "provider", value = "vertex" },
       { path = "parameters.vertex.project_id", value = "stan" },
+      { path = "provider", value = "vertex" },
+      { path = "model", value = "gemini-3" },
     }, ctx.ops)
   end)
 
@@ -249,9 +256,37 @@ describe("flemma.provider.registry model_transform()", function()
     local ctx = fake_ctx({ provider = "anthropic" })
     registry.model_transform("claude-x;timeout=99", ctx)
     assert.are.same({
-      { path = "model", value = "claude-x" },
       { path = "parameters.anthropic.timeout", value = 99 },
+      { path = "model", value = "claude-x" },
     }, ctx.ops)
+  end)
+
+  it("emits multiple parameters in sorted key order", function()
+    local ctx = fake_ctx({ provider = "anthropic" })
+    registry.model_transform("claude-x;b=2;a=1", ctx)
+    assert.are.same({
+      { path = "parameters.anthropic.a", value = 1 },
+      { path = "parameters.anthropic.b", value = 2 },
+      { path = "model", value = "claude-x" },
+    }, ctx.ops)
+  end)
+
+  it("passes explicit nil parameters through as vim.NIL clears", function()
+    local ctx = fake_ctx({ provider = "anthropic" })
+    registry.model_transform("claude-x;thinking_budget=nil", ctx)
+    assert.are.same({
+      { path = "parameters.anthropic.thinking_budget", value = vim.NIL },
+      { path = "model", value = "claude-x" },
+    }, ctx.ops)
+  end)
+
+  it("drops matrix parameters glued to a preset reference", function()
+    -- A preset expands late (at materialize), so its provider is unknowable at
+    -- write time — scoping under the ambient provider would mis-route the
+    -- parameters. They belong in the preset definition instead.
+    local ctx = fake_ctx({ provider = "anthropic" })
+    registry.model_transform("$kimi;opt=2", ctx)
+    assert.are.same({ { path = "model", value = "$kimi" } }, ctx.ops)
   end)
 
   it("does not emit a provider write for prefixless models", function()

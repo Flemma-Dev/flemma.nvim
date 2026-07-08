@@ -1266,6 +1266,15 @@ describe("config transform module", function()
     assert.equals(99, result.parameters.anthropic.timeout)
   end)
 
+  it("clears a lower-layer parameter via a matrix key=nil", function()
+    config.init(transform_schema())
+    config.apply(config.LAYERS.SETUP, { parameters = { anthropic = { timeout = 99 } } })
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "claude-y;timeout=nil"
+    local result = config.materialize(1)
+    assert.equals("claude-y", result.model)
+    assert.is_nil(result.parameters.anthropic.timeout)
+  end)
+
   it("a later provider write beats a provider/ prefix and vice-versa", function()
     config.init(transform_schema())
     local w = config.writer(1, config.LAYERS.FRONTMATTER)

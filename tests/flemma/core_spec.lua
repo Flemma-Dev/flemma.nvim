@@ -615,6 +615,38 @@ describe(":Flemma send command", function()
     assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
   end)
 
+  it("clears a parameter via matrix key=nil", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1234", {}, {})
+    assert.equals(1234, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=nil", {}, {})
+    assert.is_nil(require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
+  it("peels matrix parameters glued to the provider argument", function()
+    core.switch_provider("anthropic;thinking_budget=77", nil, {}, {})
+    local resolved = require("flemma.config").materialize()
+    assert.equals("anthropic", resolved.provider)
+    assert.equals(77, resolved.parameters.anthropic.thinking_budget)
+  end)
+
+  it("warns about ignored non-option matrix segments", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;api-key=1", {}, {})
+
+    vim.wait(50, function()
+      return #captured > 0
+    end, 10, false)
+    flush_schedule()
+
+    local saw_warning = false
+    for _, n in ipairs(captured) do
+      if n.message:find("api-key=1", 1, true) then
+        saw_warning = true
+        break
+      end
+    end
+    assert.is_true(saw_warning, "Should surface the ignored segment in the switch notification")
+  end)
+
   it("initialize_provider emits deferred warning", function()
     -- Use an invalid model to trigger fallback warning
     core.initialize_provider("openai", "nonexistent-model", {})

@@ -175,6 +175,12 @@ msgstr "Unknown provider '{{ provider }}'. Supported providers are: {{ providers
 msgid "ui.provider.model_fallback"
 msgstr "Model '{{ model }}' is not valid for provider '{{ provider }}'. Using default: '{{ fallback }}'."
 
+#. Bullet line in the switch notification for a ';'-segment of the model
+#. string that is not a key=value matrix option.
+#. Variables: {{ segment }} — the raw ignored segment.
+msgid "ui.provider.ignored_matrix_segment"
+msgstr "Ignored '{{ segment }}' — not a key=value matrix option"
+
 #. Header after :Flemma switch. Paired forms: model resolved or not.
 #. Variables: {{ provider }}, {{ model }}.
 msgid "ui.provider.switched"

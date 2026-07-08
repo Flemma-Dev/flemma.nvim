@@ -27,6 +27,7 @@ local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local indicators = require("flemma.ui.indicators")
 local injector = require("flemma.tools.injector")
+local modeline = require("flemma.utilities.modeline")
 local path_util = require("flemma.utilities.path")
 local tool_names = require("flemma.utilities.tools")
 local parser = require("flemma.parser")
@@ -251,10 +252,15 @@ local function apply_config(provider_name, model_name, explicit_params, layer, m
 
   -- Matrix parameters are always provider-specific and are written BEFORE the
   -- explicit key=value loop, so space-separated overrides win (last write wins
-  -- per store resolution).
+  -- per store resolution). vim.NIL means "explicitly clear" — the same contract
+  -- as the explicit loop below.
   if matrix_parameters then
     for k, v in pairs(matrix_parameters) do
-      w.parameters[provider_name][k] = v
+      if v == vim.NIL then
+        w.parameters[provider_name][k] = nil
+      else
+        w.parameters[provider_name][k] = v
+      end
     end
   end
 
@@ -312,15 +318,20 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   -- keyword, preset model, preset-override positional).
   ---@type table<string, any>|nil
   local matrix_parameters
+  ---@type string[]
+  local ignored_segments = {}
   if type(provider_name) == "string" and provider_name:find(";", 1, true) then
-    local decomposed = registry.decompose_model(provider_name)
-    provider_name = decomposed.model
-    if next(decomposed.parameters) then
-      matrix_parameters = decomposed.parameters
+    -- The provider slot carries no provider/model grammar — peel matrix
+    -- parameters only and let provider validation judge the primary as-is.
+    local primary, params, extras = modeline.parse_matrix(provider_name, { preserve_nil = true })
+    provider_name = primary
+    if next(params) then
+      matrix_parameters = params
     end
+    vim.list_extend(ignored_segments, extras)
   end
   if type(model_name) == "string" then
-    local decomposed = registry.decompose_model(model_name)
+    local decomposed = registry.decompose_model(model_name, { preserve_nil = true })
     model_name = decomposed.model
     local model_provider = decomposed.provider
     if model_provider then
@@ -331,6 +342,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
     if next(decomposed.parameters) then
       matrix_parameters = vim.tbl_extend("force", matrix_parameters or {}, decomposed.parameters)
     end
+    vim.list_extend(ignored_segments, decomposed.extras)
   end
 
   -- Validate provider
@@ -365,6 +377,9 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   -- Validate provider-specific parameters (advisory warnings, never fails)
   ---@type string[]
   local param_warnings = {}
+  for _, segment in ipairs(ignored_segments) do
+    table.insert(param_warnings, messages["ui.provider.ignored_matrix_segment"]{ segment = segment })
+  end
   if validated_model then
     local resolved_config = config_facade.materialize()
     local flat_params = normalize.merge_parameters(resolved_provider, resolved_config)
