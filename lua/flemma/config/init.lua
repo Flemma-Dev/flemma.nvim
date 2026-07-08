@@ -516,11 +516,13 @@ end
 
 --- Materialize the current resolved config into a plain Lua table.
 --- Walks the schema tree (static fields + DISCOVER-cached fields) and resolves
---- every path from the store, then expands any $-prefixed model preset and any
---- "provider/model" shorthand into their concrete fields. Returns a deep copy
---- safe for external mutation. Use when consumers need the effective config as a
---- plain table (`pairs()`, `vim.deepcopy()`); the raw accessors `get`/`inspect`
---- deliberately preserve preset aliases.
+--- every path from the store, then expands any $-prefixed model preset into
+--- its concrete fields ("provider/model" shorthand and matrix parameters need
+--- no expansion here — every write path decomposes them at the store
+--- boundary). Returns a deep copy safe for external mutation. Use when
+--- consumers need the effective config as a plain table (`pairs()`,
+--- `vim.deepcopy()`); the raw accessors `get`/`inspect` deliberately preserve
+--- preset aliases.
 ---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return table
 function M.materialize(bufnr)

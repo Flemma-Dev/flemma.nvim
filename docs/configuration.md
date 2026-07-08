@@ -451,9 +451,7 @@ Values are passed to `vim.cmd()`, so any Ex command works.
 
 ### Model matrix parameters
 
-Model strings accept **matrix parameters** — `;key=value` pairs appended to the
-model name (URI matrix syntax, RFC 3986 §3.3). They decompose at write time into
-provider-scoped parameters, so this:
+Model strings accept **matrix parameters** — `;key=value` pairs appended to the model name (URI matrix syntax, RFC 3986 §3.3). They decompose at write time into provider-scoped parameters, so this:
 
 ```lua
 flemma.opt.model = "vertex/gemini-3.1-pro-preview;project_id=stans-playground"
@@ -467,13 +465,14 @@ flemma.opt.model = "gemini-3.1-pro-preview"
 flemma.opt.parameters.vertex.project_id = "stans-playground"
 ```
 
-Matrix parameters are always provider-specific. Later writes win in source
-order: a `flemma.opt.parameters.vertex.project_id = ...` after the model line
-overrides the matrix value, and vice-versa. The same string works verbatim in
-`:Flemma switch` and in preset definitions; space-separated `key=value`
-arguments on the command line override matrix parameters of the same name.
-Values follow the modeline grammar — quoting (`;note='a;b'`), booleans,
-numbers, and comma lists (`;tags=a,b`).
+Matrix parameters are always provider-specific. Later writes win in source order: a `flemma.opt.parameters.vertex.project_id = ...` after the model line overrides the matrix value, and vice-versa. The same string works verbatim in `:Flemma switch` and in preset definitions; command-line `key=value` arguments override preset parameters of the same name, whichever grammar either side used.
+
+Values follow the modeline grammar — quoting (`;note='a;b'`), booleans, numbers, and comma lists (`;tags=a,b`). Two consequences worth knowing:
+
+- Numeric-looking values become Lua numbers. A string-typed parameter that happens to be all digits needs quotes: `;project_id='123456789042'`.
+- `;key=nil` explicitly clears the parameter, shadowing values from lower config layers — the same contract as the space-separated form.
+
+Parameter names are validated against the provider's schema: a typo like `;projext_id=x` is a config error naming the full parameter path. Matrix parameters cannot be attached to a preset reference (`model = "$fast;key=v"`) — a preset's provider is resolved later, so scope the parameter inside the preset definition instead.
 
 ### Presets
 

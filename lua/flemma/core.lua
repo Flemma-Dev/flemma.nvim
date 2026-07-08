@@ -241,7 +241,7 @@ local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schem
 ---@param model_name? string Validated model name
 ---@param explicit_params? table<string, any> User's explicit parameter overrides
 ---@param layer? integer Facade layer to write to (default: RUNTIME)
----@param matrix_parameters table<string, any>|nil Provider-scoped matrix (";key=value") parameters
+---@param matrix_parameters? table<string, any> Provider-scoped matrix (";key=value") parameters (vim.NIL values clear)
 local function apply_config(provider_name, model_name, explicit_params, layer, matrix_parameters)
   layer = layer or config_facade.LAYERS.RUNTIME
   local w = config_facade.writer(nil, layer)

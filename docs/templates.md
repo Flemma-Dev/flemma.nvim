@@ -493,7 +493,7 @@ Check the logs at @//var/log/app.log.
 
 - **Path prefixes:** `@./` and `@../` resolve relative to the `.chat` file's directory. `@~/` resolves relative to `$HOME`. `@//` denotes an absolute path (`@//tmp/file` resolves to `/tmp/file`).
 - **Trailing punctuation** (`.`, `)`, `,`, etc.) is stripped automatically so you can write natural prose around references.
-- **Options:** the `;key=value` tail after a reference is parsed as matrix parameters (multiple `;key=value` pairs are supported). `type=<mime>` is the only option consumed today — it forces a specific MIME type, as in the Lua example above.
+- **Options:** the `;key=value` tail after a reference is parsed as matrix parameters (multiple `;key=value` pairs are supported). `type=<mime>` is the only option consumed today — it forces a specific MIME type, as in the Lua example above. A MIME type that itself contains `;` parameters must be quoted — `@./notes.txt;type='text/plain;charset=utf-8'` — since an unquoted `;` starts the next option.
 - **URL-encoded paths:** percent-encoded characters are decoded before file resolution. `@./my%20report.txt` resolves to `my report.txt`.
 
 > [!TIP]

@@ -84,7 +84,7 @@ return s.object({
   provider = s.string("anthropic"),
   model = s.optional(s.string():transform(function(value, ctx)
     -- Lazy require: schema.lua cannot top-require the provider registry
-    -- (load cycle) — mirror the DISCOVER callback pattern above.
+    -- (load cycle) — mirror the DISCOVER callback pattern below.
     return require("flemma.provider.registry").model_transform(value, ctx)
   end)),
 
