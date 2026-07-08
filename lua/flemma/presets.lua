@@ -9,10 +9,18 @@ local bridge = require("flemma.bridge")
 local log = require("flemma.logging")
 local messages = require("flemma.messages")
 local modeline = require("flemma.utilities.modeline")
+local nav = require("flemma.schema.navigation")
 local notify = require("flemma.notify")
 local registry = require("flemma.provider.registry")
+local schema_definition = require("flemma.config.schema")
 local string_utils = require("flemma.utilities.string")
 local tools_registry = require("flemma.tools.registry")
+
+--- The general parameters schema (static fields like max_tokens, temperature)
+--- distinguishes general from provider-specific keys — same derivation as
+--- core.lua's routing.
+---@type flemma.schema.Node
+local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schema("parameters") --[[@as flemma.schema.Node]]
 
 ---@class flemma.presets.Preset
 ---@field provider? string Resolved provider name
@@ -88,6 +96,12 @@ local function normalize_definition(name, definition)
   local matrix_parameters
   if type(model) == "string" then
     local decomposed = registry.decompose_model(model)
+    if #decomposed.extras > 0 then
+      warn(messages["ui.preset.ignored_matrix_segment"]{
+        preset = name,
+        segments = table.concat(decomposed.extras, ", "),
+      })
+    end
     model = decomposed.model
     if decomposed.provider and provider and decomposed.provider ~= provider then
       return nil,
@@ -133,7 +147,20 @@ local function normalize_definition(name, definition)
     })
   end
 
-  local parameters = vim.deepcopy(extracted.parameters)
+  -- Fully normalize parameters: provider-specific keys nest under the
+  -- provider namespace, so preset.parameters is isomorphic to
+  -- config.parameters — one shape, no downstream provenance sniffing.
+  -- Provider-less presets keep flat keys; they scope under the switch-target
+  -- provider at use time.
+  local parameters = {}
+  for key, value in pairs(vim.deepcopy(extracted.parameters)) do
+    if provider and not parameters_schema:has_field(key) and not registry.has(key) then
+      parameters[provider] = parameters[provider] or {}
+      parameters[provider][key] = value
+    else
+      parameters[key] = value
+    end
+  end
   if matrix_parameters then
     if provider then
       parameters[provider] = vim.tbl_deep_extend("force", parameters[provider] or {}, matrix_parameters)
@@ -215,6 +242,23 @@ function M.finalize()
         end
       end
     end
+  end
+end
+
+---Write a provider-bearing preset's parameters through a config write proxy.
+---Preset parameters are config-shaped (normalize_definition nests
+---provider-specific keys), so each top-level key assigns structurally.
+---Provider-less presets are a no-op: their flat parameters scope under the
+---switch-target provider and must flow through the explicit-params channel —
+---the caller passes preset.parameters to the switch instead.
+---@param preset flemma.presets.Preset
+---@param writer table Config write proxy for the target layer
+function M.write_parameters(preset, writer)
+  if not preset.provider or not preset.parameters or next(preset.parameters) == nil then
+    return
+  end
+  for key, value in pairs(preset.parameters) do
+    writer.parameters[key] = value
   end
 end
 

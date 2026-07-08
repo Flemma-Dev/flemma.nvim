@@ -629,6 +629,18 @@ describe(":Flemma send command", function()
     assert.equals(77, resolved.parameters.anthropic.thinking_budget)
   end)
 
+  it("a CLI space override deterministically beats a preset matrix parameter", function()
+    require("flemma.presets").setup({ ["$budget"] = "anthropic/claude-haiku-4-5;thinking_budget=1111" })
+    vim.cmd("Flemma switch $budget thinking_budget=2222")
+    assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
+  it("a CLI matrix override beats a preset space parameter", function()
+    require("flemma.presets").setup({ ["$budget2"] = "anthropic claude-haiku-4-5 thinking_budget=1111" })
+    vim.cmd("Flemma switch $budget2 claude-haiku-4-5;thinking_budget=2222")
+    assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
   it("warns about ignored non-option matrix segments", function()
     core.switch_provider("anthropic", "claude-haiku-4-5;api-key=1", {}, {})
 

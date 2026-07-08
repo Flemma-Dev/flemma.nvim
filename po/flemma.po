@@ -673,6 +673,10 @@ msgstr "Explicit provider '{{ provider_explicit }}' conflicts with preset '{{ pr
 msgid "ui.preset.model_params_no_provider"
 msgstr "Preset {{ preset }}: parameters in model '{{ model }}' were ignored — no provider to scope them to"
 
+#. Variables: {{ preset }} — the preset name; {{ segments }} — comma-separated raw segments that are not key=value options.
+msgid "ui.preset.ignored_matrix_segment"
+msgstr "Preset {{ preset }}: ignored '{{ segments }}' — not key=value matrix options"
+
 #. Variables: {{ preset }} — the preset name; {{ provider_field }} — the preset's provider field; {{ provider_model }} — the provider from the model string.
 msgid "ui.preset.model_provider_conflict"
 msgstr "Preset {{ preset }}: provider '{{ provider_field }}' conflicts with '{{ provider_model }}' from the model string"

@@ -281,11 +281,6 @@ local function apply_config(provider_name, model_name, explicit_params, layer, m
         end
         if parameters_schema:has_field(k) then
           w.parameters[k] = write_value
-        elseif registry.has(k) and type(write_value) == "table" then
-          -- Provider-keyed sub-table (e.g. preset parameters normalized from a
-          -- matrix model string): assign to its own provider namespace — the
-          -- proxy recurses object assignment per-field.
-          w.parameters[k] = write_value
         else
           w.parameters[provider_name][k] = write_value
         end
