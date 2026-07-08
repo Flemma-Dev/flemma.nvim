@@ -1067,6 +1067,19 @@ describe("config transform module", function()
     s = require("flemma.schema")
   end)
 
+  local registry = require("flemma.provider.registry")
+
+  local function transform_schema()
+    return s.object({
+      provider = s.string("anthropic"),
+      model = s.string("claude-x"):transform(registry.model_transform),
+      parameters = s.object({
+        anthropic = s.object({ timeout = s.optional(s.integer()) }),
+        vertex = s.object({ project_id = s.optional(s.string()) }),
+      }),
+    })
+  end
+
   it("resolves emitted paths relative to the transformed field's parent", function()
     local node = s.string():transform(function(value, ctx)
       ctx:set("model", value)
@@ -1125,5 +1138,46 @@ describe("config transform module", function()
     end)
     assert.is_false(ok)
     assert.is_false(transform.is_expanding())
+  end)
+
+  it("decomposes a matrix model write through the proxy", function()
+    config.init(transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "vertex/gemini-3;project_id=stan"
+    local result = config.materialize(1)
+    assert.equals("vertex", result.provider)
+    assert.equals("gemini-3", result.model)
+    assert.equals("stan", result.parameters.vertex.project_id)
+  end)
+
+  it("later explicit parameter write wins over a matrix parameter", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.model = "vertex/gemini-3;project_id=matrix"
+    w.parameters.vertex.project_id = "explicit"
+    assert.equals("explicit", config.materialize(1).parameters.vertex.project_id)
+  end)
+
+  it("later matrix model write wins over an explicit parameter", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.parameters.vertex.project_id = "explicit"
+    w.model = "vertex/gemini-3;project_id=matrix"
+    assert.equals("matrix", config.materialize(1).parameters.vertex.project_id)
+  end)
+
+  it("scopes prefixless matrix parameters under the ambient provider", function()
+    config.init(transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "claude-y;timeout=99"
+    local result = config.materialize(1)
+    assert.equals("anthropic", result.provider)
+    assert.equals(99, result.parameters.anthropic.timeout)
+  end)
+
+  it("a later provider write beats a provider/ prefix and vice-versa", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.model = "vertex/gemini-3"
+    w.provider = "anthropic"
+    assert.equals("anthropic", config.materialize(1).provider)
   end)
 end)

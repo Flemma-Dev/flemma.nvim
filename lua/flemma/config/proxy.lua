@@ -17,6 +17,7 @@ local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
 local symbols = require("flemma.symbols")
+local transform = require("flemma.config.transform")
 
 --- Build an is_list classifier function for the given root schema.
 --- Returns true when the path refers to a list-capable field (ListNode,
@@ -167,6 +168,24 @@ local function make_list_proxy(path, layer, bufnr, item_schema, coerce_fn, root_
   }, ListProxy)
 end
 
+--- Apply a $append/$prepend/$remove transform op through the list machinery.
+---@param root_schema flemma.schema.Node
+---@param layer integer
+---@param bufnr integer?
+---@param op flemma.config.transform.Op
+local function apply_transform_list_op(root_schema, layer, bufnr, op)
+  local leaf = nav.navigate_schema(root_schema, op.path)
+  local item_schema = leaf and leaf:get_item_schema()
+  if not item_schema then
+    error({ type = "config", error = string.format("transform op '%s' targets non-list path '%s'", op.op, op.path) })
+  end
+  ---@cast leaf -nil
+  local coerce_fn = leaf:has_coerce() and leaf:get_coerce() or nil
+  local list_proxy = make_list_proxy(op.path, layer, bufnr, item_schema, coerce_fn, root_schema)
+  local store_op = op.op:sub(2) -- "$append" → "append"
+  record_list_op(list_proxy, store_op, op.value, store_op == "remove")
+end
+
 -- ---------------------------------------------------------------------------
 -- Read / Write Proxy factory
 -- ---------------------------------------------------------------------------
@@ -312,6 +331,30 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- or hybrid proxy and return the proxy itself. When assigned back
       -- (e.g. `w.f = w.f + item`), the value is a sentinel: ops are done.
       if is_op_chain_sentinel(value) then
+        return
+      end
+
+      -- Write transform: decompose this write into explicit ops on sibling
+      -- paths (e.g. model = "vertex/gemini;p=x" → model + provider + params).
+      -- Ops re-enter this proxy under guard(), so each target field's own
+      -- coerce/validation applies and outputs are never re-transformed.
+      if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
+        local ops = transform.run(leaf, canonical, value, bufnr)
+        transform.guard(function()
+          local root = make_proxy(root_schema, bufnr, layer, "", root_schema)
+          for _, op in ipairs(ops) do
+            if op.op == "$set" then
+              local segments = vim.split(op.path, ".", { plain = true })
+              local target = root
+              for i = 1, #segments - 1 do
+                target = target[segments[i]]
+              end
+              target[segments[#segments]] = op.value
+            else
+              apply_transform_list_op(root_schema, layer, bufnr, op)
+            end
+          end
+        end)
         return
       end
 
