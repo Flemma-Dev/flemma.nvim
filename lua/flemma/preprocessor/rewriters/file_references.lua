@@ -4,6 +4,7 @@
 ---@class flemma.preprocessor.rewriters.FileReferences
 local M = {}
 
+local modeline = require("flemma.utilities.modeline")
 local preprocessor = require("flemma.preprocessor")
 local utilities = require("flemma.utilities.encoding")
 
@@ -34,24 +35,29 @@ local function handle_file_reference(match, ctx)
     return nil
   end
 
-  local raw_path, options_str = match.captures[1]:match("^([^;]+)(;.+)$")
+  local raw_path
   local trailing
+  local opts_parts = { "[symbols.BINARY] = true" }
 
-  local opts_parts = {}
-  if options_str then
-    local mime_with_punct = options_str:match("^;type=(.+)$")
-    if mime_with_punct then
-      local mime = mime_with_punct:gsub("[%p]+$", "")
-      trailing = mime_with_punct:sub(#mime + 1)
-      table.insert(opts_parts, "[symbols.BINARY] = true")
-      table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(mime) .. "'")
+  local segments = modeline.split_on(match.captures[1], ";")
+  if segments then
+    raw_path = segments[1]
+    -- Trailing prose punctuation belongs to the sentence, not the last option
+    -- value: strip it from the raw segment before parsing (same behavior the
+    -- single-key ;type= parser had).
+    local last = segments[#segments]
+    local stripped = last:gsub("[%p]+$", "")
+    trailing = last:sub(#stripped + 1)
+    segments[#segments] = stripped
+    local options = modeline.parse_args(segments, 2)
+    if type(options.type) == "string" then
+      table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(options.type) .. "'")
     end
   else
     raw_path = match.captures[1]
     local stripped
     stripped, trailing = strip_trailing_punctuation(raw_path)
     raw_path = stripped
-    table.insert(opts_parts, "[symbols.BINARY] = true")
   end
 
   local path = url_decode(raw_path) --[[@as string]]

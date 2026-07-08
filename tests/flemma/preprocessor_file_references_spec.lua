@@ -132,6 +132,42 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     assert.is_true(has_trailing)
   end)
 
+  it("parses multi-key options and consumes type=", function()
+    local doc = run_rewriter("@./file.pdf;type=application/pdf;detail=high")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
+    assert.truthy(segs[1].code:match("application/pdf"))
+    -- detail= parses uniformly but has no include() mapping yet
+    assert.is_nil(segs[1].code:match("detail"))
+  end)
+
+  it("keeps trailing punctuation out of the last option value", function()
+    local doc = run_rewriter("See @./file.pdf;type=application/pdf;detail=high.")
+    local has_expression, has_trailing = false, false
+    for _, seg in ipairs(doc.messages[1].segments) do
+      if seg.kind == "expression" then
+        has_expression = true
+        assert.truthy(seg.code:match("application/pdf"))
+      end
+      if seg.kind == "text" and seg.value == "." then
+        has_trailing = true
+      end
+    end
+    assert.is_true(has_expression)
+    assert.is_true(has_trailing)
+  end)
+
+  it("treats unknown single options as binary references", function()
+    local doc = run_rewriter("@./file.bin;x=1")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
+    assert.is_nil(segs[1].code:match("MIME"))
+  end)
+
   it("multiple file references on one line", function()
     local doc = run_rewriter("@./a.txt and @./b.txt")
     local kinds = segment_kinds(doc)
