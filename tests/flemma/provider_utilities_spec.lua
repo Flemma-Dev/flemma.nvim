@@ -226,11 +226,11 @@ end)
 describe("flemma.provider.registry model_transform()", function()
   local function fake_ctx(reads)
     local ctx = { ops = {} }
-    function ctx:get(path)
+    ctx.get = function(path)
       return reads[path]
     end
-    function ctx:set(path, value)
-      table.insert(self.ops, { op = "$set", path = path, value = value })
+    ctx.set = function(path, value)
+      table.insert(ctx.ops, { path = path, value = value })
     end
     return ctx
   end
@@ -239,9 +239,9 @@ describe("flemma.provider.registry model_transform()", function()
     local ctx = fake_ctx({})
     registry.model_transform("vertex/gemini-3;project_id=stan", ctx)
     assert.are.same({
-      { op = "$set", path = "model", value = "gemini-3" },
-      { op = "$set", path = "provider", value = "vertex" },
-      { op = "$set", path = "parameters.vertex.project_id", value = "stan" },
+      { path = "model", value = "gemini-3" },
+      { path = "provider", value = "vertex" },
+      { path = "parameters.vertex.project_id", value = "stan" },
     }, ctx.ops)
   end)
 
@@ -249,26 +249,26 @@ describe("flemma.provider.registry model_transform()", function()
     local ctx = fake_ctx({ provider = "anthropic" })
     registry.model_transform("claude-x;timeout=99", ctx)
     assert.are.same({
-      { op = "$set", path = "model", value = "claude-x" },
-      { op = "$set", path = "parameters.anthropic.timeout", value = 99 },
+      { path = "model", value = "claude-x" },
+      { path = "parameters.anthropic.timeout", value = 99 },
     }, ctx.ops)
   end)
 
   it("does not emit a provider write for prefixless models", function()
     local ctx = fake_ctx({ provider = "anthropic" })
     registry.model_transform("claude-x", ctx)
-    assert.are.same({ { op = "$set", path = "model", value = "claude-x" } }, ctx.ops)
+    assert.are.same({ { path = "model", value = "claude-x" } }, ctx.ops)
   end)
 
   it("drops parameters when no provider is resolvable", function()
     local ctx = fake_ctx({})
     registry.model_transform("claude-x;p=1", ctx)
-    assert.are.same({ { op = "$set", path = "model", value = "claude-x" } }, ctx.ops)
+    assert.are.same({ { path = "model", value = "claude-x" } }, ctx.ops)
   end)
 
   it("passes non-string values through as a plain model set", function()
     local ctx = fake_ctx({})
     registry.model_transform(true, ctx)
-    assert.are.same({ { op = "$set", path = "model", value = true } }, ctx.ops)
+    assert.are.same({ { path = "model", value = true } }, ctx.ops)
   end)
 end)

@@ -492,28 +492,28 @@ end
 --- Schema `:transform` for model-shaped fields: decomposes a "provider/model;key=value"
 --- write into sibling `model`, `provider`, and provider-scoped parameter writes.
 --- Matrix parameters are ALWAYS provider-specific (never routed to general parameters).
---- Prefixless models scope parameters under the ambient provider (ctx:get, which at the
+--- Prefixless models scope parameters under the ambient provider (ctx.get, which at the
 --- root mount always resolves via the schema default); if no provider is resolvable the
 --- parameters are dropped with a log line rather than guessed.
 ---@param value any
----@param ctx flemma.config.TransformContext
+---@param ctx flemma.schema.TransformContext
 function M.model_transform(value, ctx)
   if type(value) ~= "string" then
-    ctx:set("model", value)
+    ctx.set("model", value)
     return
   end
   local decomposed = M.decompose_model(value)
-  ctx:set("model", decomposed.model)
+  ctx.set("model", decomposed.model)
   if decomposed.provider then
-    ctx:set("provider", decomposed.provider)
+    ctx.set("provider", decomposed.provider)
   end
   if next(decomposed.parameters) == nil then
     return
   end
-  local namespace = decomposed.provider or ctx:get("provider")
+  local namespace = decomposed.provider or ctx.get("provider")
   if type(namespace) == "string" and namespace ~= "" then
     for key, parameter_value in pairs(decomposed.parameters) do
-      ctx:set("parameters." .. namespace .. "." .. key, parameter_value)
+      ctx.set("parameters." .. namespace .. "." .. key, parameter_value)
     end
   else
     log.warn("model_transform(): dropped matrix parameters from " .. value .. " — no provider to scope them to")

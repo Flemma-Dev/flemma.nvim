@@ -131,22 +131,6 @@ local function report_error(ctx, msg)
   return nil, msg
 end
 
---- Apply a $append/$prepend/$remove transform op via the store.
----@param ctx flemma.config.ApplyContext
----@param op flemma.config.transform.Op
-local function transform_list_op(ctx, op)
-  local leaf = nav.navigate_schema(ctx.schema, op.path)
-  local item_schema = leaf and leaf:get_item_schema()
-  local store_op = op.op:sub(2)
-  if item_schema and store_op ~= "remove" then
-    local ok, err = item_schema:validate_value(op.value)
-    if not ok then
-      error({ type = "config", error = string.format("transform op at '%s': %s", op.path, err or "invalid") })
-    end
-  end
-  store.record(ctx.layer, ctx.bufnr, store_op, op.path, op.value)
-end
-
 --- Recursively walk a plain Lua table and record set ops on the target layer.
 --- Object nodes are walked into; lists and scalars become single set ops.
 --- Alias keys at each object level are resolved to canonical paths.
@@ -197,6 +181,25 @@ local function apply_recursive(ctx, path, value)
     return report_error(ctx, "config.apply: " .. messages["ui.config.apply_unknown_key"]{ key = path })
   end
 
+  -- Write transform: fires for any value shape, before object handling — the
+  -- transform consumes the write entirely (same trigger contract as the proxy
+  -- and JSON-operator sites). Each op re-enters at the root with its path
+  -- unflattened into a nested table: apply_recursive's per-segment object
+  -- recursion keeps DISCOVER deferral, validation, and error collection
+  -- identical to a direct write, at any depth.
+  if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
+    local ok, err = transform.expand(leaf, path, value, ctx.bufnr, function(op_path, op_value)
+      local op_ok, op_err = apply_recursive(ctx, "", unflatten_path(op_path, op_value))
+      if not op_ok then
+        error({ type = "config", error = op_err }, 0)
+      end
+    end)
+    if not ok then
+      return report_error(ctx, err --[[@as string]])
+    end
+    return true
+  end
+
   if leaf:is_object() and type(value) == "table" then
     -- Hybrid objects with allow_list: sequential table → listops for
     -- op-prefixed values, plain set for unprefixed lists.
@@ -230,30 +233,6 @@ local function apply_recursive(ctx, path, value)
       end
     end
   else
-    if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
-      local ops = transform.run(leaf, path, value, ctx.bufnr)
-      ---@type boolean?, string?
-      local ok_all, err_all = true, nil
-      transform.guard(function()
-        for _, op in ipairs(ops) do
-          if op.op == "$set" then
-            -- Re-enter at the root with the path unflattened into a nested
-            -- table: recursing through apply_recursive's per-segment object
-            -- branch (rather than a single flat-path call) keeps DISCOVER
-            -- deferral, validation, and error collection identical to a
-            -- direct write, at any depth.
-            local ok, err = apply_recursive(ctx, "", unflatten_path(op.path, op.value))
-            if not ok then
-              ok_all, err_all = nil, err
-              return
-            end
-          else
-            transform_list_op(ctx, op)
-          end
-        end
-      end)
-      return ok_all, err_all
-    end
     local unwrapped_leaf = nav.unwrap_optional(leaf)
     if listops.try_apply(unwrapped_leaf, value, ctx.layer, ctx.bufnr, path) then
       return true

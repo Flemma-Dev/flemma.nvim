@@ -17,6 +17,17 @@ local hl = require("flemma.hl")
 ---@class flemma.schema.CoerceContext
 ---@field get fun(path: string): any Resolve a config path from global layers (L10-L30)
 
+--- Context passed to write transforms for decomposing one write into explicit
+--- ops on sibling paths. A strict superset of the coerce context: transforms
+--- read exactly as coerce functions do, plus `set`. Both accessors resolve
+--- paths RELATIVE to the parent object of the transformed field, and `get` is
+--- buffer-aware — a value written earlier in the same frontmatter evaluation
+--- is visible. Coerce functions receive the plain CoerceContext (no `set`),
+--- so emitting from coerce is impossible by construction. Constructed by
+--- flemma.config.transform, mirroring store.make_coerce_context().
+---@class flemma.schema.TransformContext: flemma.schema.CoerceContext
+---@field set fun(path: string, value: any) Record a decomposed write (vim.NIL value marks an explicit clear)
+
 -- ---------------------------------------------------------------------------
 -- Node base class
 -- ---------------------------------------------------------------------------
@@ -26,7 +37,7 @@ local hl = require("flemma.hl")
 ---@field _type_as? string Override generated type annotation
 ---@field _coerce? fun(value: any, ctx: flemma.schema.CoerceContext?): any Value transformer (runs before validation on writes; finalize() re-runs with ctx)
 ---@field _deferred_validator? fun(value: any, ctx: flemma.schema.CoerceContext): boolean, string? Semantic validator deferred to finalize (runs after coerce, on resolved values)
----@field _transform? fun(value: any, ctx: flemma.config.TransformContext) Write decomposer (runs INSTEAD of the write at write sites; emits ops via ctx; write-time only, never re-run at finalize)
+---@field _transform? fun(value: any, ctx: flemma.schema.TransformContext) Write decomposer (runs INSTEAD of the write at write sites; emits ops via ctx; write-time only, never re-run at finalize)
 local Node = {}
 Node.__index = Node
 
@@ -88,12 +99,12 @@ end
 --- Attach a write transform — the write-side sibling of `:coerce`.
 --- Where coerce reshapes the VALUE on this path (value → value, re-run at
 --- finalize), a transform reshapes the WRITE across paths: it receives the raw
---- value plus a write-capable context and emits explicit ops (ctx:set/:append/
---- :prepend/:remove) whose paths resolve relative to the parent object of the
---- transformed field. Transform outputs are terminal (never re-transformed) and
---- the hook is write-time only — it consumes its source, so finalize has
---- nothing to re-run.
----@param fn fun(value: any, ctx: flemma.config.TransformContext)
+--- value plus a write-capable context and records decomposed writes (ctx.set)
+--- whose paths resolve relative to the parent object of the transformed
+--- field. Transform outputs are terminal (never re-transformed) and the hook
+--- is write-time only — it consumes its source, so finalize has nothing to
+--- re-run.
+---@param fn fun(value: any, ctx: flemma.schema.TransformContext)
 ---@return flemma.schema.Node self
 function Node:transform(fn)
   self._transform = fn
@@ -102,7 +113,7 @@ end
 
 --- Apply the transform, if one is set. No-op (and no ops emitted) otherwise.
 ---@param value any
----@param ctx flemma.config.TransformContext
+---@param ctx flemma.schema.TransformContext
 function Node:apply_transform(value, ctx)
   if self._transform then
     self._transform(value, ctx)
@@ -116,7 +127,7 @@ function Node:has_transform()
 end
 
 --- Return the transform function, or nil if none.
----@return (fun(value: any, ctx: flemma.config.TransformContext))?
+---@return (fun(value: any, ctx: flemma.schema.TransformContext))?
 function Node:get_transform()
   return self._transform
 end
@@ -1028,6 +1039,24 @@ function OptionalNode:get_inner_schema()
   return self._inner
 end
 
+--- Delegate hook attachment to the inner schema — a hook stored on the
+--- wrapper would be invisible to has_coerce(), which reads the inner.
+---@param fn fun(value: any, ctx: flemma.schema.CoerceContext?): any
+---@return flemma.schema.Node self
+function OptionalNode:coerce(fn)
+  self._inner:coerce(fn)
+  return self
+end
+
+--- Delegate hook attachment to the inner schema — a hook stored on the
+--- wrapper would be invisible to has_transform(), which reads the inner.
+---@param fn fun(value: any, ctx: flemma.schema.TransformContext)
+---@return flemma.schema.Node self
+function OptionalNode:transform(fn)
+  self._inner:transform(fn)
+  return self
+end
+
 --- Delegate coerce to the inner schema. Nil values bypass coercion.
 ---@param value any
 ---@param ctx flemma.schema.CoerceContext? Context for config lookups (nil during boot)
@@ -1052,7 +1081,7 @@ function OptionalNode:get_coerce()
 end
 
 ---@param value any
----@param ctx flemma.config.TransformContext
+---@param ctx flemma.schema.TransformContext
 function OptionalNode:apply_transform(value, ctx)
   return self._inner:apply_transform(value, ctx)
 end
@@ -1062,7 +1091,7 @@ function OptionalNode:has_transform()
   return self._inner:has_transform()
 end
 
----@return (fun(value: any, ctx: flemma.config.TransformContext))?
+---@return (fun(value: any, ctx: flemma.schema.TransformContext))?
 function OptionalNode:get_transform()
   return self._inner:get_transform()
 end
@@ -1189,6 +1218,24 @@ function NullableNode:apply_coerce(value, ctx)
   return self._inner:apply_coerce(value, ctx)
 end
 
+--- Delegate hook attachment to the inner schema — a hook stored on the
+--- wrapper would be invisible to has_coerce(), which reads the inner.
+---@param fn fun(value: any, ctx: flemma.schema.CoerceContext?): any
+---@return flemma.schema.Node self
+function NullableNode:coerce(fn)
+  self._inner:coerce(fn)
+  return self
+end
+
+--- Delegate hook attachment to the inner schema — a hook stored on the
+--- wrapper would be invisible to has_transform(), which reads the inner.
+---@param fn fun(value: any, ctx: flemma.schema.TransformContext)
+---@return flemma.schema.Node self
+function NullableNode:transform(fn)
+  self._inner:transform(fn)
+  return self
+end
+
 ---@return boolean
 function NullableNode:has_coerce()
   return self._inner:has_coerce()
@@ -1200,7 +1247,7 @@ function NullableNode:get_coerce()
 end
 
 ---@param value any
----@param ctx flemma.config.TransformContext
+---@param ctx flemma.schema.TransformContext
 function NullableNode:apply_transform(value, ctx)
   return self._inner:apply_transform(value, ctx)
 end
@@ -1210,7 +1257,7 @@ function NullableNode:has_transform()
   return self._inner:has_transform()
 end
 
----@return (fun(value: any, ctx: flemma.config.TransformContext))?
+---@return (fun(value: any, ctx: flemma.schema.TransformContext))?
 function NullableNode:get_transform()
   return self._inner:get_transform()
 end

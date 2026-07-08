@@ -407,6 +407,13 @@ msgstr "list item[{{ index }}] at '{{ path }}': {{ reason }}"
 msgid "ui.config.apply_validation_error"
 msgstr "validation error at '{{ path }}': {{ reason }}"
 
+#. Shown when a write transform (e.g. a matrix model string) decomposes into
+#. an op that fails to apply — the original written value gives the user the
+#. path they actually authored.
+#. Variables: {{ value }} — the raw written value whose expansion failed; {{ detail }} — the underlying config error.
+msgid "ui.config.transform_expand_failed"
+msgstr "could not expand '{{ value }}': {{ detail }}"
+
 #. Diagnostic formatting fallbacks.
 msgid "ui.diagnostics.unknown_error"
 msgstr "unknown error"

@@ -72,6 +72,24 @@ local function walk(schema, path, value, layer, bufnr, failures)
 
   local unwrapped = nav.unwrap_optional(node)
 
+  -- Write transform: fires for any value shape, before object coercion and
+  -- navigation — the transform consumes the write entirely (same trigger
+  -- contract as the proxy and config.apply sites). Ops re-enter walk() under
+  -- the expansion flag, so per-op failures land in the shared failures sink.
+  if value ~= nil and not transform.is_expanding() and node:has_transform() then
+    local ok, err = transform.expand(node, path, value, bufnr, function(op_path, op_value)
+      walk(schema, op_path, op_value, layer, bufnr, failures)
+    end)
+    if not ok then
+      table.insert(failures, {
+        path = path,
+        value = value,
+        message = err --[[@as string]],
+      })
+    end
+    return
+  end
+
   -- Non-table value: try coerce for object nodes (e.g., autopilot: false →
   -- { enabled = false }), then fall through to scalar set.
   if type(value) ~= "table" then
@@ -81,30 +99,6 @@ local function walk(schema, path, value, layer, bufnr, failures)
         walk(schema, path, coerced, layer, bufnr, failures)
         return
       end
-    end
-    if value ~= nil and not transform.is_expanding() and node:has_transform() then
-      local ops = transform.run(node, path, value, bufnr)
-      transform.guard(function()
-        for _, op in ipairs(ops) do
-          if op.op == "$set" then
-            walk(schema, op.path, op.value, layer, bufnr, failures)
-          else
-            local leaf = nav.navigate_schema(schema, op.path, { unwrap_leaf = true })
-            local unwrapped_op = leaf and nav.unwrap_optional(leaf)
-            local item_schema = unwrapped_op and (unwrapped_op:get_list_item_schema() or unwrapped_op:get_item_schema())
-            record_list_op(
-              layer,
-              bufnr,
-              op.op:sub(2) --[[@as "append"|"remove"|"prepend"]],
-              op.path,
-              op.value,
-              item_schema,
-              failures
-            )
-          end
-        end
-      end)
-      return
     end
     local ok, err = node:validate_value(value)
     if not ok then

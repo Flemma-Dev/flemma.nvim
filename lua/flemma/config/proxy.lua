@@ -168,24 +168,6 @@ local function make_list_proxy(path, layer, bufnr, item_schema, coerce_fn, root_
   }, ListProxy)
 end
 
---- Apply a $append/$prepend/$remove transform op through the list machinery.
----@param root_schema flemma.schema.Node
----@param layer integer
----@param bufnr integer?
----@param op flemma.config.transform.Op
-local function apply_transform_list_op(root_schema, layer, bufnr, op)
-  local leaf = nav.navigate_schema(root_schema, op.path)
-  local item_schema = leaf and leaf:get_item_schema()
-  if not item_schema then
-    error({ type = "config", error = string.format("transform op '%s' targets non-list path '%s'", op.op, op.path) })
-  end
-  ---@cast leaf -nil
-  local coerce_fn = leaf:has_coerce() and leaf:get_coerce() or nil
-  local list_proxy = make_list_proxy(op.path, layer, bufnr, item_schema, coerce_fn, root_schema)
-  local store_op = op.op:sub(2) -- "$append" → "append"
-  record_list_op(list_proxy, store_op, op.value, store_op == "remove")
-end
-
 -- ---------------------------------------------------------------------------
 -- Read / Write Proxy factory
 -- ---------------------------------------------------------------------------
@@ -336,25 +318,25 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
 
       -- Write transform: decompose this write into explicit ops on sibling
       -- paths (e.g. model = "vertex/gemini;p=x" → model + provider + params).
-      -- Ops re-enter this proxy under guard(), so each target field's own
-      -- coerce/validation applies and outputs are never re-transformed.
+      -- Ops re-enter this proxy under the expansion flag, so each target
+      -- field's own coerce/validation applies and outputs are never
+      -- re-transformed. A nil op value is the proxy's native clear (set-nil).
       if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
-        local ops = transform.run(leaf, canonical, value, bufnr)
-        transform.guard(function()
-          local root = make_proxy(root_schema, bufnr, layer, "", root_schema)
-          for _, op in ipairs(ops) do
-            if op.op == "$set" then
-              local segments = vim.split(op.path, ".", { plain = true })
-              local target = root
-              for i = 1, #segments - 1 do
-                target = target[segments[i]]
-              end
-              target[segments[#segments]] = op.value
-            else
-              apply_transform_list_op(root_schema, layer, bufnr, op)
-            end
+        local root = make_proxy(root_schema, bufnr, layer, "", root_schema)
+        local ok, err = transform.expand(leaf, canonical, value, bufnr, function(op_path, op_value)
+          local segments = vim.split(op_path, ".", { plain = true })
+          local target = root
+          for i = 1, #segments - 1 do
+            target = target[segments[i]]
           end
+          target[segments[#segments]] = op_value
         end)
+        if not ok then
+          error({
+            type = "config",
+            error = err --[[@as string]],
+          })
+        end
         return
       end
 

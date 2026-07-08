@@ -1100,6 +1100,7 @@ describe("config transform module", function()
 
   before_each(function()
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.operators"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.listops"] = nil
     package.loaded["flemma.config.store"] = nil
@@ -1112,9 +1113,8 @@ describe("config transform module", function()
     s = require("flemma.schema")
   end)
 
-  local registry = require("flemma.provider.registry")
-
   local function transform_schema()
+    local registry = require("flemma.provider.registry")
     return s.object({
       provider = s.string("anthropic"),
       model = s.string("claude-x"):transform(registry.model_transform),
@@ -1127,61 +1127,109 @@ describe("config transform module", function()
 
   it("resolves emitted paths relative to the transformed field's parent", function()
     local node = s.string():transform(function(value, ctx)
-      ctx:set("model", value)
-      ctx:set("parameters.p.k", 1)
+      ctx.set("model", value)
+      ctx.set("parameters.p.k", 1)
     end)
     local ops = transform.run(node, "presets.x.model", "m", nil)
     assert.are.same({
-      { op = "$set", path = "presets.x.model", value = "m" },
-      { op = "$set", path = "presets.x.parameters.p.k", value = 1 },
+      { path = "presets.x.model", value = "m" },
+      { path = "presets.x.parameters.p.k", value = 1 },
     }, ops)
   end)
 
   it("treats a root-level field's parent as the root", function()
     local node = s.string():transform(function(value, ctx)
-      ctx:set("model", value)
+      ctx.set("model", value)
     end)
     local ops = transform.run(node, "model", "m", nil)
-    assert.are.same({ { op = "$set", path = "model", value = "m" } }, ops)
+    assert.are.same({ { path = "model", value = "m" } }, ops)
   end)
 
-  it("reads through ctx:get with the same relative base", function()
+  it("reads through ctx.get with the same relative base", function()
     config.init(s.object({ provider = s.string("anthropic"), model = s.string("m") }))
     local seen
     local node = s.string():transform(function(_, ctx)
-      seen = ctx:get("provider")
+      seen = ctx.get("provider")
     end)
     transform.run(node, "model", "x", nil)
     assert.equals("anthropic", seen)
   end)
 
-  it("collects explicit list ops", function()
+  it("denies coerce functions the transform context's set", function()
+    local store = require("flemma.config.store")
+    local coerce_ctx = store.make_coerce_context(nil)
+    assert.is_function(coerce_ctx.get)
+    assert.is_nil(coerce_ctx.set)
+  end)
+
+  it("expand applies ops through the site callback in emission order", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("a", value)
+      ctx.set("b", value .. "!")
+    end)
+    local applied = {}
+    local ok, err = transform.expand(node, "model", "x", nil, function(path, value)
+      applied[#applied + 1] = { path = path, value = value }
+    end)
+    assert.is_true(ok)
+    assert.is_nil(err)
+    assert.are.same({ { path = "a", value = "x" }, { path = "b", value = "x!" } }, applied)
+  end)
+
+  it("expand converts vim.NIL op values to real nil at the apply boundary", function()
     local node = s.string():transform(function(_, ctx)
-      ctx:append("tags", "a")
-      ctx:prepend("tags", "b")
-      ctx:remove("tags", "c")
+      ctx.set("cleared", vim.NIL)
     end)
-    local ops = transform.run(node, "model", "x", nil)
-    assert.are.same({
-      { op = "$append", path = "tags", value = "a" },
-      { op = "$prepend", path = "tags", value = "b" },
-      { op = "$remove", path = "tags", value = "c" },
-    }, ops)
+    local calls = 0
+    local seen_value = "sentinel"
+    transform.expand(node, "model", "x", nil, function(_, value)
+      calls = calls + 1
+      seen_value = value
+    end)
+    assert.equals(1, calls)
+    assert.is_nil(seen_value)
   end)
 
-  it("guard sets and restores the expansion flag", function()
-    assert.is_false(transform.is_expanding())
-    transform.guard(function()
-      assert.is_true(transform.is_expanding())
+  it("expand raises the expansion flag only while applying", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
     end)
+    assert.is_false(transform.is_expanding())
+    local inside
+    transform.expand(node, "model", "x", nil, function()
+      inside = transform.is_expanding()
+    end)
+    assert.is_true(inside)
     assert.is_false(transform.is_expanding())
   end)
 
-  it("guard restores the flag when the callback errors", function()
-    local ok = pcall(transform.guard, function()
-      error("boom")
+  it("expand restores the flag and contextualizes an op failure", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+    end)
+    local ok, err = transform.expand(node, "model", "vertex/g;p=1", nil, function()
+      error({ type = "config", error = "unknown key 'parameters.vertex.p'" })
+    end)
+    assert.is_nil(ok)
+    assert.truthy(err:find("vertex/g;p=1", 1, true))
+    assert.truthy(err:find("unknown key 'parameters.vertex.p'", 1, true))
+    assert.is_false(transform.is_expanding())
+  end)
+
+  it("expand re-raises suspense sentinels unchanged", function()
+    local readiness = require("flemma.readiness")
+    local boundary = readiness.get_or_create_boundary("transform-spec", function(done)
+      done()
+    end)
+    local sentinel = readiness.Suspense.new("waiting", boundary)
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+    end)
+    local ok, err = pcall(transform.expand, node, "model", "x", nil, function()
+      error(sentinel)
     end)
     assert.is_false(ok)
+    assert.is_true(readiness.is_suspense(err))
     assert.is_false(transform.is_expanding())
   end)
 
@@ -1233,5 +1281,46 @@ describe("config transform module", function()
     assert.equals("vertex", result.provider)
     assert.equals("gemini-3", result.model)
     assert.equals("stan", result.parameters.vertex.project_id)
+  end)
+
+  -- The transform trigger contract must be identical at every write entry
+  -- point: a transform on an object node consumes a table write the same way
+  -- a transform on a scalar node consumes a string write.
+  local function object_transform_schema()
+    return s.object({
+      seen = s.optional(s.string()),
+      widget = s.object({ enabled = s.optional(s.boolean()) }):transform(function(_, ctx)
+        ctx.set("seen", "fired")
+      end),
+    })
+  end
+
+  it("fires an object-node transform through the proxy", function()
+    config.init(object_transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).widget = { enabled = true }
+    assert.equals("fired", config.materialize(1).seen)
+  end)
+
+  it("fires an object-node transform through config.apply", function()
+    config.init(object_transform_schema())
+    config.apply(config.LAYERS.SETUP, { widget = { enabled = true } })
+    assert.equals("fired", config.materialize().seen)
+  end)
+
+  it("fires an object-node transform through JSON operators", function()
+    config.init(object_transform_schema())
+    local failures = config.apply_operators(config.LAYERS.RUNTIME, nil, { widget = { enabled = true } })
+    assert.are.same({}, failures)
+    assert.equals("fired", config.materialize().seen)
+  end)
+
+  it("never re-transforms a transform's own output", function()
+    config.init(s.object({
+      model = s.string("m"):transform(function(value, ctx)
+        ctx.set("model", value .. "!")
+      end),
+    }))
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "x"
+    assert.equals("x!", config.materialize(1).model)
   end)
 end)
