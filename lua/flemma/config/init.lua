@@ -13,7 +13,6 @@
 local M = {}
 
 local bridge = require("flemma.bridge")
-local str = require("flemma.utilities.string")
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local messages = require("flemma.messages")
@@ -549,13 +548,6 @@ function M.materialize(bufnr)
   assert(root_schema, "config.init() must be called before materialize()")
   local resolved = vim.deepcopy(materialize_resolved(root_schema, "", bufnr) or {})
   resolved = expand_model_preset(resolved)
-  if type(resolved.model) == "string" then
-    local model, provider = str.split_provider_model(resolved.model)
-    if provider then
-      resolved.provider = provider
-      resolved.model = model
-    end
-  end
   return resolved
 end
 

@@ -78,6 +78,31 @@ local function normalize_definition(name, definition)
   local provider = extracted.provider
   local model = extracted.model
 
+  -- Decompose provider/model and matrix (";key=value") parameters from the
+  -- model value — the single point that covers both definition forms (a string
+  -- definition's positional was split by extract, leaving matrix glued to the
+  -- model; a table definition's model field arrives verbatim). Matrix
+  -- parameters are preset-local by construction: they nest inside
+  -- preset.parameters and only merge into config when the preset is used.
+  ---@type table<string, any>|nil
+  local matrix_parameters
+  if type(model) == "string" then
+    local decomposed = registry.decompose_model(model)
+    model = decomposed.model
+    if decomposed.provider and provider and decomposed.provider ~= provider then
+      return nil,
+        messages["ui.preset.model_provider_conflict"]{
+          preset = name,
+          provider_field = provider,
+          provider_model = decomposed.provider,
+        }
+    end
+    provider = provider or decomposed.provider
+    if next(decomposed.parameters) then
+      matrix_parameters = decomposed.parameters
+    end
+  end
+
   -- Provider is optional for approval-only presets (e.g. $standard, $readonly)
   if provider ~= nil and (type(provider) ~= "string" or provider == "") then
     return nil, messages["ui.preset.invalid_provider"]{ preset = name }
@@ -87,9 +112,11 @@ local function normalize_definition(name, definition)
     return nil, messages["ui.preset.invalid_model"]{ preset = name }
   end
 
-  -- String definitions require positional <provider> <model>
+  -- String definitions require positional <provider> <model> (bare tokens, or
+  -- the slash-consumed single-positional form) — key=value assignment syntax
+  -- for provider/model is rejected here, same as before this relaxation.
   if definition_type == "string" then
-    if not extracted.positionals[1] or not extracted.positionals[2] then
+    if not (provider and model) or extracted.has_explicit_provider or extracted.has_explicit_model then
       return nil, messages["ui.preset.invalid_string_format"]{ preset = name }
     end
     if #extracted.extra_positionals > 0 then
@@ -107,6 +134,13 @@ local function normalize_definition(name, definition)
   end
 
   local parameters = vim.deepcopy(extracted.parameters)
+  if matrix_parameters then
+    if provider then
+      parameters[provider] = vim.tbl_deep_extend("force", parameters[provider] or {}, matrix_parameters)
+    else
+      warn(messages["ui.preset.model_params_no_provider"]{ preset = name, model = tostring(extracted.model) })
+    end
+  end
 
   return {
     provider = provider,

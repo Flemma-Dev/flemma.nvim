@@ -14,7 +14,7 @@ describe("flemma.config — integration", function()
   local function make_schema()
     return s.object({
       provider = s.string("anthropic"),
-      model = s.string("claude-sonnet-4-20250514"),
+      model = s.string("claude-sonnet-4-20250514"):transform(require("flemma.provider.registry").model_transform),
       parameters = s.object({
         max_tokens = s.optional(s.integer()),
         timeout = s.optional(s.integer()),
@@ -22,6 +22,9 @@ describe("flemma.config — integration", function()
         anthropic = s.object({
           thinking_budget = s.optional(s.integer()),
           timeout = s.optional(s.integer()),
+        }),
+        vertex = s.object({
+          project_id = s.optional(s.string()),
         }),
       }),
       tools = s.object({
@@ -761,6 +764,15 @@ describe("flemma.config — integration", function()
       local result = config.materialize()
       assert.equals("anthropic", result.provider)
       assert.equals("claude-opus-4-8", result.model)
+    end)
+
+    it("decomposes matrix parameters from the model shorthand", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { model = "vertex/gemini-3.1-pro-preview;project_id=stans-playground" })
+      local result = config.materialize()
+      assert.equals("vertex", result.provider)
+      assert.equals("gemini-3.1-pro-preview", result.model)
+      assert.equals("stans-playground", result.parameters.vertex.project_id)
     end)
   end)
 
