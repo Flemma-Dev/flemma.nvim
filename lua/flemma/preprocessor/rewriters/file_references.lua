@@ -11,14 +11,20 @@ local utilities = require("flemma.utilities.encoding")
 local url_decode = utilities.url_decode
 local lua_string_escape = utilities.lua_string_escape
 
----Strip trailing punctuation from a file path.
----@param path string
----@return string path The path without trailing punctuation
+---Strip trailing prose punctuation from a raw reference. Quote-aware: nothing
+---at or before the last quote character is touched, so punctuation inside a
+---quoted option value (`;note='a;b.'`) is content, not sentence prose.
+---@param raw string
+---@return string body The reference without trailing punctuation
 ---@return string trailing The stripped trailing punctuation
-local function strip_trailing_punctuation(path)
-  local cleaned = path:gsub("[%p]+$", "")
-  local trailing = path:sub(#cleaned + 1)
-  return cleaned, trailing
+local function strip_trailing_punctuation(raw)
+  local prefix, tail = raw:match("^(.*['\"])(.-)$")
+  if not prefix then
+    prefix, tail = "", raw
+  end
+  local cleaned = tail:gsub("[%p]+$", "")
+  local body = prefix .. cleaned
+  return body, raw:sub(#body + 1)
 end
 
 local file_refs = preprocessor.create_rewriter("file-references", { priority = 100 })
@@ -35,29 +41,19 @@ local function handle_file_reference(match, ctx)
     return nil
   end
 
-  local raw_path
-  local trailing
+  -- Trailing prose punctuation belongs to the sentence, not the reference:
+  -- strip it from the raw capture first, so the pathless and options-bearing
+  -- forms share one rule, then parse the remainder through the shared matrix
+  -- grammar. `type=` is the only option consumed today; other keys parse
+  -- uniformly and are ignored. A MIME with parameters must be quoted
+  -- (`;type='text/plain;charset=utf-8'`) — an unquoted `;` starts the next
+  -- option per the grammar.
+  local raw, trailing = strip_trailing_punctuation(match.captures[1])
+  local raw_path, options = modeline.parse_matrix(raw)
   local opts_parts = { "[symbols.BINARY] = true" }
-
-  local segments = modeline.split_on(match.captures[1], ";")
-  if segments then
-    raw_path = segments[1]
-    -- Trailing prose punctuation belongs to the sentence, not the last option
-    -- value: strip it from the raw segment before parsing (same behavior the
-    -- single-key ;type= parser had).
-    local last = segments[#segments]
-    local stripped = last:gsub("[%p]+$", "")
-    trailing = last:sub(#stripped + 1)
-    segments[#segments] = stripped
-    local options = modeline.parse_args(segments, 2)
-    if type(options.type) == "string" then
-      table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(options.type) .. "'")
-    end
-  else
-    raw_path = match.captures[1]
-    local stripped
-    stripped, trailing = strip_trailing_punctuation(raw_path)
-    raw_path = stripped
+  local mime = options.type
+  if mime ~= nil and type(mime) ~= "table" then
+    table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(tostring(mime)) .. "'")
   end
 
   local path = url_decode(raw_path) --[[@as string]]
