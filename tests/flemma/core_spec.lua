@@ -602,6 +602,19 @@ describe(":Flemma send command", function()
     assert.is_true(saw_fallback, "Should show model fallback as bullet in switch notification")
   end)
 
+  it("switch_provider peels matrix parameters off the model string", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1234", {}, {})
+    local resolved = require("flemma.config").materialize()
+    assert.equals("anthropic", resolved.provider)
+    assert.is_nil(resolved.model:find(";", 1, true))
+    assert.equals(1234, resolved.parameters.anthropic.thinking_budget)
+  end)
+
+  it("space-separated key=value overrides a matrix parameter of the same name", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1111", { thinking_budget = 2222 }, {})
+    assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
   it("initialize_provider emits deferred warning", function()
     -- Use an invalid model to trigger fallback warning
     core.initialize_provider("openai", "nonexistent-model", {})

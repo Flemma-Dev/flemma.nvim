@@ -240,12 +240,22 @@ local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schem
 ---@param model_name? string Validated model name
 ---@param explicit_params? table<string, any> User's explicit parameter overrides
 ---@param layer? integer Facade layer to write to (default: RUNTIME)
-local function apply_config(provider_name, model_name, explicit_params, layer)
+---@param matrix_parameters table<string, any>|nil Provider-scoped matrix (";key=value") parameters
+local function apply_config(provider_name, model_name, explicit_params, layer, matrix_parameters)
   layer = layer or config_facade.LAYERS.RUNTIME
   local w = config_facade.writer(nil, layer)
   w.provider = provider_name
   if model_name then
     w.model = model_name
+  end
+
+  -- Matrix parameters are always provider-specific and are written BEFORE the
+  -- explicit key=value loop, so space-separated overrides win (last write wins
+  -- per store resolution).
+  if matrix_parameters then
+    for k, v in pairs(matrix_parameters) do
+      w.parameters[provider_name][k] = v
+    end
   end
 
   -- Write each explicit parameter to the correct namespaced path.
@@ -264,6 +274,11 @@ local function apply_config(provider_name, model_name, explicit_params, layer)
           write_value = v
         end
         if parameters_schema:has_field(k) then
+          w.parameters[k] = write_value
+        elseif registry.has(k) and type(write_value) == "table" then
+          -- Provider-keyed sub-table (e.g. preset parameters normalized from a
+          -- matrix model string): assign to its own provider namespace — the
+          -- proxy recurses object assignment per-field.
           w.parameters[k] = write_value
         else
           w.parameters[provider_name][k] = write_value
@@ -291,6 +306,33 @@ end
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return boolean success, string[] param_warnings, string|nil model_fallback_warning
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
+  -- Peel matrix parameters off the provider/model strings before validation —
+  -- a pasted "vertex/gemini-3;project_id=x" must validate as model "gemini-3".
+  -- This is the single choke point for every switch entry (positional, model=
+  -- keyword, preset model, preset-override positional).
+  ---@type table<string, any>|nil
+  local matrix_parameters
+  if type(provider_name) == "string" and provider_name:find(";", 1, true) then
+    local decomposed = registry.decompose_model(provider_name)
+    provider_name = decomposed.model
+    if next(decomposed.parameters) then
+      matrix_parameters = decomposed.parameters
+    end
+  end
+  if type(model_name) == "string" then
+    local decomposed = registry.decompose_model(model_name)
+    model_name = decomposed.model
+    local model_provider = decomposed.provider
+    if model_provider then
+      -- A provider/ prefix in the model string is the most specific directive —
+      -- same semantics as flemma.opt.model = "provider/model".
+      provider_name = model_provider
+    end
+    if next(decomposed.parameters) then
+      matrix_parameters = vim.tbl_extend("force", matrix_parameters or {}, decomposed.parameters)
+    end
+  end
+
   -- Validate provider
   if not registry.has(provider_name) then
     local err = messages["ui.provider.unknown"]{
@@ -318,7 +360,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   end
 
   -- Write to facade
-  apply_config(resolved_provider, validated_model, explicit_params, layer)
+  apply_config(resolved_provider, validated_model, explicit_params, layer, matrix_parameters)
 
   -- Validate provider-specific parameters (advisory warnings, never fails)
   ---@type string[]
