@@ -1119,7 +1119,11 @@ describe("config transform module", function()
       provider = s.string("anthropic"),
       model = s.string("claude-x"):transform(registry.model_transform),
       parameters = s.object({
-        anthropic = s.object({ timeout = s.optional(s.integer()) }),
+        max_tokens = s.optional(s.integer()),
+        anthropic = s.object({
+          max_tokens = s.optional(s.integer()),
+          timeout = s.optional(s.integer()),
+        }),
         vertex = s.object({ project_id = s.optional(s.string()) }),
       }),
     })
@@ -1275,12 +1279,41 @@ describe("config transform module", function()
     assert.is_nil(result.parameters.anthropic.timeout)
   end)
 
-  it("a later provider write beats a provider/ prefix and vice-versa", function()
+  it("a later provider write beats a provider/ prefix", function()
     config.init(transform_schema())
     local w = config.writer(1, config.LAYERS.FRONTMATTER)
     w.model = "vertex/gemini-3"
     w.provider = "anthropic"
     assert.equals("anthropic", config.materialize(1).provider)
+  end)
+
+  it("a later provider/ prefix beats an explicit provider write", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.provider = "anthropic"
+    w.model = "vertex/gemini-3"
+    assert.equals("vertex", config.materialize(1).provider)
+  end)
+
+  it("scopes prefixless matrix parameters under a provider written earlier in the same buffer layer", function()
+    -- The buffer-aware ctx.get is the transform context's distinguishing
+    -- capability: the ambient provider here comes from a frontmatter-layer
+    -- write, not the schema default.
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.provider = "vertex"
+    w.model = "gemini-3;project_id=stan"
+    local result = config.materialize(1)
+    assert.equals("vertex", result.provider)
+    assert.equals("stan", result.parameters.vertex.project_id)
+  end)
+
+  it("routes general-schema matrix keys provider-specific, never global", function()
+    config.init(transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "claude-y;max_tokens=1234"
+    local result = config.materialize(1)
+    assert.equals(1234, result.parameters.anthropic.max_tokens)
+    assert.is_nil(result.parameters.max_tokens)
   end)
 
   it("decomposes matrix parameters through config.apply", function()

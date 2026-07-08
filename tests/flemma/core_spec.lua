@@ -615,6 +615,30 @@ describe(":Flemma send command", function()
     assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
   end)
 
+  it("routes general-schema matrix keys provider-specific on the switch surface", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;max_tokens=1234", {}, {})
+    local resolved = require("flemma.config").materialize()
+    assert.equals(1234, resolved.parameters.anthropic.max_tokens)
+    assert.is_not.equals(1234, resolved.parameters.max_tokens)
+  end)
+
+  it("resolves the same string identically through flemma.opt.model and :Flemma switch", function()
+    local config = require("flemma.config")
+    local paste = "anthropic/claude-haiku-4-5;thinking_budget=4321"
+
+    config.writer(nil, config.LAYERS.RUNTIME).model = paste
+    local via_config = config.materialize()
+    local config_triple = { via_config.provider, via_config.model, via_config.parameters.anthropic.thinking_budget }
+
+    vim.cmd("Flemma switch " .. paste)
+    local via_switch = config.materialize()
+    assert.are.same(
+      config_triple,
+      { via_switch.provider, via_switch.model, via_switch.parameters.anthropic.thinking_budget }
+    )
+    assert.are.same({ "anthropic", "claude-haiku-4-5", 4321 }, config_triple)
+  end)
+
   it("clears a parameter via matrix key=nil", function()
     core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1234", {}, {})
     assert.equals(1234, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
