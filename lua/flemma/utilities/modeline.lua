@@ -82,15 +82,16 @@ local function try_unquote(raw)
   return raw, false
 end
 
----Split a raw value on commas outside any quoted region
+---Split a raw value on a delimiter outside any quoted region
 ---@param raw string
----@return string[]|nil items List of raw items, or nil if no unquoted commas exist
-local function split_on_commas(raw)
+---@param delimiter string Single-character delimiter (e.g. ";", ",")
+---@return string[]|nil items List of raw items, or nil if no unquoted delimiter exists
+local function split_on(raw, delimiter)
   local items = {}
   local start = 1
   local in_quotes = false
   local quote_char = nil
-  local found_comma = false
+  local found_delimiter = false
   local i = 1
   local len = #raw
 
@@ -115,8 +116,8 @@ local function split_on_commas(raw)
         in_quotes = true
         quote_char = ch
         i = i + 1
-      elseif ch == "," then
-        found_comma = true
+      elseif ch == delimiter then
+        found_delimiter = true
         items[#items + 1] = raw:sub(start, i - 1)
         start = i + 1
         i = i + 1
@@ -126,7 +127,7 @@ local function split_on_commas(raw)
     end
   end
 
-  if not found_comma then
+  if not found_delimiter then
     return nil
   end
 
@@ -143,7 +144,7 @@ local function resolve_value(raw)
     return unquoted
   end
 
-  local items = split_on_commas(raw)
+  local items = split_on(raw, ",")
   if items then
     local result = {}
     for i, item in ipairs(items) do
@@ -271,6 +272,39 @@ function M.parse(line, opts)
 
   local tokens = scan(line)
   return parse_tokens(tokens, opts)
+end
+
+---Split a raw value on a single-character delimiter, respecting quoted regions.
+---@param raw string
+---@param delimiter string Single-character delimiter (e.g. ";", ",")
+---@return string[]|nil items List of raw segments, or nil if no unquoted delimiter exists
+function M.split_on(raw, delimiter)
+  return split_on(raw, delimiter)
+end
+
+---Parse a "primary;key=value;key=value" matrix-parameter string (RFC 3986 §3.3 style).
+---The primary is the first ';'-segment; each further segment is a key=value pair whose
+---value is resolved with the modeline grammar (quotes, coercion, comma lists).
+---Segments without '=' are ignored; repeated keys keep the last value.
+---@param value string
+---@return string primary
+---@return table<string, boolean|number|string|table> params
+function M.parse_matrix(value)
+  if type(value) ~= "string" or value == "" then
+    return value, {}
+  end
+  local segments = split_on(value, ";")
+  if not segments then
+    return value, {}
+  end
+  local params = {}
+  for i = 2, #segments do
+    local key, raw = segments[i]:match("^([%w_]+)=(.*)$")
+    if key then
+      params[key] = resolve_value(raw)
+    end
+  end
+  return segments[1], params
 end
 
 return M
