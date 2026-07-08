@@ -262,14 +262,12 @@ local function setup_commands()
         local provider = preset.provider
         local model = preset.model
 
-        ---@type table<string, any>
-        local key_value_args = {}
-        if not preset.provider then
-          -- Provider-less presets keep flat parameters that scope under
-          -- whichever provider the switch resolves to — the explicit-params
-          -- channel owns that routing.
-          key_value_args = vim.deepcopy(preset.parameters or {})
-        end
+        -- route_parameters writes a provider-bearing preset's config-shaped
+        -- parameters structurally — like preset.tools above, and BEFORE
+        -- switch_provider's own writes so command-line overrides (matrix or
+        -- space form) win on store order — and returns a provider-less preset's
+        -- flat parameters for the explicit channel.
+        local key_value_args = presets.route_parameters(preset, config_facade.writer(nil, config_facade.LAYERS.RUNTIME))
 
         local remaining_args = {}
         for i = 2, #args do
@@ -312,11 +310,6 @@ local function setup_commands()
         end
 
         if provider then
-          -- Preset parameters write structurally — like preset.tools above —
-          -- BEFORE switch_provider's own writes, so command-line overrides,
-          -- matrix or space form, win on store order. Same global scope as
-          -- switch_provider's parameter writes.
-          presets.write_parameters(preset, config_facade.writer(nil, config_facade.LAYERS.RUNTIME))
           core.switch_provider(provider, model, key_value_args, { bufnr = bufnr })
         end
         return

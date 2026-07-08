@@ -245,21 +245,32 @@ function M.finalize()
   end
 end
 
----Write a provider-bearing preset's parameters through a config write proxy.
----Preset parameters are config-shaped (normalize_definition nests
----provider-specific keys), so each top-level key assigns structurally.
----Provider-less presets are a no-op: their flat parameters scope under the
----switch-target provider and must flow through the explicit-params channel —
----the caller passes preset.parameters to the switch instead.
+---Route a preset's parameters to the correct config channel and return the
+---flat overrides that still need the explicit (key=value) channel. This is the
+---single point that decides where a preset's parameters go — both `setup` and
+---`:Flemma switch` call it, so the rule lives in one place.
+---
+---A provider-bearing preset carries config-shaped parameters (normalize_definition
+---nests provider-specific keys), so they assign structurally through `writer` —
+---isomorphic to config.parameters — leaving nothing for the explicit channel. A
+---provider-less preset carries flat parameters that must scope under whichever
+---provider the switch resolves to, so they are returned for the explicit channel
+---and nothing is written structurally. The return is always a fresh copy, safe
+---for the caller to overlay command-line overrides onto.
 ---@param preset flemma.presets.Preset
 ---@param writer table Config write proxy for the target layer
-function M.write_parameters(preset, writer)
-  if not preset.provider or not preset.parameters or next(preset.parameters) == nil then
-    return
+---@return table<string, any> overrides Flat parameters for the explicit channel
+function M.route_parameters(preset, writer)
+  if not preset.parameters or next(preset.parameters) == nil then
+    return {}
+  end
+  if not preset.provider then
+    return vim.deepcopy(preset.parameters)
   end
   for key, value in pairs(preset.parameters) do
     writer.parameters[key] = value
   end
+  return {}
 end
 
 ---Get a normalized preset by name (returns a deep copy)

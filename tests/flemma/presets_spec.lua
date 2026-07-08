@@ -196,6 +196,44 @@ describe("flemma.presets", function()
     assert.are.same({ moonshot = { opt = 1, other = 2 } }, preset.parameters)
   end)
 
+  describe("route_parameters()", function()
+    local function fake_writer()
+      return { parameters = {} }
+    end
+
+    it("writes a provider-bearing preset's config-shaped parameters structurally", function()
+      presets.setup({ ["$kimi"] = { provider = "moonshot", model = "kimi-k2.6;opt=value" } })
+      local writer = fake_writer()
+      local overrides = presets.route_parameters(presets.get("$kimi"), writer)
+      assert.are.same({ moonshot = { opt = "value" } }, writer.parameters)
+      assert.are.same({}, overrides)
+    end)
+
+    it("returns a provider-less preset's flat parameters for the explicit channel", function()
+      presets.setup({ ["$tweak"] = { temperature = 0.5, custom_knob = 7 } })
+      local writer = fake_writer()
+      local overrides = presets.route_parameters(presets.get("$tweak"), writer)
+      assert.are.same({}, writer.parameters)
+      assert.are.same({ temperature = 0.5, custom_knob = 7 }, overrides)
+    end)
+
+    it("returns a fresh copy the caller can mutate without touching the preset", function()
+      presets.setup({ ["$tweak"] = { temperature = 0.5 } })
+      local preset = presets.get("$tweak")
+      local overrides = presets.route_parameters(preset, fake_writer())
+      overrides.temperature = 0.9
+      assert.equals(0.5, preset.parameters.temperature)
+    end)
+
+    it("is a no-op returning {} when the preset has no parameters", function()
+      presets.setup({ ["$plain"] = { provider = "openai", model = "o3" } })
+      local writer = fake_writer()
+      local overrides = presets.route_parameters(presets.get("$plain"), writer)
+      assert.are.same({}, writer.parameters)
+      assert.are.same({}, overrides)
+    end)
+  end)
+
   it("keeps parameters flat when the preset has no provider", function()
     presets.setup({ ["$tweak"] = { temperature = 0.5, custom_knob = 7 } })
     local preset = presets.get("$tweak")
