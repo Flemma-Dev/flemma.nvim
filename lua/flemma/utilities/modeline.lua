@@ -10,6 +10,11 @@ local M = {}
 ---@class flemma.utilities.modeline.ParseOpts
 ---@field preserve_nil? boolean Store vim.NIL for keyword nil values instead of dropping the key
 
+---The single definition of what a key=value token looks like: identifier key
+---(word characters and underscores), '=', raw value. Shared by the token
+---parser and the matrix grammar so the key charset cannot drift.
+local KEY_VALUE_PATTERN = "^([%w_]+)=(.*)$"
+
 ---Coerce a raw string value to its natural Lua type
 ---@param raw string
 ---@return boolean|number|string|nil
@@ -226,7 +231,7 @@ local function parse_tokens(tokens, opts)
   local positional_index = 0
 
   for _, token in ipairs(tokens) do
-    local key, raw = token:match("^([%w_]+)=(.*)$")
+    local key, raw = token:match(KEY_VALUE_PATTERN)
     if key then
       local value = resolve_value(raw)
       if value == nil and preserve_nil then
@@ -283,28 +288,38 @@ function M.split_on(raw, delimiter)
 end
 
 ---Parse a "primary;key=value;key=value" matrix-parameter string (RFC 3986 §3.3 style).
----The primary is the first ';'-segment; each further segment is a key=value pair whose
----value is resolved with the modeline grammar (quotes, coercion, comma lists).
----Segments without '=' are ignored; repeated keys keep the last value.
----@param value string
----@return string primary
+---The primary is the first ';'-segment; the remaining segments run through the
+---token grammar (parse_args), so quoting, coercion, comma lists, last-wins
+---repeated keys, and preserve_nil are all inherited rather than re-implemented.
+---Segments that do not parse as key=value are returned verbatim in `extras`
+---for the caller to surface or ignore — they never become parameters.
+---@param value string|any Non-string values pass through as the primary, untouched
+---@param opts? flemma.utilities.modeline.ParseOpts
+---@return string|any primary
 ---@return table<string, boolean|number|string|table> params
-function M.parse_matrix(value)
+---@return string[] extras Raw segments after the primary that are not key=value pairs
+function M.parse_matrix(value, opts)
   if type(value) ~= "string" or value == "" then
-    return value, {}
+    return value, {}, {}
   end
   local segments = split_on(value, ";")
   if not segments then
-    return value, {}
+    return value, {}, {}
   end
+  local parsed = M.parse_args(segments, 2, opts)
   local params = {}
-  for i = 2, #segments do
-    local key, raw = segments[i]:match("^([%w_]+)=(.*)$")
-    if key then
-      params[key] = resolve_value(raw)
+  for key, parameter_value in pairs(parsed) do
+    if type(key) == "string" then
+      params[key] = parameter_value
     end
   end
-  return segments[1], params
+  local extras = {}
+  for i = 2, #segments do
+    if segments[i] ~= "" and not segments[i]:match(KEY_VALUE_PATTERN) then
+      extras[#extras + 1] = segments[i]
+    end
+  end
+  return segments[1], params, extras
 end
 
 return M
