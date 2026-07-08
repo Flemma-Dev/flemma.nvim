@@ -449,6 +449,32 @@ Individual buffers can override the global setting via frontmatter: `flemma.opt.
 
 Values are passed to `vim.cmd()`, so any Ex command works.
 
+### Model matrix parameters
+
+Model strings accept **matrix parameters** — `;key=value` pairs appended to the
+model name (URI matrix syntax, RFC 3986 §3.3). They decompose at write time into
+provider-scoped parameters, so this:
+
+```lua
+flemma.opt.model = "vertex/gemini-3.1-pro-preview;project_id=stans-playground"
+```
+
+is exactly equivalent to:
+
+```lua
+flemma.opt.provider = "vertex"
+flemma.opt.model = "gemini-3.1-pro-preview"
+flemma.opt.parameters.vertex.project_id = "stans-playground"
+```
+
+Matrix parameters are always provider-specific. Later writes win in source
+order: a `flemma.opt.parameters.vertex.project_id = ...` after the model line
+overrides the matrix value, and vice-versa. The same string works verbatim in
+`:Flemma switch` and in preset definitions; space-separated `key=value`
+arguments on the command line override matrix parameters of the same name.
+Values follow the modeline grammar — quoting (`;note='a;b'`), booleans,
+numbers, and comma lists (`;tags=a,b`).
+
 ### Presets
 
 Presets accept two formats:

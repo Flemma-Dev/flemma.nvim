@@ -87,7 +87,7 @@ Non-negotiable. The canonical statement of every hard rule lives in this block; 
 - **Status suffixes**: `(pending)` / `(approved)` / `(denied)` / `(rejected)` / `(aborted)` / `(error)`, or explicit `(status=pending sandbox=false)` for mixed metadata — unrecognized tokens round-trip via the AST node's `meta` field.
 - **Thinking blocks** (`@Assistant`): `<thinking>` / `</thinking>`, optionally with `provider:signature="base64"` or the `redacted` flag.
 - **Expressions**: `{{ lua_expression }}` in `@System`/`@You` messages — sandboxed environment with `math`, `string`, `table`, `utf8`, select `vim.fn`/`vim.fs` functions, and essential globals.
-- **File references**: `@./path`, `@../path`, `@~/path`, `@//absolute/path`, optional `;type=mime/type` suffix, in `@You` messages.
+- **File references**: `@./path`, `@../path`, `@~/path`, `@//absolute/path`, optional `;key=value` matrix parameters (`;type=mime/type` sets the MIME type), in `@You` messages.
 
 All tool IDs, job IDs, and metadata are embedded in buffer text so `.chat` files stay portable and re-parseable.
 
