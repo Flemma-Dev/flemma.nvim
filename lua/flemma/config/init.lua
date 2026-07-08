@@ -21,6 +21,7 @@ local notify = require("flemma.notify")
 local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
 local store = require("flemma.config.store")
+local transform = require("flemma.config.transform")
 
 --- Layer priority constants.
 M.LAYERS = store.LAYERS
@@ -80,6 +81,28 @@ local function path_parent(path)
   return "", path
 end
 
+--- Convert a dotted canonical path + value into a nested table rooted at "".
+--- Transform ops carry fully-flattened absolute paths (e.g.
+--- "parameters.vertex.project_id"), but re-applying one as a single
+--- apply_recursive(ctx, path, value) call bypasses the per-segment object
+--- recursion that DISCOVER deferral depends on — deferral only checks one
+--- parent level up, so an op two-or-more levels below an unregistered
+--- DISCOVER key would report "unknown key" instead of deferring. Rebuilding
+--- the nested table and re-entering at the root makes each segment boundary
+--- go through the normal object branch again, so deferral triggers at the
+--- right level regardless of op path depth.
+---@param path string
+---@param value any
+---@return table
+local function unflatten_path(path, value)
+  local segments = vim.split(path, ".", { plain = true })
+  local nested = value
+  for i = #segments, 1, -1 do
+    nested = { [segments[i]] = nested }
+  end
+  return nested
+end
+
 -- ---------------------------------------------------------------------------
 -- Internal: recursive table application
 -- ---------------------------------------------------------------------------
@@ -107,6 +130,22 @@ local function report_error(ctx, msg)
     return true
   end
   return nil, msg
+end
+
+--- Apply a $append/$prepend/$remove transform op via the store.
+---@param ctx flemma.config.ApplyContext
+---@param op flemma.config.transform.Op
+local function transform_list_op(ctx, op)
+  local leaf = nav.navigate_schema(ctx.schema, op.path)
+  local item_schema = leaf and leaf:get_item_schema()
+  local store_op = op.op:sub(2)
+  if item_schema and store_op ~= "remove" then
+    local ok, err = item_schema:validate_value(op.value)
+    if not ok then
+      error({ type = "config", error = string.format("transform op at '%s': %s", op.path, err or "invalid") })
+    end
+  end
+  store.record(ctx.layer, ctx.bufnr, store_op, op.path, op.value)
 end
 
 --- Recursively walk a plain Lua table and record set ops on the target layer.
@@ -192,6 +231,30 @@ local function apply_recursive(ctx, path, value)
       end
     end
   else
+    if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
+      local ops = transform.run(leaf, path, value, ctx.bufnr)
+      ---@type boolean?, string?
+      local ok_all, err_all = true, nil
+      transform.guard(function()
+        for _, op in ipairs(ops) do
+          if op.op == "$set" then
+            -- Re-enter at the root with the path unflattened into a nested
+            -- table: recursing through apply_recursive's per-segment object
+            -- branch (rather than a single flat-path call) keeps DISCOVER
+            -- deferral, validation, and error collection identical to a
+            -- direct write, at any depth.
+            local ok, err = apply_recursive(ctx, "", unflatten_path(op.path, op.value))
+            if not ok then
+              ok_all, err_all = nil, err
+              return
+            end
+          else
+            transform_list_op(ctx, op)
+          end
+        end
+      end)
+      return ok_all, err_all
+    end
     local unwrapped_leaf = nav.unwrap_optional(leaf)
     if listops.try_apply(unwrapped_leaf, value, ctx.layer, ctx.bufnr, path) then
       return true

@@ -623,6 +623,39 @@ describe("flemma.config — integration", function()
       assert.is_nil(deferred)
       assert.equals(1200, config.get().parameters.timeout)
     end)
+
+    it("defers matrix parameters for not-yet-registered DISCOVER providers", function()
+      local registry_table = {}
+      local schema = s.object({
+        provider = s.string("anthropic"),
+        model = s.string("m"):transform(require("flemma.provider.registry").model_transform),
+        parameters = s.object({
+          [symbols.DISCOVER] = function(key)
+            return registry_table[key]
+          end,
+        }),
+      })
+      config.init(schema)
+
+      -- Pass 1: vertex is unknown — the transform's parameters write defers.
+      local ok, err, deferred = config.apply(
+        L.SETUP,
+        { model = "vertex/gemini-3;project_id=stan" },
+        { defer_discover = true }
+      )
+      assert.is_true(ok)
+      assert.is_nil(err)
+
+      -- Register the provider schema, then pass 2 applies the deferred write.
+      registry_table.vertex = s.object({ project_id = s.optional(s.string()) })
+      local failures = config.apply_deferred(L.SETUP, deferred)
+      assert.is_nil(failures)
+
+      local result = config.materialize()
+      assert.equals("vertex", result.provider)
+      assert.equals("gemini-3", result.model)
+      assert.equals("stan", result.parameters.vertex.project_id)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -1179,5 +1212,14 @@ describe("config transform module", function()
     w.model = "vertex/gemini-3"
     w.provider = "anthropic"
     assert.equals("anthropic", config.materialize(1).provider)
+  end)
+
+  it("decomposes matrix parameters through config.apply", function()
+    config.init(transform_schema())
+    config.apply(config.LAYERS.SETUP, { model = "vertex/gemini-3;project_id=stan" })
+    local result = config.materialize()
+    assert.equals("vertex", result.provider)
+    assert.equals("gemini-3", result.model)
+    assert.equals("stan", result.parameters.vertex.project_id)
   end)
 end)

@@ -11,6 +11,7 @@ local M = {}
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
+local transform = require("flemma.config.transform")
 
 --- Valid operator keys and their store operation names.
 ---@type table<string, "set"|"append"|"remove"|"prepend">
@@ -80,6 +81,30 @@ local function walk(schema, path, value, layer, bufnr, failures)
         walk(schema, path, coerced, layer, bufnr, failures)
         return
       end
+    end
+    if value ~= nil and not transform.is_expanding() and node:has_transform() then
+      local ops = transform.run(node, path, value, bufnr)
+      transform.guard(function()
+        for _, op in ipairs(ops) do
+          if op.op == "$set" then
+            walk(schema, op.path, op.value, layer, bufnr, failures)
+          else
+            local leaf = nav.navigate_schema(schema, op.path, { unwrap_leaf = true })
+            local unwrapped_op = leaf and nav.unwrap_optional(leaf)
+            local item_schema = unwrapped_op and (unwrapped_op:get_list_item_schema() or unwrapped_op:get_item_schema())
+            record_list_op(
+              layer,
+              bufnr,
+              op.op:sub(2) --[[@as "append"|"remove"|"prepend"]],
+              op.path,
+              op.value,
+              item_schema,
+              failures
+            )
+          end
+        end
+      end)
+      return
     end
     local ok, err = node:validate_value(value)
     if not ok then
