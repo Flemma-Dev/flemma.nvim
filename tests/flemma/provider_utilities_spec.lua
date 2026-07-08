@@ -196,3 +196,79 @@ describe("provider utility functions", function()
     end)
   end)
 end)
+
+describe("flemma.provider.registry decompose_model()", function()
+  it("decomposes provider, model, and matrix parameters", function()
+    local d = registry.decompose_model("vertex/gemini-3.1-pro-preview;project_id=stan;region=eu")
+    assert.equals("vertex", d.provider)
+    assert.equals("gemini-3.1-pro-preview", d.model)
+    -- Individual lookups, not table equality: parameters is a plain table and
+    -- key iteration order is irrelevant to this assertion.
+    assert.equals("stan", d.parameters.project_id)
+    assert.equals("eu", d.parameters.region)
+  end)
+
+  it("passes plain model names through", function()
+    local d = registry.decompose_model("claude-haiku-4-5")
+    assert.is_nil(d.provider)
+    assert.equals("claude-haiku-4-5", d.model)
+    assert.are.same({}, d.parameters)
+  end)
+
+  it("handles matrix parameters without a provider prefix", function()
+    local d = registry.decompose_model("gemini-3.1-pro-preview;project_id=stan")
+    assert.is_nil(d.provider)
+    assert.equals("gemini-3.1-pro-preview", d.model)
+    assert.are.same({ project_id = "stan" }, d.parameters)
+  end)
+end)
+
+describe("flemma.provider.registry model_transform()", function()
+  local function fake_ctx(reads)
+    local ctx = { ops = {} }
+    function ctx:get(path)
+      return reads[path]
+    end
+    function ctx:set(path, value)
+      table.insert(self.ops, { op = "$set", path = path, value = value })
+    end
+    return ctx
+  end
+
+  it("emits model, provider, and provider-scoped parameters", function()
+    local ctx = fake_ctx({})
+    registry.model_transform("vertex/gemini-3;project_id=stan", ctx)
+    assert.are.same({
+      { op = "$set", path = "model", value = "gemini-3" },
+      { op = "$set", path = "provider", value = "vertex" },
+      { op = "$set", path = "parameters.vertex.project_id", value = "stan" },
+    }, ctx.ops)
+  end)
+
+  it("scopes prefixless parameters under the ambient provider", function()
+    local ctx = fake_ctx({ provider = "anthropic" })
+    registry.model_transform("claude-x;timeout=99", ctx)
+    assert.are.same({
+      { op = "$set", path = "model", value = "claude-x" },
+      { op = "$set", path = "parameters.anthropic.timeout", value = 99 },
+    }, ctx.ops)
+  end)
+
+  it("does not emit a provider write for prefixless models", function()
+    local ctx = fake_ctx({ provider = "anthropic" })
+    registry.model_transform("claude-x", ctx)
+    assert.are.same({ { op = "$set", path = "model", value = "claude-x" } }, ctx.ops)
+  end)
+
+  it("drops parameters when no provider is resolvable", function()
+    local ctx = fake_ctx({})
+    registry.model_transform("claude-x;p=1", ctx)
+    assert.are.same({ { op = "$set", path = "model", value = "claude-x" } }, ctx.ops)
+  end)
+
+  it("passes non-string values through as a plain model set", function()
+    local ctx = fake_ctx({})
+    registry.model_transform(true, ctx)
+    assert.are.same({ { op = "$set", path = "model", value = true } }, ctx.ops)
+  end)
+end)

@@ -8,6 +8,8 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
+local log = require("flemma.logging")
+local modeline = require("flemma.utilities.modeline")
 local registry_utils = require("flemma.utilities.registry")
 local str = require("flemma.utilities.string")
 
@@ -470,6 +472,52 @@ function M.extract_switch_arguments(parsed)
   end
 
   return info
+end
+
+---@class flemma.provider.DecomposedModel
+---@field model string Model name without provider prefix or matrix parameters
+---@field provider string|nil Provider from a "provider/" or "provider " prefix, if any
+---@field parameters table<string, any> Matrix (";key=value") parameters, possibly empty
+
+--- Decompose a model directive string into model, provider, and matrix parameters.
+--- Pure — safe to call on already-plain model names (returns them unchanged).
+---@param value string
+---@return flemma.provider.DecomposedModel
+function M.decompose_model(value)
+  local primary, matrix = modeline.parse_matrix(value)
+  local model, provider = str.split_provider_model(primary)
+  return { model = model, provider = provider, parameters = matrix }
+end
+
+--- Schema `:transform` for model-shaped fields: decomposes a "provider/model;key=value"
+--- write into sibling `model`, `provider`, and provider-scoped parameter writes.
+--- Matrix parameters are ALWAYS provider-specific (never routed to general parameters).
+--- Prefixless models scope parameters under the ambient provider (ctx:get, which at the
+--- root mount always resolves via the schema default); if no provider is resolvable the
+--- parameters are dropped with a log line rather than guessed.
+---@param value any
+---@param ctx flemma.config.TransformContext
+function M.model_transform(value, ctx)
+  if type(value) ~= "string" then
+    ctx:set("model", value)
+    return
+  end
+  local decomposed = M.decompose_model(value)
+  ctx:set("model", decomposed.model)
+  if decomposed.provider then
+    ctx:set("provider", decomposed.provider)
+  end
+  if next(decomposed.parameters) == nil then
+    return
+  end
+  local namespace = decomposed.provider or ctx:get("provider")
+  if type(namespace) == "string" and namespace ~= "" then
+    for key, parameter_value in pairs(decomposed.parameters) do
+      ctx:set("parameters." .. namespace .. "." .. key, parameter_value)
+    end
+  else
+    log.warn("model_transform(): dropped matrix parameters from " .. value .. " — no provider to scope them to")
+  end
 end
 
 return M
