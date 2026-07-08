@@ -1619,3 +1619,48 @@ describe("flemma.schema", function()
     end)
   end)
 end)
+
+describe("schema node transform hook", function()
+  local s = require("flemma.schema")
+
+  local function collector_ctx()
+    local ctx = { ops = {} }
+    function ctx:set(path, value)
+      table.insert(self.ops, { op = "$set", path = path, value = value })
+    end
+    function ctx:get(_)
+      return nil
+    end
+    return ctx
+  end
+
+  it("has no transform by default", function()
+    assert.is_false(s.string():has_transform())
+  end)
+
+  it("attaches a transform chainably and applies it", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx:set("other", value .. "!")
+    end)
+    assert.is_true(node:has_transform())
+    local ctx = collector_ctx()
+    node:apply_transform("x", ctx)
+    assert.are.same({ { op = "$set", path = "other", value = "x!" } }, ctx.ops)
+  end)
+
+  it("delegates through optional wrappers", function()
+    local node = s.optional(s.string():transform(function(value, ctx)
+      ctx:set("other", value)
+    end))
+    assert.is_true(node:has_transform())
+    local ctx = collector_ctx()
+    node:apply_transform("y", ctx)
+    assert.are.same({ { op = "$set", path = "other", value = "y" } }, ctx.ops)
+  end)
+
+  it("apply_transform is a no-op without a transform", function()
+    local ctx = collector_ctx()
+    s.string():apply_transform("x", ctx)
+    assert.are.same({}, ctx.ops)
+  end)
+end)

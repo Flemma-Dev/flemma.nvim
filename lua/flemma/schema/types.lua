@@ -26,6 +26,7 @@ local hl = require("flemma.hl")
 ---@field _type_as? string Override generated type annotation
 ---@field _coerce? fun(value: any, ctx: flemma.schema.CoerceContext?): any Value transformer (runs before validation on writes; finalize() re-runs with ctx)
 ---@field _deferred_validator? fun(value: any, ctx: flemma.schema.CoerceContext): boolean, string? Semantic validator deferred to finalize (runs after coerce, on resolved values)
+---@field _transform? fun(value: any, ctx: flemma.config.TransformContext) Write decomposer (runs INSTEAD of the write at write sites; emits ops via ctx; write-time only, never re-run at finalize)
 local Node = {}
 Node.__index = Node
 
@@ -82,6 +83,42 @@ end
 ---@return (fun(value: any, ctx: flemma.schema.CoerceContext?): any)?
 function Node:get_coerce()
   return self._coerce
+end
+
+--- Attach a write transform — the write-side sibling of `:coerce`.
+--- Where coerce reshapes the VALUE on this path (value → value, re-run at
+--- finalize), a transform reshapes the WRITE across paths: it receives the raw
+--- value plus a write-capable context and emits explicit ops (ctx:set/:append/
+--- :prepend/:remove) whose paths resolve relative to the parent object of the
+--- transformed field. Transform outputs are terminal (never re-transformed) and
+--- the hook is write-time only — it consumes its source, so finalize has
+--- nothing to re-run.
+---@param fn fun(value: any, ctx: flemma.config.TransformContext)
+---@return flemma.schema.Node self
+function Node:transform(fn)
+  self._transform = fn
+  return self
+end
+
+--- Apply the transform, if one is set. No-op (and no ops emitted) otherwise.
+---@param value any
+---@param ctx flemma.config.TransformContext
+function Node:apply_transform(value, ctx)
+  if self._transform then
+    self._transform(value, ctx)
+  end
+end
+
+--- Whether this node has a write transform.
+---@return boolean
+function Node:has_transform()
+  return self._transform ~= nil
+end
+
+--- Return the transform function, or nil if none.
+---@return (fun(value: any, ctx: flemma.config.TransformContext))?
+function Node:get_transform()
+  return self._transform
 end
 
 --- Attach a deferred semantic validator.
@@ -822,6 +859,7 @@ function ObjectNode:extend(other)
   node._strict = self._strict
   node._list_schema = self._list_schema
   node._coerce = self._coerce
+  node._transform = self._transform
   node._description = self._description
   node._type_as = self._type_as
   node._class_as = self._class_as
@@ -1013,6 +1051,22 @@ function OptionalNode:get_coerce()
   return self._inner:get_coerce()
 end
 
+---@param value any
+---@param ctx flemma.config.TransformContext
+function OptionalNode:apply_transform(value, ctx)
+  return self._inner:apply_transform(value, ctx)
+end
+
+---@return boolean
+function OptionalNode:has_transform()
+  return self._inner:has_transform()
+end
+
+---@return (fun(value: any, ctx: flemma.config.TransformContext))?
+function OptionalNode:get_transform()
+  return self._inner:get_transform()
+end
+
 --- Delegate deferred validator detection to the inner schema.
 ---@return boolean
 function OptionalNode:has_deferred_validator()
@@ -1143,6 +1197,22 @@ end
 ---@return (fun(value: any, ctx: flemma.schema.CoerceContext?): any)?
 function NullableNode:get_coerce()
   return self._inner:get_coerce()
+end
+
+---@param value any
+---@param ctx flemma.config.TransformContext
+function NullableNode:apply_transform(value, ctx)
+  return self._inner:apply_transform(value, ctx)
+end
+
+---@return boolean
+function NullableNode:has_transform()
+  return self._inner:has_transform()
+end
+
+---@return (fun(value: any, ctx: flemma.config.TransformContext))?
+function NullableNode:get_transform()
+  return self._inner:get_transform()
 end
 
 ---@return boolean

@@ -1049,3 +1049,81 @@ describe("flemma.config — integration", function()
     end)
   end)
 end)
+
+describe("config transform module", function()
+  local transform, config, s
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.listops"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.transform"] = nil
+    package.loaded["flemma.schema"] = nil
+    package.loaded["flemma.schema.types"] = nil
+    package.loaded["flemma.schema.navigation"] = nil
+    config = require("flemma.config")
+    transform = require("flemma.config.transform")
+    s = require("flemma.schema")
+  end)
+
+  it("resolves emitted paths relative to the transformed field's parent", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx:set("model", value)
+      ctx:set("parameters.p.k", 1)
+    end)
+    local ops = transform.run(node, "presets.x.model", "m", nil)
+    assert.are.same({
+      { op = "$set", path = "presets.x.model", value = "m" },
+      { op = "$set", path = "presets.x.parameters.p.k", value = 1 },
+    }, ops)
+  end)
+
+  it("treats a root-level field's parent as the root", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx:set("model", value)
+    end)
+    local ops = transform.run(node, "model", "m", nil)
+    assert.are.same({ { op = "$set", path = "model", value = "m" } }, ops)
+  end)
+
+  it("reads through ctx:get with the same relative base", function()
+    config.init(s.object({ provider = s.string("anthropic"), model = s.string("m") }))
+    local seen
+    local node = s.string():transform(function(_, ctx)
+      seen = ctx:get("provider")
+    end)
+    transform.run(node, "model", "x", nil)
+    assert.equals("anthropic", seen)
+  end)
+
+  it("collects explicit list ops", function()
+    local node = s.string():transform(function(_, ctx)
+      ctx:append("tags", "a")
+      ctx:prepend("tags", "b")
+      ctx:remove("tags", "c")
+    end)
+    local ops = transform.run(node, "model", "x", nil)
+    assert.are.same({
+      { op = "$append", path = "tags", value = "a" },
+      { op = "$prepend", path = "tags", value = "b" },
+      { op = "$remove", path = "tags", value = "c" },
+    }, ops)
+  end)
+
+  it("guard sets and restores the expansion flag", function()
+    assert.is_false(transform.is_expanding())
+    transform.guard(function()
+      assert.is_true(transform.is_expanding())
+    end)
+    assert.is_false(transform.is_expanding())
+  end)
+
+  it("guard restores the flag when the callback errors", function()
+    local ok = pcall(transform.guard, function()
+      error("boom")
+    end)
+    assert.is_false(ok)
+    assert.is_false(transform.is_expanding())
+  end)
+end)

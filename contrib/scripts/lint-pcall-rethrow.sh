@@ -14,6 +14,7 @@ WATCHED_FILES=(
   lua/flemma/templating/compiler.lua
   lua/flemma/usage/prefetch.lua
   lua/flemma/commands.lua
+  lua/flemma/config/transform.lua
 )
 
 violations=0
