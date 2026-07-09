@@ -13,7 +13,6 @@
 local M = {}
 
 local bridge = require("flemma.bridge")
-local str = require("flemma.utilities.string")
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local messages = require("flemma.messages")
@@ -21,6 +20,7 @@ local notify = require("flemma.notify")
 local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
 local store = require("flemma.config.store")
+local transform = require("flemma.config.transform")
 
 --- Layer priority constants.
 M.LAYERS = store.LAYERS
@@ -78,6 +78,28 @@ local function path_parent(path)
     return parent, leaf
   end
   return "", path
+end
+
+--- Convert a dotted canonical path + value into a nested table rooted at "".
+--- Transform ops carry fully-flattened absolute paths (e.g.
+--- "parameters.vertex.project_id"), but re-applying one as a single
+--- apply_recursive(ctx, path, value) call bypasses the per-segment object
+--- recursion that DISCOVER deferral depends on — deferral only checks one
+--- parent level up, so an op two-or-more levels below an unregistered
+--- DISCOVER key would report "unknown key" instead of deferring. Rebuilding
+--- the nested table and re-entering at the root makes each segment boundary
+--- go through the normal object branch again, so deferral triggers at the
+--- right level regardless of op path depth.
+---@param path string
+---@param value any
+---@return table
+local function unflatten_path(path, value)
+  local segments = vim.split(path, ".", { plain = true })
+  local nested = value
+  for i = #segments, 1, -1 do
+    nested = { [segments[i]] = nested }
+  end
+  return nested
 end
 
 -- ---------------------------------------------------------------------------
@@ -157,6 +179,25 @@ local function apply_recursive(ctx, path, value)
       end
     end
     return report_error(ctx, "config.apply: " .. messages["ui.config.apply_unknown_key"]{ key = path })
+  end
+
+  -- Write transform: fires for any value shape, before object handling — the
+  -- transform consumes the write entirely (same trigger contract as the proxy
+  -- and JSON-operator sites). Each op re-enters at the root with its path
+  -- unflattened into a nested table: apply_recursive's per-segment object
+  -- recursion keeps DISCOVER deferral, validation, and error collection
+  -- identical to a direct write, at any depth.
+  if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
+    local ok, err = transform.expand(leaf, path, value, ctx.bufnr, function(op_path, op_value)
+      local op_ok, op_err = apply_recursive(ctx, "", unflatten_path(op_path, op_value))
+      if not op_ok then
+        error({ type = "config", error = op_err }, 0)
+      end
+    end)
+    if not ok then
+      return report_error(ctx, err --[[@as string]])
+    end
+    return true
   end
 
   if leaf:is_object() and type(value) == "table" then
@@ -475,24 +516,19 @@ end
 
 --- Materialize the current resolved config into a plain Lua table.
 --- Walks the schema tree (static fields + DISCOVER-cached fields) and resolves
---- every path from the store, then expands any $-prefixed model preset and any
---- "provider/model" shorthand into their concrete fields. Returns a deep copy
---- safe for external mutation. Use when consumers need the effective config as a
---- plain table (`pairs()`, `vim.deepcopy()`); the raw accessors `get`/`inspect`
---- deliberately preserve preset aliases.
+--- every path from the store, then expands any $-prefixed model preset into
+--- its concrete fields ("provider/model" shorthand and matrix parameters need
+--- no expansion here — every write path decomposes them at the store
+--- boundary). Returns a deep copy safe for external mutation. Use when
+--- consumers need the effective config as a plain table (`pairs()`,
+--- `vim.deepcopy()`); the raw accessors `get`/`inspect` deliberately preserve
+--- preset aliases.
 ---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return table
 function M.materialize(bufnr)
   assert(root_schema, "config.init() must be called before materialize()")
   local resolved = vim.deepcopy(materialize_resolved(root_schema, "", bufnr) or {})
   resolved = expand_model_preset(resolved)
-  if type(resolved.model) == "string" then
-    local model, provider = str.split_provider_model(resolved.model)
-    if provider then
-      resolved.provider = provider
-      resolved.model = model
-    end
-  end
   return resolved
 end
 

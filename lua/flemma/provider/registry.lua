@@ -8,6 +8,8 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
+local log = require("flemma.logging")
+local modeline = require("flemma.utilities.modeline")
 local registry_utils = require("flemma.utilities.registry")
 local str = require("flemma.utilities.string")
 
@@ -470,6 +472,75 @@ function M.extract_switch_arguments(parsed)
   end
 
   return info
+end
+
+---@class flemma.provider.DecomposedModel
+---@field model string Model name without provider prefix or matrix parameters
+---@field provider string|nil Provider from a "provider/" or "provider " prefix, if any
+---@field parameters table<string, any> Matrix (";key=value") parameters, possibly empty
+---@field extras string[] Raw ';'-segments that are not key=value pairs, for caller warnings
+
+--- Decompose a model directive string into model, provider, matrix parameters,
+--- and any non-option segments. Pure — safe to call on already-plain model
+--- names (returns them unchanged).
+---@param value string
+---@param opts? flemma.utilities.modeline.ParseOpts preserve_nil stores vim.NIL for "key=nil" clears
+---@return flemma.provider.DecomposedModel
+function M.decompose_model(value, opts)
+  local primary, matrix, extras = modeline.parse_matrix(value, opts)
+  local model, provider = str.split_provider_model(primary)
+  return { model = model, provider = provider, parameters = matrix, extras = extras }
+end
+
+--- Schema `:transform` for model-shaped fields: decomposes a "provider/model;key=value"
+--- write into provider-scoped parameter, `provider`, and `model` writes — in that
+--- order: parameters are the only ops that can fail validation, and expansion is
+--- not atomic, so a failing parameter must leave provider and model untouched.
+--- Matrix parameters are ALWAYS provider-specific (never routed to general
+--- parameters); "key=nil" is an explicit clear (vim.NIL through the op).
+--- Prefixless models scope parameters under the ambient provider (ctx.get, which
+--- at the root mount always resolves via the schema default); preset references
+--- ("$name") expand late, so their parameters are dropped with a log line — they
+--- belong in the preset definition. Non-option segments are logged and ignored.
+---@param value any
+---@param ctx flemma.schema.TransformContext
+function M.model_transform(value, ctx)
+  if type(value) ~= "string" then
+    ctx.set("model", value)
+    return
+  end
+  local decomposed = M.decompose_model(value, { preserve_nil = true })
+  if #decomposed.extras > 0 then
+    log.debug(
+      "model_transform(): ignored non-option segments in " .. value .. ": " .. table.concat(decomposed.extras, ", ")
+    )
+  end
+  if next(decomposed.parameters) ~= nil then
+    ---@type string|nil
+    local namespace
+    if value:sub(1, 1) == "$" then
+      -- A preset reference resolves its provider only at materialize time —
+      -- scoping under the ambient provider here would mis-route the parameters.
+      namespace = nil
+    else
+      namespace = decomposed.provider or ctx.get("provider")
+    end
+    if type(namespace) == "string" and namespace ~= "" then
+      -- Sorted keys keep op order — and any partial failure — deterministic
+      -- across pairs() orderings.
+      local keys = vim.tbl_keys(decomposed.parameters)
+      table.sort(keys)
+      for _, key in ipairs(keys) do
+        ctx.set("parameters." .. namespace .. "." .. key, decomposed.parameters[key])
+      end
+    else
+      log.warn("model_transform(): dropped matrix parameters from " .. value .. " — no provider to scope them to")
+    end
+  end
+  if decomposed.provider then
+    ctx.set("provider", decomposed.provider)
+  end
+  ctx.set("model", decomposed.model)
 end
 
 return M

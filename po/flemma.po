@@ -175,6 +175,12 @@ msgstr "Unknown provider '{{ provider }}'. Supported providers are: {{ providers
 msgid "ui.provider.model_fallback"
 msgstr "Model '{{ model }}' is not valid for provider '{{ provider }}'. Using default: '{{ fallback }}'."
 
+#. Bullet line in the switch notification for a ';'-segment of the model
+#. string that is not a key=value matrix option.
+#. Variables: {{ segment }} — the raw ignored segment.
+msgid "ui.provider.ignored_matrix_segment"
+msgstr "Ignored '{{ segment }}' — not a key=value matrix option"
+
 #. Header after :Flemma switch. Paired forms: model resolved or not.
 #. Variables: {{ provider }}, {{ model }}.
 msgid "ui.provider.switched"
@@ -406,6 +412,13 @@ msgstr "list item[{{ index }}] at '{{ path }}': {{ reason }}"
 #. Variables: {{ path }}, {{ reason }}.
 msgid "ui.config.apply_validation_error"
 msgstr "validation error at '{{ path }}': {{ reason }}"
+
+#. Shown when a write transform (e.g. a matrix model string) decomposes into
+#. an op that fails to apply — the original written value gives the user the
+#. path they actually authored.
+#. Variables: {{ value }} — the raw written value whose expansion failed; {{ detail }} — the underlying config error.
+msgid "ui.config.transform_expand_failed"
+msgstr "could not expand '{{ value }}': {{ detail }}"
 
 #. Diagnostic formatting fallbacks.
 msgid "ui.diagnostics.unknown_error"
@@ -655,6 +668,18 @@ msgstr "Default preset '{{ preset }}' not found. Provider not initialized."
 #. Variables: {{ provider_explicit }}, {{ preset }}, {{ provider_preset }}.
 msgid "ui.preset.provider_conflict"
 msgstr "Explicit provider '{{ provider_explicit }}' conflicts with preset '{{ preset }}' (provider: '{{ provider_preset }}'). Provider not initialized."
+
+#. Variables: {{ preset }} — the preset name; {{ model }} — the model string carrying the dropped parameters.
+msgid "ui.preset.model_params_no_provider"
+msgstr "Preset {{ preset }}: parameters in model '{{ model }}' were ignored — no provider to scope them to"
+
+#. Variables: {{ preset }} — the preset name; {{ segments }} — comma-separated raw segments that are not key=value options.
+msgid "ui.preset.ignored_matrix_segment"
+msgstr "Preset {{ preset }}: ignored '{{ segments }}' — not key=value matrix options"
+
+#. Variables: {{ preset }} — the preset name; {{ provider_field }} — the preset's provider field; {{ provider_model }} — the provider from the model string.
+msgid "ui.preset.model_provider_conflict"
+msgstr "Preset {{ preset }}: provider '{{ provider_field }}' conflicts with '{{ provider_model }}' from the model string"
 
 #. Inline request-progress spinner (virt_text on the @Assistant: line). The
 #. spinner glyph and " · " separators are layout added in code, not translated.

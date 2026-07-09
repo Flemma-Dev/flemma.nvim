@@ -8,10 +8,13 @@ local s = require("flemma.schema")
 local function test_schema()
   return s.object({
     provider = s.string("anthropic"),
-    model = s.string("claude-sonnet-4-20250514"),
+    model = s.string("claude-sonnet-4-20250514"):transform(require("flemma.provider.registry").model_transform),
     parameters = s.object({
       temperature = s.number(0.7),
       max_tokens = s.optional(s.integer()),
+      vertex = s.object({
+        project_id = s.optional(s.string()),
+      }),
     }),
     tools = s.object({
       auto_approve = s.list(s.string(), {}),
@@ -379,6 +382,15 @@ describe("config.apply_operators", function()
 
       assert.are.equal(2, #failures)
     end)
+  end)
+
+  it("decomposes a matrix model string written as a plain value", function()
+    local failures = config.apply_operators(config.LAYERS.RUNTIME, nil, { model = "vertex/gemini-3;project_id=stan" })
+    assert.are.same({}, failures)
+    local result = config.materialize()
+    assert.equals("vertex", result.provider)
+    assert.equals("gemini-3", result.model)
+    assert.equals("stan", result.parameters.vertex.project_id)
   end)
 end)
 

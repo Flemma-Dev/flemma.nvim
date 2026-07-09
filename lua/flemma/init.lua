@@ -158,24 +158,31 @@ M.setup = function(user_opts)
     notify.error(preset_error)
     return
   end
+  ---@type table<string, any>
+  local boot_params = {}
   if resolved_preset then
-    -- Write resolved preset values to the SETUP layer.
+    -- Write resolved preset values to the SETUP layer. route_parameters writes
+    -- a provider-bearing preset's config-shaped parameters structurally and
+    -- returns a provider-less preset's flat parameters for the explicit channel.
     local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
     w.provider = resolved_preset.provider
     w.model = resolved_preset.model
+    boot_params = presets.route_parameters(resolved_preset, w)
     config.provider = resolved_preset.provider
     config.model = resolved_preset.model
   end
 
   -- Initialize provider based on the resolved config. Pass SETUP layer so the
   -- validated provider/model go to the same layer as user opts (not RUNTIME).
-  -- Only pass the preset's extra parameters as explicit overrides — the user's
-  -- setup parameters are already in L20 from config_facade.apply() above.
+  -- boot_params carries a provider-less preset's flat parameters (they scope
+  -- under the resolved provider); a provider-bearing preset's were already
+  -- written structurally above, and the user's setup parameters are already in
+  -- L20 from config_facade.apply() above.
   if resolved_preset then
     core.initialize_provider(
       resolved_preset.provider or config.provider --[[@as string]],
       resolved_preset.model or config.model,
-      resolved_preset.parameters or {},
+      boot_params,
       config_facade.LAYERS.SETUP
     )
   else

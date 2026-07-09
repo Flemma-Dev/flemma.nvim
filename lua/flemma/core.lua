@@ -27,6 +27,7 @@ local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local indicators = require("flemma.ui.indicators")
 local injector = require("flemma.tools.injector")
+local modeline = require("flemma.utilities.modeline")
 local path_util = require("flemma.utilities.path")
 local tool_names = require("flemma.utilities.tools")
 local parser = require("flemma.parser")
@@ -240,12 +241,27 @@ local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schem
 ---@param model_name? string Validated model name
 ---@param explicit_params? table<string, any> User's explicit parameter overrides
 ---@param layer? integer Facade layer to write to (default: RUNTIME)
-local function apply_config(provider_name, model_name, explicit_params, layer)
+---@param matrix_parameters? table<string, any> Provider-scoped matrix (";key=value") parameters (vim.NIL values clear)
+local function apply_config(provider_name, model_name, explicit_params, layer, matrix_parameters)
   layer = layer or config_facade.LAYERS.RUNTIME
   local w = config_facade.writer(nil, layer)
   w.provider = provider_name
   if model_name then
     w.model = model_name
+  end
+
+  -- Matrix parameters are always provider-specific and are written BEFORE the
+  -- explicit key=value loop, so space-separated overrides win (last write wins
+  -- per store resolution). vim.NIL means "explicitly clear" — the same contract
+  -- as the explicit loop below.
+  if matrix_parameters then
+    for k, v in pairs(matrix_parameters) do
+      if v == vim.NIL then
+        w.parameters[provider_name][k] = nil
+      else
+        w.parameters[provider_name][k] = v
+      end
+    end
   end
 
   -- Write each explicit parameter to the correct namespaced path.
@@ -291,6 +307,39 @@ end
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return boolean success, string[] param_warnings, string|nil model_fallback_warning
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
+  -- Peel matrix parameters off the provider/model strings before validation —
+  -- a pasted "vertex/gemini-3;project_id=x" must validate as model "gemini-3".
+  -- This is the single choke point for every switch entry (positional, model=
+  -- keyword, preset model, preset-override positional).
+  ---@type table<string, any>|nil
+  local matrix_parameters
+  ---@type string[]
+  local ignored_segments = {}
+  if type(provider_name) == "string" and provider_name:find(";", 1, true) then
+    -- The provider slot carries no provider/model grammar — peel matrix
+    -- parameters only and let provider validation judge the primary as-is.
+    local primary, params, extras = modeline.parse_matrix(provider_name, { preserve_nil = true })
+    provider_name = primary
+    if next(params) then
+      matrix_parameters = params
+    end
+    vim.list_extend(ignored_segments, extras)
+  end
+  if type(model_name) == "string" then
+    local decomposed = registry.decompose_model(model_name, { preserve_nil = true })
+    model_name = decomposed.model
+    local model_provider = decomposed.provider
+    if model_provider then
+      -- A provider/ prefix in the model string is the most specific directive —
+      -- same semantics as flemma.opt.model = "provider/model".
+      provider_name = model_provider
+    end
+    if next(decomposed.parameters) then
+      matrix_parameters = vim.tbl_extend("force", matrix_parameters or {}, decomposed.parameters)
+    end
+    vim.list_extend(ignored_segments, decomposed.extras)
+  end
+
   -- Validate provider
   if not registry.has(provider_name) then
     local err = messages["ui.provider.unknown"]{
@@ -318,11 +367,14 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   end
 
   -- Write to facade
-  apply_config(resolved_provider, validated_model, explicit_params, layer)
+  apply_config(resolved_provider, validated_model, explicit_params, layer, matrix_parameters)
 
   -- Validate provider-specific parameters (advisory warnings, never fails)
   ---@type string[]
   local param_warnings = {}
+  for _, segment in ipairs(ignored_segments) do
+    table.insert(param_warnings, messages["ui.provider.ignored_matrix_segment"]{ segment = segment })
+  end
   if validated_model then
     local resolved_config = config_facade.materialize()
     local flat_params = normalize.merge_parameters(resolved_provider, resolved_config)

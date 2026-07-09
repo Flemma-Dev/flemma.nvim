@@ -11,6 +11,7 @@ local M = {}
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
+local transform = require("flemma.config.transform")
 
 --- Valid operator keys and their store operation names.
 ---@type table<string, "set"|"append"|"remove"|"prepend">
@@ -70,6 +71,24 @@ local function walk(schema, path, value, layer, bufnr, failures)
   end
 
   local unwrapped = nav.unwrap_optional(node)
+
+  -- Write transform: fires for any value shape, before object coercion and
+  -- navigation — the transform consumes the write entirely (same trigger
+  -- contract as the proxy and config.apply sites). Ops re-enter walk() under
+  -- the expansion flag, so per-op failures land in the shared failures sink.
+  if value ~= nil and not transform.is_expanding() and node:has_transform() then
+    local ok, err = transform.expand(node, path, value, bufnr, function(op_path, op_value)
+      walk(schema, op_path, op_value, layer, bufnr, failures)
+    end)
+    if not ok then
+      table.insert(failures, {
+        path = path,
+        value = value,
+        message = err --[[@as string]],
+      })
+    end
+    return
+  end
 
   -- Non-table value: try coerce for object nodes (e.g., autopilot: false →
   -- { enabled = false }), then fall through to scalar set.
