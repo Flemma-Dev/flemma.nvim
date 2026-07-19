@@ -307,7 +307,11 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
       local thinking_content_lines = {}
       i = i + 1
 
-      -- Collect thinking content until closing tag
+      -- Collect thinking content until the closing tag. Only a bare
+      -- `</thinking>` line closes the block: the token with trailing content on
+      -- the same line is thinking prose (HTML/XML examples, format
+      -- transcripts), never a close.
+      local closed = false
       while i <= #lines do
         if lines[i]:match("^</thinking>$") then
           local thinking_end_line = base_line_num + i - 1
@@ -319,12 +323,23 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
               end_line = thinking_end_line,
             }, { signature = signature, redacted = redacted or nil })
           )
+          closed = true
           i = i + 1
           break
-        else
-          table.insert(thinking_content_lines, lines[i])
-          i = i + 1
         end
+        table.insert(thinking_content_lines, lines[i])
+        i = i + 1
+      end
+      -- Unterminated block: keep the collected lines as thinking to the end of
+      -- the message — buffer content must never drop out of the AST.
+      if not closed then
+        table.insert(
+          segments,
+          ast.thinking(table.concat(thinking_content_lines, "\n"), {
+            start_line = thinking_start_line,
+            end_line = base_line_num + #lines - 1,
+          }, { signature = signature, redacted = redacted or nil })
+        )
       end
     elseif line:match(TOOL_USE_PATTERN) then
       flush_accum()

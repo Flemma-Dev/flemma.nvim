@@ -1265,6 +1265,96 @@ describe("ast and context", function()
       assert.equals(3, thinking_seg.position.start_line, "Thinking should start at line 3")
       assert.equals(6, thinking_seg.position.end_line, "Thinking should end at line 6")
     end)
+
+    it("treats </thinking> with trailing content as thinking prose, not a closing tag", function()
+      -- The token can legitimately appear inside reasoning (HTML/XML examples,
+      -- transcripts of the buffer format); only a bare line closes the block.
+      local lines = {
+        "@Assistant:",
+        '<thinking anthropic:signature="sig-value">',
+        "reasoning before",
+        "</thinking><div>markup example</div>",
+        "reasoning after",
+        "</thinking>",
+        "Answer text.",
+      }
+      local doc = parser.parse_lines(lines)
+      local msg = doc.messages[1]
+
+      local thinking_seg, text_seg
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "thinking" then
+          thinking_seg = seg
+        elseif seg.kind == "text" then
+          text_seg = seg
+        end
+      end
+
+      assert.is_not_nil(thinking_seg, "Should have thinking segment")
+      assert.equals("reasoning before\n</thinking><div>markup example</div>\nreasoning after", thinking_seg.content)
+      assert.equals(2, thinking_seg.position.start_line)
+      assert.equals(6, thinking_seg.position.end_line, "Block closes at the bare tag only")
+      assert.is_not_nil(thinking_seg.signature)
+      assert.equals("sig-value", thinking_seg.signature.value)
+
+      assert.is_not_nil(text_seg, "Text after the bare closing tag remains text")
+      assert.equals("Answer text.", text_seg.value)
+    end)
+
+    it("keeps a block whose closing tag is glued to content as unterminated thinking", function()
+      -- Models replaying the foreign-thinking text format glue their answer
+      -- onto the closing tag; without a bare close the whole turn stays
+      -- thinking — preserved, never dropped.
+      local lines = {
+        "@Assistant:",
+        "<thinking>",
+        "imitated reasoning",
+        "</thinking>Welcome! Here is the answer.",
+      }
+      local doc = parser.parse_lines(lines)
+      local msg = doc.messages[1]
+
+      local thinking_seg, text_seg
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "thinking" then
+          thinking_seg = seg
+        elseif seg.kind == "text" then
+          text_seg = seg
+        end
+      end
+
+      assert.is_not_nil(thinking_seg, "Should have thinking segment")
+      assert.equals("imitated reasoning\n</thinking>Welcome! Here is the answer.", thinking_seg.content)
+      assert.equals(2, thinking_seg.position.start_line)
+      assert.equals(4, thinking_seg.position.end_line, "Block extends to the end of the message")
+      assert.is_nil(text_seg, "No text segment: the glued line is not a close")
+    end)
+
+    it("keeps an unterminated thinking block as thinking content instead of dropping it", function()
+      local lines = {
+        "@Assistant:",
+        "<thinking>",
+        "partial reasoning",
+        "still reasoning",
+      }
+      local doc = parser.parse_lines(lines)
+      local msg = doc.messages[1]
+
+      local thinking_seg, text_seg
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "thinking" then
+          thinking_seg = seg
+        elseif seg.kind == "text" then
+          text_seg = seg
+        end
+      end
+
+      assert.is_not_nil(thinking_seg, "Unterminated thinking must still produce a segment")
+      assert.equals("partial reasoning\nstill reasoning", thinking_seg.content)
+      assert.equals(2, thinking_seg.position.start_line)
+      assert.equals(4, thinking_seg.position.end_line, "Block extends to the end of the message")
+      assert.is_nil(text_seg, "Unterminated thinking content must not leak into text")
+    end)
   end)
 
   describe("Expression segment positions", function()
