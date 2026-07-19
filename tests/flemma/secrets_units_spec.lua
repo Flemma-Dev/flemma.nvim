@@ -352,13 +352,30 @@ describe("flemma.secrets.resolvers.chatgpt", function()
 
   describe("supports()", function()
     it("returns true for chatgpt_subscription kind", function()
+      -- Seed a throwaway auth file and point the resolver at it via config — the
+      -- test must never depend on the host's ~/.codex/auth.json (present only
+      -- when the developer happens to be logged in to Codex).
+      local tmp = vim.fn.tempname() .. ".json"
+      local auth_data = {
+        auth_mode = "chatgpt",
+        tokens = {
+          access_token = "test-access-token",
+          account_id = "acct_12345",
+        },
+      }
+      local f = io.open(tmp, "w")
+      f:write(json.encode(auth_data))
+      f:close()
+
       local ctx = {
         diagnostic = function() end,
         get_config = function()
-          return nil
+          return { auth_file = tmp }
         end,
       }
       assert.is_true(chatgpt:supports({ kind = "chatgpt_subscription", service = "codex" }, ctx))
+
+      os.remove(tmp)
     end)
 
     it("returns false for other credential kinds", function()
