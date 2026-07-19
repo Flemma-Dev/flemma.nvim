@@ -661,6 +661,7 @@ function M._check_buffered_response(self, callbacks)
   if ok and type(data) == "table" then
     local msg = self:extract_json_response_error(data)
     if msg and callbacks.on_error then
+      log.error("base._check_buffered_response(): API error: " .. log.inspect(msg))
       callbacks.on_error(msg)
       return true
     end
