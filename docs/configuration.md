@@ -331,12 +331,14 @@ thinking = {
 
 The `foreign` field controls what happens to thinking blocks from a different provider when you switch providers mid-conversation. Thinking blocks carry a provider signature — when the current provider doesn't match the signature, those blocks are "foreign."
 
-| `foreign` value            | Behaviour                                                                                                                                                                  |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"preserve"` **(default)** | Foreign thinking blocks are injected as text wrapped in `<thinking>` tags so the new provider can see the prior reasoning. Redacted and empty blocks are silently skipped. |
-| `"drop"`                   | Foreign thinking blocks are silently removed from the prompt.                                                                                                              |
+| `foreign` value            | Behaviour                                                                                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"preserve"` **(default)** | Foreign thinking blocks are injected as plain text — a short context phrase, the reasoning, and a `---` rule separating it from the turn's visible text. Redacted and empty blocks are silently skipped. |
+| `"drop"`                   | Foreign thinking blocks are silently removed from the prompt.                                                                                                                                            |
 
 This matters when you start a conversation with one provider (say, Anthropic) and switch to another (say, OpenAI) mid-conversation. With `"preserve"`, the new provider sees the old provider's reasoning as context. With `"drop"`, it sees only the visible messages.
+
+The framing is deliberately **tagless prose**, not an XML-style envelope: models mirror tag pairs that lead their own prior turns, so any wrapper tag eventually reappears verbatim in replies. The framing text is the `thinking.foreign.wrap` entry in the [string catalogue](../po/flemma-harness.po).
 
 Override per-buffer via frontmatter:
 

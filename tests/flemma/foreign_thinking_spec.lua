@@ -130,13 +130,13 @@ describe("Base Provider Thinking Helpers", function()
       assert.is_nil(base.wrap_foreign_thinking(provider, segments))
     end)
 
-    it("wraps single foreign segment in thinking tags", function()
+    it("frames single foreign segment as tagless prose context", function()
       local provider = make_provider()
       local segments = {
         { kind = "thinking", content = "foreign reasoning here" },
       }
       local result = base.wrap_foreign_thinking(provider, segments)
-      assert.equals("<thinking>\nforeign reasoning here\n</thinking>", result)
+      assert.equals("Here is some context to help you: foreign reasoning here\n---", result)
     end)
 
     it("concatenates multiple foreign segments with double newline and trims each", function()
@@ -146,7 +146,7 @@ describe("Base Provider Thinking Helpers", function()
         { kind = "thinking", content = "  second thought  " },
       }
       local result = base.wrap_foreign_thinking(provider, segments)
-      assert.equals("<thinking>\nfirst thought\n\nsecond thought\n</thinking>", result)
+      assert.equals("Here is some context to help you: first thought\n\nsecond thought\n---", result)
     end)
 
     it("returns nil when no foreign segments found", function()
@@ -164,7 +164,7 @@ describe("Base Provider Thinking Helpers", function()
         { kind = "thinking", content = "usable foreign thought" },
       }
       local result = base.wrap_foreign_thinking(provider, segments)
-      assert.equals("<thinking>\nusable foreign thought\n</thinking>", result)
+      assert.equals("Here is some context to help you: usable foreign thought\n---", result)
     end)
 
     it("skips non-thinking segments", function()
@@ -174,7 +174,7 @@ describe("Base Provider Thinking Helpers", function()
         { kind = "thinking", content = "actual foreign thought" },
       }
       local result = base.wrap_foreign_thinking(provider, segments)
-      assert.equals("<thinking>\nactual foreign thought\n</thinking>", result)
+      assert.equals("Here is some context to help you: actual foreign thought\n---", result)
     end)
 
     it("returns nil when all segments are redacted", function()

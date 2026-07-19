@@ -118,6 +118,23 @@ msgstr "Job lost: session ended before completion."
 msgid "request.aborted"
 msgstr "Response interrupted by the user."
 
+#. Variables: {{ content }} — another provider's reasoning text, injected into
+#. the request when switching providers mid-conversation (thinking.foreign =
+#. "preserve"). Wire-only: this framing never appears in the buffer.
+#. THE RULE: this text leads the model's own prior turns, and models complete
+#. patterns found in their own output — whatever framing is used here will
+#. sooner or later be reproduced, verbatim, in new replies. Only ever use
+#. framing that stays harmless when echoed: plain prose, at most a lone "---"
+#. (nothing to open or close, ordinary markdown). Never paired or structural
+#. markers — XML-style tags, brackets, fences — because an echoed pair
+#. re-enters the conversation as structure instead of text. The phrase quotes
+#. OpenRouter's cross-model reasoning example; Pi enforces the same rule
+#. ("no tags to avoid model mimicking them").
+msgid "thinking.foreign.wrap"
+msgstr ""
+"Here is some context to help you: {{ content }}\n"
+"---"
+
 #. Variables: {{ max_lines }}, {{ max_bytes_kb }} — truncation limits.
 msgid "tool.bash.description"
 msgstr "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last {{ max_lines }} lines or {{ max_bytes_kb }}KB (whichever is hit first). If truncated, full output is saved to a file. $FLEMMA_TOOLS_STORE_PATH is set in the environment and points to a directory where saved tool results for this conversation are stored. Optionally provide a timeout in seconds."

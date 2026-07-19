@@ -22,6 +22,8 @@ What the harness injects into or exposes to the LLM at request time.
 
 - **Strict-schema rewriting** — for providers that require strict JSON schemas, the harness rewrites tool schemas to make harness parameters nullable and appends them to `required`, ensuring the model always includes them. See [Strict mode for tool schemas](tools.md#strict-mode-for-tool-schemas) in tools.md.
 
+- **The string catalogue** — every string the model sees (tool descriptions, injected placeholders, the prose framing for another provider's thinking) lives in [`po/flemma-harness.po`](../po/flemma-harness.po). Editing an entry is prompt engineering, not translation.
+
 ---
 
 ## Environment-shaping surface

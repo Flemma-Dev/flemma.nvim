@@ -802,7 +802,9 @@ function M.is_foreign_thinking(self, segment)
   return not self:is_native_thinking(segment)
 end
 
----Collect foreign thinking segments and wrap them in a single <thinking> block.
+---Collect foreign thinking segments and frame them as tagless prose context
+---(the `thinking.foreign.wrap` catalogue entry — see its PO comment for why
+---it must never grow an XML-style envelope).
 ---Returns nil if foreign thinking is disabled or no foreign segments are found.
 ---@param self flemma.provider.Base
 ---@param segments flemma.ast.GenericThinkingPart[]
@@ -821,7 +823,7 @@ function M.wrap_foreign_thinking(self, segments)
   if #parts == 0 then
     return nil
   end
-  return "<thinking>\n" .. table.concat(parts, "\n\n") .. "\n</thinking>"
+  return messages["thinking.foreign.wrap"]{ content = table.concat(parts, "\n\n") }
 end
 
 --- Emit a thinking block to the buffer.
