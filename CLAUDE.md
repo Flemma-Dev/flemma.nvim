@@ -136,6 +136,7 @@ One entry per learning: **bold symptom** → fix. Add new ones as they're earned
 - **Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`** — the walker prefers it; a sync `:resolve` doing `vim.system(cmd):wait()` blocks the editor. `provider:resolve_credential()` returns `flemma.secrets.Result|nil` only — failures flow through suspense boundaries, not return values.
 - **AST positions are 1-indexed; `nvim_buf_*` and extmark rows are 0-indexed** — every boundary crossing subtracts one; off-by-ones here put indicators on the wrong lines.
 - **Tool lists for provider requests must come from `tools.get_for_prompt()`** — it blocks on `ensure_ready()`; reading the registry directly lets async MCP sources establish a partial prompt-cache prefix, invalidating the cache for the rest of the conversation.
+- **`make format` reports high file-change counts that don't reflect real drift** — treefmt reformats, then `format-messages-brace-call.sh` fixes brace-call style; the two passes touch many files but cancel out. Trust `git status`/`git diff` for what actually changed, not the formatter's stdout.
 
 ## Knowledge Management
 
