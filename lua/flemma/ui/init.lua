@@ -444,23 +444,43 @@ local function update_cursorline(bufnr)
   end
 end
 
--- Updatetime management state
--- We use reference counting to track how many chat buffers are "active"
--- (i.e., currently being displayed in a window). Only restore updatetime
--- when the last active chat buffer is left.
-local updatetime_state = {
-  original = nil, -- The original updatetime before any chat buffer was entered
-  active_chat_buffers = {}, -- Set of bufnr that are currently active (in a window)
+-- Session option management state.
+-- While at least one chat buffer is active (entered), selected global options
+-- are overridden; when the last chat buffer is left, they are restored. One
+-- reference-counted set serves every managed option (updatetime, viewoptions).
+local chat_options_state = {
+  active_chat_buffers = {}, -- Set of bufnr that are currently active (entered)
+  updatetime = nil, -- Original updatetime while overridden (nil = not overridden)
+  viewoptions_folds = nil, -- true while "folds" is stripped from viewoptions (nil = not stripped)
 }
 
 ---Count active chat buffers
 ---@return integer
 local function count_active_chat_buffers()
   local count = 0
-  for _ in pairs(updatetime_state.active_chat_buffers) do
+  for _ in pairs(chat_options_state.active_chat_buffers) do
     count = count + 1
   end
   return count
+end
+
+---Restore managed global options once the last active chat buffer is left.
+---Called via vim.schedule from BufLeave/BufDelete-family handlers so that the
+---restore runs after the entire synchronous autocmd batch — in particular
+---after a user's `mkview` autocmd fires for the chat buffer being left, which
+---must still see the stripped viewoptions.
+local function restore_chat_session_options()
+  if count_active_chat_buffers() > 0 then
+    return
+  end
+  if chat_options_state.updatetime ~= nil then
+    vim.o.updatetime = chat_options_state.updatetime
+    chat_options_state.updatetime = nil
+  end
+  if chat_options_state.viewoptions_folds then
+    vim.opt.viewoptions:append("folds")
+    chat_options_state.viewoptions_folds = nil
+  end
 end
 
 ---Parse the `editing.conceal` format `{conceallevel}{concealcursor}` into a
@@ -590,10 +610,11 @@ function M.setup_chat_filetype_autocmds()
   -- Create or clear the augroup for all chat-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaChat", { clear = true })
 
-  -- Reset updatetime state when re-initializing
-  updatetime_state = {
-    original = nil,
+  -- Reset session option state when re-initializing
+  chat_options_state = {
     active_chat_buffers = {},
+    updatetime = nil,
+    viewoptions_folds = nil,
   }
 
   -- Handle .chat file detection
@@ -666,66 +687,42 @@ function M.setup_chat_filetype_autocmds()
     end,
   })
 
-  -- Handle updatetime management for chat buffers
+  -- Session option management for chat buffers.
+  -- While a chat buffer is entered, managed global options are overridden:
+  --  - updatetime → 100 for responsive CursorHold-driven UI updates
+  --  - viewoptions loses "folds" so a user's `mkview` autocmd doesn't persist
+  --    fold state that would fight Flemma's foldexpr on the next `loadview`
+  -- Restore is deferred (vim.schedule) so a switch to another chat buffer —
+  -- whose BufEnter fires within the same batch — keeps the overrides live.
   local editing_config = config_facade.get()
-  if editing_config and editing_config.editing and editing_config.editing.manage_updatetime then
+  local editing = (editing_config and editing_config.editing) or {}
+  if editing.manage_updatetime or editing.manage_viewoptions then
     vim.api.nvim_create_autocmd("BufEnter", {
       group = augroup,
       pattern = "*.chat",
       callback = function(ev)
-        local bufnr = ev.buf
-
-        -- Save original updatetime on first chat buffer activation
-        if updatetime_state.original == nil then
-          updatetime_state.original = vim.o.updatetime
+        chat_options_state.active_chat_buffers[ev.buf] = true
+        if editing.manage_updatetime then
+          if chat_options_state.updatetime == nil then
+            chat_options_state.updatetime = vim.o.updatetime
+          end
+          vim.o.updatetime = 100
         end
-
-        -- Mark this buffer as active
-        updatetime_state.active_chat_buffers[bufnr] = true
-
-        -- Set fast updatetime for chat buffers
-        vim.o.updatetime = 100
+        if editing.manage_viewoptions then
+          if chat_options_state.viewoptions_folds == nil and vim.tbl_contains(vim.opt.viewoptions:get(), "folds") then
+            chat_options_state.viewoptions_folds = true
+          end
+          vim.opt.viewoptions:remove("folds")
+        end
       end,
     })
 
-    vim.api.nvim_create_autocmd("BufLeave", {
+    vim.api.nvim_create_autocmd({ "BufLeave", "BufWipeout", "BufUnload", "BufDelete" }, {
       group = augroup,
       pattern = "*.chat",
       callback = function(ev)
-        local bufnr = ev.buf
-
-        -- Remove this buffer from active set
-        updatetime_state.active_chat_buffers[bufnr] = nil
-
-        -- Use vim.schedule to defer the check - this allows BufEnter on the
-        -- next buffer to fire first, so we can see if we're switching to another
-        -- chat buffer (in which case we shouldn't restore updatetime)
-        vim.schedule(function()
-          -- Only restore updatetime if no more active chat buffers
-          if count_active_chat_buffers() == 0 and updatetime_state.original ~= nil then
-            vim.o.updatetime = updatetime_state.original
-            updatetime_state.original = nil
-          end
-        end)
-      end,
-    })
-
-    -- Also clean up when buffers are deleted
-    vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload", "BufDelete" }, {
-      group = augroup,
-      pattern = "*.chat",
-      callback = function(ev)
-        local bufnr = ev.buf
-        updatetime_state.active_chat_buffers[bufnr] = nil
-
-        -- Use vim.schedule here too for consistency
-        vim.schedule(function()
-          -- Restore if this was the last active chat buffer
-          if count_active_chat_buffers() == 0 and updatetime_state.original ~= nil then
-            vim.o.updatetime = updatetime_state.original
-            updatetime_state.original = nil
-          end
-        end)
+        chat_options_state.active_chat_buffers[ev.buf] = nil
+        vim.schedule(restore_chat_session_options)
       end,
     })
   end
@@ -1198,6 +1195,17 @@ function M.setup()
       end
       bridge.update_ui(ev.buf)
       buffer_state.ui_update_tick = tick
+      if ev.event == "BufWinEnter" then
+        -- A user's `:loadview` autocmd (also on BufWinEnter) may run after us
+        -- and overwrite foldmethod/foldexpr from a stale view. Scheduled
+        -- callbacks only run once the whole synchronous autocmd batch has
+        -- finished, so this check reliably sees the post-loadview state.
+        -- Capture bufnr — by drain time the current buffer may differ.
+        local bufnr = ev.buf
+        vim.schedule(function()
+          folding.ensure_fold_settings(bufnr)
+        end)
+      end
     end,
   })
 

@@ -370,6 +370,7 @@ return s.object({
     disable_textwidth = s.boolean(true),
     auto_write = s.boolean(false),
     manage_updatetime = s.boolean(true),
+    manage_viewoptions = s.boolean(true),
     compact_headers = s.boolean(true),
     fold = s.object({
       level = s.integer(1),

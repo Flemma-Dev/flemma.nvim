@@ -143,6 +143,121 @@ describe("State Management", function()
     end)
   end)
 
+  describe("viewoptions management", function()
+    local function has_folds()
+      return vim.tbl_contains(vim.opt.viewoptions:get(), "folds")
+    end
+
+    before_each(function()
+      -- Drain restore callbacks scheduled by the PREVIOUS test's module
+      -- instance: the outer before_each's buffer churn fires BufLeave/BufUnload
+      -- on the old instance's autocmds before flemma.setup replaces them, and
+      -- those closures read the old instance's frozen state. Flush them before
+      -- establishing this test's viewoptions baseline so a stale append lands
+      -- here, not inside the test.
+      vim.wait(10, function()
+        return false
+      end)
+      vim.o.viewoptions = "folds,cursor,curdir"
+      -- Re-run setup AFTER the flush: resets the session option state so no
+      -- capture from the churn window survives into the test.
+      flemma.setup({
+        editing = {
+          manage_updatetime = true,
+          fold = {
+            level = 1,
+          },
+        },
+      })
+    end)
+
+    after_each(function()
+      vim.o.viewoptions = "folds,cursor,curdir"
+    end)
+
+    it("strips folds while a chat buffer is active and restores it after leaving", function()
+      assert.is_true(has_folds())
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/test1.chat")
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.cmd("doautocmd BufEnter *.chat")
+
+      assert.is_false(has_folds(), "folds should be stripped from viewoptions while in a chat buffer")
+
+      vim.cmd("doautocmd BufLeave *.chat")
+      local other_buf = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(other_buf, "/tmp/other.txt")
+      vim.api.nvim_set_current_buf(other_buf)
+      vim.wait(10, function()
+        return false
+      end)
+
+      assert.is_true(has_folds(), "folds should be restored after leaving the last chat buffer")
+    end)
+
+    it("keeps folds stripped when switching between chat buffers", function()
+      local buf1 = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(buf1, "/tmp/test1.chat")
+      vim.bo[buf1].filetype = "chat"
+      local buf2 = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(buf2, "/tmp/test2.chat")
+      vim.bo[buf2].filetype = "chat"
+
+      vim.api.nvim_set_current_buf(buf1)
+      vim.cmd("doautocmd BufEnter *.chat")
+      assert.is_false(has_folds())
+
+      vim.cmd("doautocmd BufLeave *.chat")
+      vim.api.nvim_set_current_buf(buf2)
+      vim.cmd("doautocmd BufEnter *.chat")
+      vim.wait(10, function()
+        return false
+      end)
+
+      assert.is_false(has_folds(), "folds should stay stripped while another chat buffer is active")
+    end)
+
+    it("does not add folds for users whose viewoptions never contained it", function()
+      vim.o.viewoptions = "cursor,curdir"
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/test1.chat")
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.cmd("doautocmd BufEnter *.chat")
+      assert.is_false(has_folds())
+
+      vim.cmd("doautocmd BufLeave *.chat")
+      local other_buf = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(other_buf, "/tmp/other.txt")
+      vim.api.nvim_set_current_buf(other_buf)
+      vim.wait(10, function()
+        return false
+      end)
+
+      assert.is_false(has_folds(), "folds should not be invented for users who never had it")
+    end)
+
+    it("respects editing.manage_viewoptions = false", function()
+      flemma.setup({
+        editing = {
+          manage_updatetime = true,
+          manage_viewoptions = false,
+        },
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/test1.chat")
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.cmd("doautocmd BufEnter *.chat")
+
+      assert.is_true(has_folds(), "viewoptions should be untouched when management is disabled")
+    end)
+  end)
+
   describe("folding setup", function()
     it("should set folding on correct window for buffer", function()
       -- Create two windows
