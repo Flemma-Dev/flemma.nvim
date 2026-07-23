@@ -525,6 +525,10 @@ msgstr "stderr: {{ detail }}"
 msgid "tool.mcporter.start_failed"
 msgstr "Failed to start mcporter call"
 
+#. Variables: {{ default }} — the configured default call timeout in seconds.
+msgid "tool.mcporter.input.timeout"
+msgstr "Timeout in seconds (default: {{ default }}). Increase for long-running operations such as deep research or large web crawls."
+
 #. count = timeout seconds. Variables: {{ count }}.
 msgid "tool.mcporter.timeout"
 msgid_plural "tool.mcporter.timeout"
