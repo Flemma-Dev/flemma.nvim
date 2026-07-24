@@ -33,11 +33,19 @@ setmetatable(M, { __index = openai_chat })
 --                `thinking.type = "enabled"|"disabled"` based on the user's
 --                resolved thinking state, with temperature locked accordingly
 --                (1.0 when enabled, 0.6 when disabled).
+--   "effort"   — thinking is always on and its depth is set through the top-level
+--                `reasoning_effort` field (kimi-k3). No `thinking` object is sent —
+--                K3 rejects it — and temperature is left to the user, since nothing
+--                in the K3 docs fixes it. The API value comes from the model's
+--                `thinking_effort_map`, so an "effort" model must declare one.
 --   nil        — no thinking support (moonshot-v1-*); no `thinking` parameter
 --                is sent.
 
+--- Lowest `reasoning_effort` the Moonshot API accepts (`low`/`high`/`max`).
+local EFFORT_FLOOR = "low"
+
 ---@param model_name string
----@return "forced"|"optional"|nil
+---@return "forced"|"optional"|"effort"|nil
 local function get_thinking_mode(model_name)
   local info = provider_registry.get_model_info("moonshot", model_name)
   if info and info.meta then
@@ -113,6 +121,28 @@ function M._apply_thinking(self, body, resolution)
     body.thinking = { type = "enabled" }
     body.temperature = 1.0
     log.debug("moonshot._apply_thinking: Forced thinking on for " .. model .. ", temperature locked to 1.0")
+    return
+  end
+
+  if mode == "effort" then
+    if not resolution.enabled then
+      -- K3 cannot stop reasoning ("You can't — K3 always thinks"), so a disabled
+      -- resolution sends the floor rather than omitting the field and silently
+      -- inheriting the server default of "max". Note the budget branch of
+      -- resolve_thinking returns `enabled = false` without the `explicit` flag,
+      -- so "user turned thinking off" and "thinking was never configured" are
+      -- indistinguishable here — both mean "as little thinking as possible".
+      body.reasoning_effort = EFFORT_FLOOR
+      log.debug("moonshot._apply_thinking: Thinking off for " .. model .. ", reasoning_effort floored to low")
+    elseif resolution.mapped_effort then
+      body.reasoning_effort = resolution.mapped_effort
+      log.debug("moonshot._apply_thinking: reasoning_effort " .. resolution.mapped_effort .. " for " .. model)
+    else
+      -- Model declares "effort" mode but no thinking_effort_map: the canonical
+      -- level is not a valid API value, so omit the field and let the server
+      -- default apply rather than send something the API will reject.
+      log.debug("moonshot._apply_thinking: No thinking_effort_map for " .. model .. ", omitting reasoning_effort")
+    end
     return
   end
 
@@ -262,6 +292,7 @@ function M.try_estimate_usage(bufnr, on_result)
       body.max_completion_tokens = nil
       body.temperature = nil
       body.thinking = nil
+      body.reasoning_effort = nil
       return body
     end,
     parse_response = function(parsed)

@@ -172,6 +172,94 @@ describe("Moonshot Provider", function()
       end)
     end)
 
+    describe("reasoning_effort for kimi-k3", function()
+      --- Build a kimi-k3 request body with the given unified thinking value.
+      ---@param thinking? table The `thinking` parameter table (nil = not configured)
+      ---@return table<string, any> request_body
+      local function build_k3(thinking)
+        local provider = moonshot.new({
+          model = "kimi-k3",
+          max_tokens = 16000,
+          thinking = thinking,
+        })
+        return provider:build_request(make_prompt({ { type = "You", content = "Hello" } }))
+      end
+
+      it("should map every canonical thinking level to an API reasoning_effort", function()
+        -- K3 accepts only low/high/max — "minimal" and "medium" clamp to a real value.
+        local expected = {
+          minimal = "low",
+          low = "low",
+          medium = "high",
+          high = "high",
+          max = "max",
+        }
+        for level, effort in pairs(expected) do
+          local request_body = build_k3({ level = level, foreign = "preserve" })
+          assert.equals(effort, request_body.reasoning_effort, "thinking=" .. level .. " should send " .. effort)
+        end
+      end)
+
+      it("should never send a thinking object for kimi-k3", function()
+        -- K3 rejects the K2-family `thinking` parameter.
+        for _, level in ipairs({ "minimal", "low", "medium", "high", "max" }) do
+          local request_body = build_k3({ level = level, foreign = "preserve" })
+          assert.is_nil(request_body.thinking, "thinking=" .. level .. " must not send a thinking object")
+        end
+        assert.is_nil(build_k3(nil).thinking)
+        assert.is_nil(build_k3({ level = false, foreign = "preserve" }).thinking)
+      end)
+
+      it("should send the floor effort when thinking is explicitly disabled", function()
+        -- K3 cannot stop reasoning; "low" is the closest honest reading of
+        -- "as little thinking as possible".
+        local request_body = build_k3({ level = false, foreign = "preserve" })
+        assert.equals("low", request_body.reasoning_effort)
+      end)
+
+      it("should send the floor effort when the resolution carries no thinking table", function()
+        -- The budget branch of resolve_thinking cannot distinguish "explicitly
+        -- disabled" from "absent" — both produce the same request. Note this is the
+        -- provider-level contract, not the end-user default: the config schema
+        -- defaults `thinking.level` to "high", so a user who never configures
+        -- thinking sends `reasoning_effort = "high"`, not the floor.
+        local request_body = build_k3(nil)
+        assert.equals("low", request_body.reasoning_effort)
+      end)
+
+      it("should map a numeric thinking budget through the effort map", function()
+        -- Numeric budgets resolve to a canonical level first, then through the map.
+        local request_body = build_k3({ level = 20000, foreign = "preserve" })
+        assert.equals("high", request_body.reasoning_effort)
+      end)
+
+      it("should leave temperature alone", function()
+        -- Unlike K2.5/K2.6, nothing in the K3 docs fixes temperature.
+        local provider = moonshot.new({
+          model = "kimi-k3",
+          max_tokens = 16000,
+          temperature = 0.3,
+          thinking = { level = "high", foreign = "preserve" },
+        })
+        local request_body = provider:build_request(make_prompt({ { type = "You", content = "Hello" } }))
+
+        assert.equals(0.3, request_body.temperature)
+        assert.is_nil(build_k3(nil).temperature, "temperature must stay unset when the user sets none")
+      end)
+
+      it("should not send reasoning_effort for thinking-toggle models", function()
+        local provider = moonshot.new({
+          model = "kimi-k2.5",
+          max_tokens = 4096,
+          thinking = { level = "high", foreign = "preserve" },
+        })
+        local request_body = provider:build_request(make_prompt({ { type = "You", content = "Hello" } }))
+
+        assert.is_nil(request_body.reasoning_effort)
+        assert.equals("enabled", request_body.thinking.type)
+      end)
+    end)
+
     describe("no thinking for moonshot-v1 models", function()
       it("should not set thinking for moonshot-v1-128k", function()
         local provider = moonshot.new({
@@ -225,6 +313,13 @@ describe("Moonshot Provider", function()
   describe("validate_parameters", function()
     it("should return no warnings for non-kimi-k2.5 models", function()
       local ok, warnings = moonshot.validate_parameters("moonshot-v1-128k", { temperature = 0.3 })
+      assert.is_true(ok)
+      assert.is_nil(warnings)
+    end)
+
+    it("should return no warnings for kimi-k3", function()
+      -- K3 locks nothing: temperature and friends reach the API as the user set them.
+      local ok, warnings = moonshot.validate_parameters("kimi-k3", { temperature = 0.3, top_p = 0.5 })
       assert.is_true(ok)
       assert.is_nil(warnings)
     end)

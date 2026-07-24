@@ -14,9 +14,9 @@ describe("flemma.provider.normalize", function()
     end)
 
     it("resolves percentage with known model", function()
-      -- claude-sonnet-4-6 has max_output_tokens = 64000
+      -- claude-haiku-4-5 has max_output_tokens = 64000
       local params = { max_tokens = "50%" }
-      normalize.resolve_max_tokens("anthropic", "claude-sonnet-4-6", params)
+      normalize.resolve_max_tokens("anthropic", "claude-haiku-4-5", params)
       assert.equals(32000, params.max_tokens)
     end)
 
@@ -34,22 +34,22 @@ describe("flemma.provider.normalize", function()
     end)
 
     it("resolves 100% to full max", function()
-      -- claude-sonnet-4-6 has max_output_tokens = 64000
+      -- claude-haiku-4-5 has max_output_tokens = 64000
       local params = { max_tokens = "100%" }
-      normalize.resolve_max_tokens("anthropic", "claude-sonnet-4-6", params)
+      normalize.resolve_max_tokens("anthropic", "claude-haiku-4-5", params)
       assert.equals(64000, params.max_tokens)
     end)
 
     it("passes through integer within limits", function()
       local params = { max_tokens = 8000 }
-      normalize.resolve_max_tokens("anthropic", "claude-sonnet-4-6", params)
+      normalize.resolve_max_tokens("anthropic", "claude-haiku-4-5", params)
       assert.equals(8000, params.max_tokens)
     end)
 
     it("clamps integer over limit", function()
-      -- claude-sonnet-4-6 has max_output_tokens = 64000
+      -- claude-haiku-4-5 has max_output_tokens = 64000
       local params = { max_tokens = 100000 }
-      normalize.resolve_max_tokens("anthropic", "claude-sonnet-4-6", params)
+      normalize.resolve_max_tokens("anthropic", "claude-haiku-4-5", params)
       assert.equals(64000, params.max_tokens)
     end)
 

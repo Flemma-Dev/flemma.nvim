@@ -5,6 +5,18 @@
 return {
   default = "gemini-3.1-pro-preview",
   models = {
+    -- Gemini 3.6 Flash (released Jul 21, 2026; no retirement date announced)
+    ["gemini-3.6-flash"] = {
+      pricing = {
+        input = 1.50,
+        output = 7.50,
+        cache_read = 0.15,
+      },
+      max_input_tokens = 1048576,
+      max_output_tokens = 65536,
+      thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+    },
+
     -- Gemini 3.5 Flash
     ["gemini-3.5-flash"] = {
       pricing = {
@@ -32,6 +44,18 @@ return {
       thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
+    -- Gemini 3.5 Flash Lite (released Jul 21, 2026; retires no earlier than Jul 21, 2027)
+    ["gemini-3.5-flash-lite"] = {
+      pricing = {
+        input = 0.30,
+        output = 2.50,
+        cache_read = 0.03,
+      },
+      max_input_tokens = 1048576,
+      max_output_tokens = 65536,
+      thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+    },
+
     -- Gemini 3.1 Flash Lite
     ["gemini-3.1-flash-lite-preview"] = {
       pricing = {
@@ -54,7 +78,9 @@ return {
       thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
-    -- Gemini 3 Pro Preview
+    -- Gemini 3 Pro Preview — no longer listed on the Vertex pricing page, the
+    -- Provisioned Throughput model table, or the thinking supported-models list;
+    -- still published by models.dev. Kept until Google announces a retirement.
     ["gemini-3-pro-preview"] = {
       pricing = {
         input = 2.0,
@@ -84,7 +110,8 @@ return {
       thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
-    -- Gemini 2.5 Pro models
+    -- Gemini 2.5 models (retiring October 16, 2026) — thinkingBudget only;
+    -- passing thinkingLevel to a pre-Gemini-3 model returns an error.
     ["gemini-2.5-pro"] = {
       pricing = {
         input = 1.25,
@@ -98,7 +125,6 @@ return {
       max_thinking_budget = 32768,
     },
 
-    -- Gemini 2.5 Flash models
     ["gemini-2.5-flash"] = {
       pricing = {
         input = 0.30,
@@ -112,7 +138,6 @@ return {
       max_thinking_budget = 24576,
     },
 
-    -- Gemini 2.5 Flash Lite models
     ["gemini-2.5-flash-lite"] = {
       pricing = {
         input = 0.10,
@@ -126,44 +151,6 @@ return {
       max_thinking_budget = 24576,
     },
 
-    -- Gemini 2.0 Flash models (retiring Jun 2026, no context caching on Vertex)
-    ["gemini-2.0-flash"] = {
-      pricing = {
-        input = 0.15,
-        output = 0.60,
-        cache_read = 0.15,
-      },
-      max_input_tokens = 1048576,
-      max_output_tokens = 8192,
-    },
-    ["gemini-2.0-flash-001"] = {
-      pricing = {
-        input = 0.15,
-        output = 0.60,
-        cache_read = 0.15,
-      },
-      max_input_tokens = 1048576,
-      max_output_tokens = 8192,
-    },
-
-    -- Gemini 2.0 Flash Lite models (retiring Jun 2026, no context caching on Vertex)
-    ["gemini-2.0-flash-lite"] = {
-      pricing = {
-        input = 0.075,
-        output = 0.30,
-        cache_read = 0.075,
-      },
-      max_input_tokens = 1048576,
-      max_output_tokens = 8192,
-    },
-    ["gemini-2.0-flash-lite-001"] = {
-      pricing = {
-        input = 0.075,
-        output = 0.30,
-        cache_read = 0.075,
-      },
-      max_input_tokens = 1048576,
-      max_output_tokens = 8192,
-    },
+    -- Gemini 2.0 Flash and 2.0 Flash Lite were retired June 1, 2026.
   },
 }

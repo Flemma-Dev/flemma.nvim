@@ -112,9 +112,22 @@ describe("flemma.models", function()
       assert.are.equal("max", info.thinking_effort_map.max)
     end)
 
-    it("anthropic sonnet-4-6 maps max to high (max is Opus-only)", function()
+    it("anthropic sonnet-4-6 maps max to max", function()
+      -- `max` effort is available on every adaptive-thinking Claude model, Sonnet included;
+      -- only `xhigh` is restricted to Opus 4.7+ / Sonnet 5 / Fable 5.
       local info = registry.get_model_info("anthropic", "claude-sonnet-4-6")
-      assert.are.equal("high", info.thinking_effort_map.max)
+      assert.are.equal("max", info.thinking_effort_map.max)
+    end)
+
+    it("anthropic opus-5 maps max to max", function()
+      local info = registry.get_model_info("anthropic", "claude-opus-5")
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("max", info.thinking_effort_map.max)
+    end)
+
+    it("openai gpt-5.6 maps max to max (native support)", function()
+      local info = registry.get_model_info("openai", "gpt-5.6-sol")
+      assert.are.equal("max", info.thinking_effort_map.max)
     end)
 
     it("anthropic sonnet-4-6 maps minimal to low", function()
@@ -137,6 +150,25 @@ describe("flemma.models", function()
       local info = registry.get_model_info("vertex", "gemini-3.1-pro-preview")
       assert.is_not_nil(info.thinking_effort_map)
       assert.are.equal("MEDIUM", info.thinking_effort_map.medium)
+    end)
+
+    it("moonshot kimi-k3 clamps the canonical levels onto low/high/max", function()
+      local info = registry.get_model_info("moonshot", "kimi-k3")
+      assert.is_not_nil(info.meta)
+      assert.are.equal("effort", info.meta.thinking_mode)
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("low", info.thinking_effort_map.minimal)
+      assert.are.equal("low", info.thinking_effort_map.low)
+      assert.are.equal("high", info.thinking_effort_map.medium)
+      assert.are.equal("high", info.thinking_effort_map.high)
+      assert.are.equal("max", info.thinking_effort_map.max)
+    end)
+
+    it("moonshot thinking-toggle models have no effort map", function()
+      -- K2 toggles thinking on and off with no depth control; a map would be inert.
+      local info = registry.get_model_info("moonshot", "kimi-k2.6")
+      assert.are.equal("optional", info.meta.thinking_mode)
+      assert.is_nil(info.thinking_effort_map)
     end)
 
     it("non-thinking models have no effort map", function()
