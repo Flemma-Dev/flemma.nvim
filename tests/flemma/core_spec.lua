@@ -69,9 +69,11 @@ describe(":Flemma send command", function()
     -- With cache_retention="short" (default), system is an array with cache_control
     assert.equals(1, #captured_request_body.system)
     assert.equals("Be brief.", captured_request_body.system[1].text)
-    -- max_tokens resolves from the default "50%" of the model's max_output_tokens
-    local default_model_info = registry.get_model_info("anthropic", default_anthropic_model)
-    assert.equals(math.floor(default_model_info.max_output_tokens / 2), captured_request_body.max_tokens)
+    -- max_tokens resolves from the default "50%" of claude-sonnet-4-6's 128K max_output.
+    -- Kept as a literal on purpose: deriving it from the registry would make the
+    -- assertion agree with whatever the catalogue says, including a wrong value.
+    assert.equals("claude-sonnet-4-6", default_anthropic_model)
+    assert.equals(64000, captured_request_body.max_tokens)
     assert.is_nil(captured_request_body.temperature)
     assert.equals(true, captured_request_body.stream)
     assert.equals(1, #captured_request_body.messages)

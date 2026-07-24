@@ -1190,7 +1190,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
 
   it("includes tools array with functionDeclarations", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1213,7 +1213,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
 
   it("includes toolConfig with AUTO mode", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1231,7 +1231,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
 
   it("includes functionCall in model message", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1269,7 +1269,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
 
   it("includes functionResponse in user message", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1303,7 +1303,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
 
   it("handles tool_result with error marker", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1349,7 +1349,7 @@ describe("Vertex AI Streaming Tool Use Response", function()
 
   it("parses functionCall from streaming response", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1378,7 +1378,7 @@ describe("Vertex AI Streaming Tool Use Response", function()
 
   it("parses text content before functionCall", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1407,7 +1407,7 @@ describe("Vertex AI Streaming Tool Use Response", function()
 
   it("parses final text response after tool result", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",
@@ -1463,7 +1463,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
   end)
 
   it("streams function call into buffer", function()
-    core.switch_provider("vertex", "gemini-2.0-flash", { project_id = "test-project", location = "global" })
+    core.switch_provider("vertex", "gemini-2.5-flash", { project_id = "test-project", location = "global" })
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate 15 * 7" })
@@ -1481,7 +1481,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
   end)
 
   it("streams text before function call into buffer", function()
-    core.switch_provider("vertex", "gemini-2.0-flash", { project_id = "test-project", location = "global" })
+    core.switch_provider("vertex", "gemini-2.5-flash", { project_id = "test-project", location = "global" })
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate 23 + 45" })
@@ -1876,7 +1876,7 @@ describe("Vertex AI Request Body Validation with Tools", function()
 
   it("builds request matching expected Vertex AI structure with functionResponse", function()
     local provider = vertex.new({
-      model = "gemini-2.0-flash",
+      model = "gemini-2.5-flash",
       max_tokens = 1024,
       temperature = 0.7,
       project_id = "test-project",

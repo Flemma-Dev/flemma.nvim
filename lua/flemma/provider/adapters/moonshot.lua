@@ -21,25 +21,29 @@ setmetatable(M, { __index = openai_chat })
 
 -- Per-model thinking behaviour is declared in `lua/flemma/models/moonshot.lua`
 -- via `meta.thinking_mode`. Accepted values:
---   "forced"   — thinking is unconditionally on; request always sends
---                `thinking.type = "enabled"` and locks temperature to 1.0
---                regardless of user configuration. Previously used by the
---                kimi-k2-thinking and kimi-k2-thinking-turbo models (retired
---                May 2026). No current model uses this mode, but the codepath
---                is preserved — Moonshot may release future models that require
---                always-on thinking. To activate: set `meta.thinking_mode = "forced"`
---                on the model entry in `lua/flemma/models/moonshot.lua`.
+--   "forced"   — thinking is unconditionally on and has no depth control
+--                (kimi-k2.7-code, kimi-k2.7-code-highspeed). No `thinking` object
+--                is sent: Moonshot documents it as omittable on these models, and
+--                the only form it accepts when set explicitly is
+--                `{"type":"enabled","keep":"all"}` — sending `{"type":"enabled"}`
+--                alone is not on the accepted list, and `"disabled"` errors.
+--                Omitting is the one wire form both the parameter reference and
+--                the thinking guide agree on. Temperature is locked to 1.0.
 --   "optional" — thinking can be toggled (kimi-k2.6, kimi-k2.5); request sends
 --                `thinking.type = "enabled"|"disabled"` based on the user's
 --                resolved thinking state, with temperature locked accordingly
 --                (1.0 when enabled, 0.6 when disabled).
 --   "effort"   — thinking is always on and its depth is set through the top-level
 --                `reasoning_effort` field (kimi-k3). No `thinking` object is sent —
---                K3 rejects it — and temperature is left to the user, since nothing
---                in the K3 docs fixes it. The API value comes from the model's
+--                K3 rejects it — and temperature is locked to 1.0, which K3 fixes
+--                just as kimi-k2.7-code does. The API value comes from the model's
 --                `thinking_effort_map`, so an "effort" model must declare one.
 --   nil        — no thinking support (moonshot-v1-*); no `thinking` parameter
 --                is sent.
+--
+-- Every mode except nil locks temperature to 1.0 at some point, because Moonshot
+-- fixes it on all K2.x/K3 models; only the non-thinking value differs (0.6, and
+-- only on the toggleable models).
 
 --- Lowest `reasoning_effort` the Moonshot API accepts (`low`/`high`/`max`).
 local EFFORT_FLOOR = "low"
@@ -118,13 +122,16 @@ function M._apply_thinking(self, body, resolution)
   local mode = get_thinking_mode(model)
 
   if mode == "forced" then
-    body.thinking = { type = "enabled" }
+    -- Thinking is on server-side whatever we send, and the accepted-value list is
+    -- narrow enough that omitting the object is the only unambiguously valid form.
+    body.thinking = nil
     body.temperature = 1.0
     log.debug("moonshot._apply_thinking: Forced thinking on for " .. model .. ", temperature locked to 1.0")
     return
   end
 
   if mode == "effort" then
+    body.temperature = 1.0
     if not resolution.enabled then
       -- K3 cannot stop reasoning ("You can't — K3 always thinks"), so a disabled
       -- resolution sends the floor rather than omitting the field and silently
@@ -210,21 +217,27 @@ end
 -- ============================================================================
 
 --- Validate Moonshot-specific parameters.
---- Warns about fixed sampling parameters that the API will override on
---- thinking-toggle models (K2.6, K2.5).
+--- Warns about fixed sampling parameters that the API will override. Moonshot
+--- fixes temperature, top_p, n and both penalties across the whole K2.x/K3 line;
+--- only the legacy moonshot-v1 models (thinking mode nil) accept them freely.
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success Always true (warnings don't fail validation)
 ---@return string[]|nil warnings Human-readable warning strings, or nil when clean
 function M.validate_parameters(model_name, parameters)
-  if get_thinking_mode(model_name) ~= "optional" then
+  local mode = get_thinking_mode(model_name)
+  if mode == nil then
     return true
   end
 
   -- Determine thinking state for validation messages
   local model_info = provider_registry.get_model_info("moonshot", model_name)
   local thinking = normalize.resolve_thinking(parameters, M.metadata.capabilities, model_info)
-  local expected_temperature = thinking.enabled and 1.0 or 0.6
+  -- Only the toggleable models drop to 0.6; "forced" and "effort" models always think.
+  local expected_temperature = 1.0
+  if mode == "optional" and not thinking.enabled then
+    expected_temperature = 0.6
+  end
 
   -- Only warn about parameters the user has explicitly set to a value that
   -- conflicts with the enforced fixed value. Parameters that are nil (not set
@@ -232,7 +245,7 @@ function M.validate_parameters(model_name, parameters)
   local warnings = {}
 
   ---@param value any The flattened parameter value
-  ---@param fixed any The enforced value for thinking-toggle models
+  ---@param fixed any The enforced value for this model
   ---@param default any The Flemma schema default value
   ---@return boolean intentional True when the user has explicitly set a conflicting value
   local function is_intentional_conflict(value, fixed, default)
@@ -240,14 +253,18 @@ function M.validate_parameters(model_name, parameters)
   end
 
   if is_intentional_conflict(parameters.temperature, expected_temperature, nil) then
-    table.insert(
-      warnings,
-      string.format(
-        "temperature will be locked to %.1f (%s thinking)",
-        expected_temperature,
-        thinking.enabled and "with" or "without"
+    if mode == "optional" then
+      table.insert(
+        warnings,
+        string.format(
+          "temperature will be locked to %.1f (%s thinking)",
+          expected_temperature,
+          thinking.enabled and "with" or "without"
+        )
       )
-    )
+    else
+      table.insert(warnings, string.format("temperature will be locked to %.1f", expected_temperature))
+    end
   end
 
   if is_intentional_conflict(parameters.top_p, 0.95, 1.0) then

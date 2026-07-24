@@ -29,7 +29,7 @@ return {
       thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
-    -- Gemini 3.1 Pro Preview
+    -- Gemini 3.1 Pro Preview — thinkingLevel only (no MINIMAL, hence minimal → LOW)
     ["gemini-3.1-pro-preview"] = {
       pricing = {
         input = 2.0,
@@ -38,9 +38,6 @@ return {
       },
       max_input_tokens = 1048576,
       max_output_tokens = 65536,
-      thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
-      min_thinking_budget = 1,
-      max_thinking_budget = 32768,
       thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
@@ -89,9 +86,6 @@ return {
       },
       max_input_tokens = 1048576,
       max_output_tokens = 65536,
-      thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
-      min_thinking_budget = 1,
-      max_thinking_budget = 32768,
       thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
@@ -104,14 +98,13 @@ return {
       },
       max_input_tokens = 1048576,
       max_output_tokens = 65536,
-      thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 24576 },
-      min_thinking_budget = 1,
-      max_thinking_budget = 24576,
       thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
     },
 
     -- Gemini 2.5 models (retiring October 16, 2026) — thinkingBudget only;
-    -- passing thinkingLevel to a pre-Gemini-3 model returns an error.
+    -- passing thinkingLevel to a pre-Gemini-3 model returns an error. These are
+    -- the only entries that carry budgets: Google publishes a thinkingBudget
+    -- range for 2.5 alone, and a Gemini 3 request carrying both parameters errors.
     ["gemini-2.5-pro"] = {
       pricing = {
         input = 1.25,
@@ -121,7 +114,9 @@ return {
       max_input_tokens = 1048576,
       max_output_tokens = 65536,
       thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
-      min_thinking_budget = 1,
+      -- 2.5 Pro's floor is 128, not 1 — unlike 2.5 Flash. Thinking cannot be
+      -- turned off on this model, which is why the floor is above zero.
+      min_thinking_budget = 128,
       max_thinking_budget = 32768,
     },
 

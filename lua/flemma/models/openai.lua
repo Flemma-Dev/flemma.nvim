@@ -6,12 +6,14 @@ return {
   default = "gpt-5.4",
   models = {
     -- GPT-5.6 models — first OpenAI family with a native `max` reasoning effort
-    -- (accepted levels: none, low, medium, high, xhigh, max; no `minimal`)
+    -- (accepted levels: none, low, medium, high, xhigh, max; no `minimal`) and
+    -- the first with a billed cache-write rate (every earlier family shows "-").
     ["gpt-5.6-sol"] = {
       pricing = {
         input = 5.0,
         output = 30.0,
         cache_read = 0.50,
+        cache_write = 6.25,
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
@@ -23,6 +25,7 @@ return {
         input = 5.0,
         output = 30.0,
         cache_read = 0.50,
+        cache_write = 6.25,
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
@@ -34,6 +37,7 @@ return {
         input = 2.50,
         output = 15.0,
         cache_read = 0.25,
+        cache_write = 3.125,
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
@@ -45,6 +49,7 @@ return {
         input = 1.0,
         output = 6.0,
         cache_read = 0.10,
+        cache_write = 1.25,
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
@@ -167,13 +172,18 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
+    -- Codex-Spark is a research preview: ChatGPT Pro in the Codex surfaces, and in
+    -- the API only for a small set of design partners. It has no page on the models
+    -- index and no row on the pricing page, so the rates below mirror gpt-5.3-codex
+    -- (its parent model) rather than a published Spark price. Limits come from the
+    -- launch post's 128K context window, minus the 32K output reservation.
     ["gpt-5.3-codex-spark"] = {
       pricing = {
         input = 1.75,
         output = 14.0,
         cache_read = 0.175,
       },
-      max_input_tokens = 100000,
+      max_input_tokens = 96000,
       max_output_tokens = 32000,
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
@@ -268,13 +278,16 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
+    -- gpt-5-pro inverts the family's usual split: 272K of the 400K context is
+    -- reserved for output, leaving 128K for input (every other GPT-5 model
+    -- reserves 128K for output and allows 272K in).
     ["gpt-5-pro"] = {
       pricing = {
         input = 15.0,
         output = 120.0,
         cache_read = 15.0,
       },
-      max_input_tokens = 272000,
+      max_input_tokens = 128000,
       max_output_tokens = 272000,
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "high", low = "high", medium = "high", high = "high", max = "high" },

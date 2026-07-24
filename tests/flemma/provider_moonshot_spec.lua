@@ -233,8 +233,8 @@ describe("Moonshot Provider", function()
         assert.equals("high", request_body.reasoning_effort)
       end)
 
-      it("should leave temperature alone", function()
-        -- Unlike K2.5/K2.6, nothing in the K3 docs fixes temperature.
+      it("should lock temperature to 1.0 regardless of what the user set", function()
+        -- Moonshot fixes K3's temperature at 1.0; any other value returns an error.
         local provider = moonshot.new({
           model = "kimi-k3",
           max_tokens = 16000,
@@ -243,8 +243,8 @@ describe("Moonshot Provider", function()
         })
         local request_body = provider:build_request(make_prompt({ { type = "You", content = "Hello" } }))
 
-        assert.equals(0.3, request_body.temperature)
-        assert.is_nil(build_k3(nil).temperature, "temperature must stay unset when the user sets none")
+        assert.equals(1.0, request_body.temperature)
+        assert.equals(1.0, build_k3(nil).temperature, "the lock applies even when the user sets nothing")
       end)
 
       it("should not send reasoning_effort for thinking-toggle models", function()
@@ -258,6 +258,38 @@ describe("Moonshot Provider", function()
         assert.is_nil(request_body.reasoning_effort)
         assert.equals("enabled", request_body.thinking.type)
       end)
+    end)
+
+    describe("forced thinking for the kimi-k2.7-code family", function()
+      --- Build a k2.7-code request body with the given unified thinking value.
+      ---@param model string The k2.7-code variant to build for
+      ---@param thinking? table The `thinking` parameter table (nil = not configured)
+      ---@return table<string, any> request_body
+      local function build_k27(model, thinking)
+        local provider = moonshot.new({ model = model, max_tokens = 16000, thinking = thinking })
+        return provider:build_request(make_prompt({ { type = "You", content = "Hello" } }))
+      end
+
+      for _, model in ipairs({ "kimi-k2.7-code", "kimi-k2.7-code-highspeed" }) do
+        it("should never send a thinking object for " .. model, function()
+          -- Thinking is always on server-side. `{"type":"disabled"}` errors outright,
+          -- and the only explicitly accepted form is `{"type":"enabled","keep":"all"}`,
+          -- so omitting the object is the one form the docs agree on.
+          assert.is_nil(build_k27(model, nil).thinking)
+          assert.is_nil(build_k27(model, { level = "high", foreign = "preserve" }).thinking)
+          assert.is_nil(build_k27(model, { level = false, foreign = "preserve" }).thinking)
+        end)
+
+        it("should lock temperature to 1.0 for " .. model, function()
+          assert.equals(1.0, build_k27(model, { level = false, foreign = "preserve" }).temperature)
+          assert.equals(1.0, build_k27(model, { level = "high", foreign = "preserve" }).temperature)
+        end)
+
+        it("should not send reasoning_effort for " .. model, function()
+          -- reasoning_effort is K3-only; K2.x rejects it.
+          assert.is_nil(build_k27(model, { level = "max", foreign = "preserve" }).reasoning_effort)
+        end)
+      end
     end)
 
     describe("no thinking for moonshot-v1 models", function()
@@ -317,11 +349,22 @@ describe("Moonshot Provider", function()
       assert.is_nil(warnings)
     end)
 
-    it("should return no warnings for kimi-k3", function()
-      -- K3 locks nothing: temperature and friends reach the API as the user set them.
+    it("should warn about fixed sampling parameters on kimi-k3", function()
+      -- Moonshot fixes temperature (1.0), top_p (0.95), n and both penalties on K3
+      -- exactly as it does on the K2 line; passing anything else returns an error.
       local ok, warnings = moonshot.validate_parameters("kimi-k3", { temperature = 0.3, top_p = 0.5 })
       assert.is_true(ok)
-      assert.is_nil(warnings)
+      assert.is_not_nil(warnings)
+      assert.equals(2, #warnings)
+      assert.matches("temperature will be locked to 1.0", warnings[1])
+      assert.matches("top_p will be fixed to 0.95", warnings[2])
+    end)
+
+    it("should warn about fixed sampling parameters on kimi-k2.7-code", function()
+      local ok, warnings = moonshot.validate_parameters("kimi-k2.7-code", { temperature = 0.3 })
+      assert.is_true(ok)
+      assert.is_not_nil(warnings)
+      assert.matches("temperature will be locked to 1.0", warnings[1])
     end)
 
     it("should return warnings for explicitly conflicting kimi-k2.5 parameters", function()

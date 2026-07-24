@@ -44,6 +44,56 @@ describe("flemma.models", function()
       assert.are.equal(24576, info.max_thinking_budget)
     end)
 
+    it("vertex 2.5 pro has a thinking budget floor of 128, not 1", function()
+      -- Google's thinking_budget table gives 2.5 Pro a minimum of 128 where 2.5
+      -- Flash allows 1 — thinking cannot be turned off on Pro at all.
+      local pro = registry.get_model_info("vertex", "gemini-2.5-pro")
+      assert.are.equal(128, pro.min_thinking_budget)
+      assert.are.equal(32768, pro.max_thinking_budget)
+      assert.are.equal(1, registry.get_model_info("vertex", "gemini-2.5-flash").min_thinking_budget)
+    end)
+
+    it("vertex gemini 3 models carry no thinking budgets", function()
+      -- Gemini 3 is thinkingLevel-only; Google publishes a thinkingBudget range for
+      -- 2.5 alone, and a Gemini 3 request carrying both parameters returns an error.
+      for _, model in ipairs({ "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-3-flash-preview" }) do
+        local info = registry.get_model_info("vertex", model)
+        assert.is_not_nil(info.thinking_effort_map, model .. " should map effort levels")
+        assert.is_nil(info.thinking_budgets, model .. " should not declare thinking_budgets")
+        assert.is_nil(info.min_thinking_budget, model .. " should not declare a budget floor")
+        assert.is_nil(info.max_thinking_budget, model .. " should not declare a budget ceiling")
+      end
+    end)
+
+    it("gpt-5.6 models carry the family's cache-write price", function()
+      -- GPT-5.6 is the first OpenAI family to bill cache writes; earlier families
+      -- show "-" on the pricing page and correctly omit the field.
+      assert.are.equal(6.25, registry.get_model_info("openai", "gpt-5.6-sol").pricing.cache_write)
+      assert.are.equal(6.25, registry.get_model_info("openai", "gpt-5.6").pricing.cache_write)
+      assert.are.equal(3.125, registry.get_model_info("openai", "gpt-5.6-terra").pricing.cache_write)
+      assert.are.equal(1.25, registry.get_model_info("openai", "gpt-5.6-luna").pricing.cache_write)
+      assert.is_nil(registry.get_model_info("openai", "gpt-5.5").pricing.cache_write)
+    end)
+
+    it("gpt-5-pro reserves its 400K context for output, not input", function()
+      -- 272K of gpt-5-pro's 400K window is max output, leaving 128K for input —
+      -- the inverse of every other GPT-5 model, which reserves 128K for output.
+      local pro = registry.get_model_info("openai", "gpt-5-pro")
+      assert.are.equal(128000, pro.max_input_tokens)
+      assert.are.equal(272000, pro.max_output_tokens)
+      assert.are.equal(272000, registry.get_model_info("openai", "gpt-5").max_input_tokens)
+      assert.are.equal(128000, registry.get_model_info("openai", "gpt-5").max_output_tokens)
+    end)
+
+    it("moonshot k2.7-code forces thinking rather than toggling it", function()
+      -- Thinking cannot be disabled on the k2.7-code family: `{"type":"disabled"}`
+      -- returns an error, unlike k2.6/k2.5 where it is a supported value.
+      for _, model in ipairs({ "kimi-k2.7-code", "kimi-k2.7-code-highspeed" }) do
+        assert.are.equal("forced", registry.get_model_info("moonshot", model).meta.thinking_mode)
+      end
+      assert.are.equal("optional", registry.get_model_info("moonshot", "kimi-k2.6").meta.thinking_mode)
+    end)
+
     it("anthropic models have min_cache_tokens", function()
       local info = registry.get_model_info("anthropic", "claude-haiku-4-5")
       assert.is_not_nil(info)
