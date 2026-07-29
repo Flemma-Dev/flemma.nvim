@@ -10,6 +10,11 @@ local M = {}
 ---@class flemma.utilities.modeline.ParseOpts
 ---@field preserve_nil? boolean Store vim.NIL for keyword nil values instead of dropping the key
 
+---The single definition of what a key=value token looks like: identifier key
+---(word characters and underscores), '=', raw value. Shared by the token
+---parser and the matrix grammar so the key charset cannot drift.
+local KEY_VALUE_PATTERN = "^([%w_]+)=(.*)$"
+
 ---Coerce a raw string value to its natural Lua type
 ---@param raw string
 ---@return boolean|number|string|nil
@@ -82,15 +87,16 @@ local function try_unquote(raw)
   return raw, false
 end
 
----Split a raw value on commas outside any quoted region
+---Split a raw value on a delimiter outside any quoted region
 ---@param raw string
----@return string[]|nil items List of raw items, or nil if no unquoted commas exist
-local function split_on_commas(raw)
+---@param delimiter string Single-character delimiter (e.g. ";", ",")
+---@return string[]|nil items List of raw items, or nil if no unquoted delimiter exists
+local function split_on(raw, delimiter)
   local items = {}
   local start = 1
   local in_quotes = false
   local quote_char = nil
-  local found_comma = false
+  local found_delimiter = false
   local i = 1
   local len = #raw
 
@@ -115,8 +121,8 @@ local function split_on_commas(raw)
         in_quotes = true
         quote_char = ch
         i = i + 1
-      elseif ch == "," then
-        found_comma = true
+      elseif ch == delimiter then
+        found_delimiter = true
         items[#items + 1] = raw:sub(start, i - 1)
         start = i + 1
         i = i + 1
@@ -126,7 +132,7 @@ local function split_on_commas(raw)
     end
   end
 
-  if not found_comma then
+  if not found_delimiter then
     return nil
   end
 
@@ -143,7 +149,7 @@ local function resolve_value(raw)
     return unquoted
   end
 
-  local items = split_on_commas(raw)
+  local items = split_on(raw, ",")
   if items then
     local result = {}
     for i, item in ipairs(items) do
@@ -225,7 +231,7 @@ local function parse_tokens(tokens, opts)
   local positional_index = 0
 
   for _, token in ipairs(tokens) do
-    local key, raw = token:match("^([%w_]+)=(.*)$")
+    local key, raw = token:match(KEY_VALUE_PATTERN)
     if key then
       local value = resolve_value(raw)
       if value == nil and preserve_nil then
@@ -271,6 +277,49 @@ function M.parse(line, opts)
 
   local tokens = scan(line)
   return parse_tokens(tokens, opts)
+end
+
+---Split a raw value on a single-character delimiter, respecting quoted regions.
+---@param raw string
+---@param delimiter string Single-character delimiter (e.g. ";", ",")
+---@return string[]|nil items List of raw segments, or nil if no unquoted delimiter exists
+function M.split_on(raw, delimiter)
+  return split_on(raw, delimiter)
+end
+
+---Parse a "primary;key=value;key=value" matrix-parameter string (RFC 3986 §3.3 style).
+---The primary is the first ';'-segment; the remaining segments run through the
+---token grammar (parse_args), so quoting, coercion, comma lists, last-wins
+---repeated keys, and preserve_nil are all inherited rather than re-implemented.
+---Segments that do not parse as key=value are returned verbatim in `extras`
+---for the caller to surface or ignore — they never become parameters.
+---@param value string|any Non-string values pass through as the primary, untouched
+---@param opts? flemma.utilities.modeline.ParseOpts
+---@return string|any primary
+---@return table<string, boolean|number|string|table> params
+---@return string[] extras Raw segments after the primary that are not key=value pairs
+function M.parse_matrix(value, opts)
+  if type(value) ~= "string" or value == "" then
+    return value, {}, {}
+  end
+  local segments = split_on(value, ";")
+  if not segments then
+    return value, {}, {}
+  end
+  local parsed = M.parse_args(segments, 2, opts)
+  local params = {}
+  for key, parameter_value in pairs(parsed) do
+    if type(key) == "string" then
+      params[key] = parameter_value
+    end
+  end
+  local extras = {}
+  for i = 2, #segments do
+    if segments[i] ~= "" and not segments[i]:match(KEY_VALUE_PATTERN) then
+      extras[#extras + 1] = segments[i]
+    end
+  end
+  return segments[1], params, extras
 end
 
 return M

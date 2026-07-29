@@ -642,9 +642,9 @@ function M.execute(bufnr, context)
       end
       local placeholder_text
       if is_tool_available("flemma.jobs.status", bufnr) then
-        placeholder_text = messages.render("job-executing--tracked", { job_id = existing_entry.job_id })
+        placeholder_text = messages["job.executing.tracked"]{ job_id = existing_entry.job_id }
       else
-        placeholder_text = messages.render("job-executing--untracked")
+        placeholder_text = messages["job.executing.untracked"]{}
       end
       local readopt_config = config_facade.materialize(bufnr)
       local fence_ok, fence_err = injector.set_fence_content(
@@ -759,9 +759,9 @@ function M.execute(bufnr, context)
     end
     local placeholder_text
     if job_status_tool_available then
-      placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
+      placeholder_text = messages["job.executing.tracked"]{ job_id = job_id }
     else
-      placeholder_text = messages.render("job-executing--untracked")
+      placeholder_text = messages["job.executing.untracked"]{}
     end
     local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text, { compact = exec_compact })
     if not f_ok then
@@ -896,7 +896,7 @@ function M.cancel(tool_id)
 
       handle_completion(bufnr, tool_id, {
         success = false,
-        error = messages.render("tool-aborted"),
+        error = messages["tool.aborted"]{},
       }, { async = false })
       return true
     end
@@ -1031,9 +1031,9 @@ function M.background_at_cursor(bufnr)
 
   local job_placeholder_text
   if is_tool_available("flemma.jobs.status", bufnr) then
-    job_placeholder_text = messages.render("job-executing--tracked", { job_id = job_id })
+    job_placeholder_text = messages["job.executing.tracked"]{ job_id = job_id }
   else
-    job_placeholder_text = messages.render("job-executing--untracked")
+    job_placeholder_text = messages["job.executing.untracked"]{}
   end
   local bg_config = config_facade.materialize(bufnr)
   local content_ok, content_err = injector.set_fence_content(
@@ -1132,7 +1132,7 @@ function M.resolve_orphaned_jobs(bufnr)
     injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
     injector.append_job_result(bufnr, orphan.job_id, {
       success = false,
-      error = messages.render("job-lost"),
+      error = messages["job.lost"]{},
     }, orphan_compact_opts)
   end
 

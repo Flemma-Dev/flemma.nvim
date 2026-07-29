@@ -1,5 +1,6 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
+local messages = require("flemma.messages")
 local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
 local state = require("flemma.state")
@@ -196,7 +197,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           table.insert(diagnostics, {
             type = "tool_result",
             severity = "warning",
-            error = "Unclosed fenced code block in tool result (missing closing fence)",
+            error = messages["ui.parse.tool_result_unclosed_fence"]{},
             position = { start_line = result_start_line },
           })
           -- Skip to end of message (next @Role: marker) to avoid parsing garbage
@@ -210,7 +211,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           table.insert(diagnostics, {
             type = "tool_result",
             severity = "warning",
-            error = "Tool result requires a fenced code block",
+            error = messages["ui.parse.tool_result_no_fence"]{},
             position = { start_line = result_start_line },
           })
           -- Skip to next line and continue
@@ -306,7 +307,11 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
       local thinking_content_lines = {}
       i = i + 1
 
-      -- Collect thinking content until closing tag
+      -- Collect thinking content until the closing tag. Only a bare
+      -- `</thinking>` line closes the block: the token with trailing content on
+      -- the same line is thinking prose (HTML/XML examples, format
+      -- transcripts), never a close.
+      local closed = false
       while i <= #lines do
         if lines[i]:match("^</thinking>$") then
           local thinking_end_line = base_line_num + i - 1
@@ -318,12 +323,23 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
               end_line = thinking_end_line,
             }, { signature = signature, redacted = redacted or nil })
           )
+          closed = true
           i = i + 1
           break
-        else
-          table.insert(thinking_content_lines, lines[i])
-          i = i + 1
         end
+        table.insert(thinking_content_lines, lines[i])
+        i = i + 1
+      end
+      -- Unterminated block: keep the collected lines as thinking to the end of
+      -- the message — buffer content must never drop out of the AST.
+      if not closed then
+        table.insert(
+          segments,
+          ast.thinking(table.concat(thinking_content_lines, "\n"), {
+            start_line = thinking_start_line,
+            end_line = base_line_num + #lines - 1,
+          }, { signature = signature, redacted = redacted or nil })
+        )
       end
     elseif line:match(TOOL_USE_PATTERN) then
       flush_accum()
@@ -347,7 +363,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
           table.insert(diagnostics, {
             type = "tool_use",
             severity = "warning",
-            error = "Failed to parse tool input: " .. parse_err,
+            error = messages["ui.parse.tool_input_failed"]{ detail = parse_err },
             position = { start_line = tool_start_line },
           })
           -- Fenced block delimiters parsed fine, only the content was malformed — skip to closing fence
@@ -367,7 +383,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         table.insert(diagnostics, {
           type = "tool_use",
           severity = "warning",
-          error = "Unclosed fenced code block in tool use (missing closing fence)",
+          error = messages["ui.parse.tool_use_unclosed_fence"]{},
           position = { start_line = tool_start_line },
         })
         -- Skip to end of message
@@ -381,7 +397,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         table.insert(diagnostics, {
           type = "tool_use",
           severity = "warning",
-          error = "Tool use requires a fenced code block with JSON input",
+          error = messages["ui.parse.tool_use_no_fence"]{},
           position = { start_line = tool_start_line },
         })
         i = block_start
@@ -539,14 +555,14 @@ end
 ---@return flemma.ast.MessageNode[] messages
 ---@return flemma.ast.Diagnostic[] errors
 local function parse_messages(lines, line_offset)
-  local messages = {}
+  local message_nodes = {}
   local errors = {}
   local i = 1
 
   while i <= #lines do
     local msg, last, diagnostics = parse_message(lines, i, line_offset, {})
     if msg then
-      table.insert(messages, msg)
+      table.insert(message_nodes, msg)
       for _, diag in ipairs(diagnostics) do
         table.insert(errors, diag)
       end
@@ -556,7 +572,7 @@ local function parse_messages(lines, line_offset)
     end
   end
 
-  return messages, errors
+  return message_nodes, errors
 end
 
 ---@param lines string[]|nil
@@ -566,8 +582,8 @@ function M.parse_lines(lines)
   local fm, _, body, body_start = parse_frontmatter(lines)
   local content_lines = body or lines
   local line_offset = body and (body_start - 1) or 0
-  local messages, errors = parse_messages(content_lines, line_offset)
-  local doc = ast.document(fm, messages, errors, { start_line = 1, end_line = #lines })
+  local message_nodes, errors = parse_messages(content_lines, line_offset)
+  local doc = ast.document(fm, message_nodes, errors, { start_line = 1, end_line = #lines })
   return doc
 end
 
@@ -700,9 +716,9 @@ function M.create_ast_snapshot_before_send(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
 
   -- Shallow-copy arrays so the snapshot is independent of the cached doc
-  local messages = {}
+  local message_nodes = {}
   for i, msg in ipairs(doc.messages) do
-    messages[i] = msg
+    message_nodes[i] = msg
   end
   local errors = {}
   for i, err in ipairs(doc.errors) do
@@ -711,7 +727,7 @@ function M.create_ast_snapshot_before_send(bufnr)
 
   buffer_state.ast_snapshot_before_send = {
     frontmatter = doc.frontmatter,
-    messages = messages,
+    messages = message_nodes,
     errors = errors,
     resume_line = doc.position.end_line + 1,
   }

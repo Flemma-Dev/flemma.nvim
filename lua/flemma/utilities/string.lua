@@ -3,6 +3,8 @@
 ---@class flemma.utilities.String
 local M = {}
 
+local messages = require("flemma.messages")
+
 --- Token counts below this threshold are shown as full comma-separated numbers;
 --- at or above it they collapse to a compact K suffix.
 local TOKEN_COMPACT_THRESHOLD = 4000
@@ -124,7 +126,10 @@ end
 ---@param pricing { input: number, output: number }
 ---@return string
 function M.format_pricing_suffix(pricing)
-  return M.format_money(pricing.input) .. " input / " .. M.format_money(pricing.output) .. " output per MTok"
+  return messages["ui.usage.pricing_suffix"]{
+    input_rate = M.format_money(pricing.input),
+    output_rate = M.format_money(pricing.output),
+  }
 end
 
 ---Build the single-line estimate string shown by `:Flemma usage:estimate`.
@@ -137,16 +142,15 @@ end
 ---@return string
 function M.format_estimate(input_tokens, model, pricing)
   if not pricing then
-    return M.format_number(input_tokens) .. " input tokens · " .. model
+    return messages["ui.usage.estimate_tokens_only"]{ count = M.format_number(input_tokens), model = model }
   end
   local cost = input_tokens * pricing.input / 1000000
-  return string.format(
-    "%s input tokens · %s · %s (%s)",
-    M.format_number(input_tokens),
-    M.format_money(cost),
-    model,
-    M.format_pricing_suffix(pricing)
-  )
+  return messages["ui.usage.estimate_with_cost"]{
+    count = M.format_number(input_tokens),
+    cost = M.format_money(cost),
+    model = model,
+    pricing = M.format_pricing_suffix(pricing),
+  }
 end
 
 ---Format a byte size for human-readable display using binary divisors.
@@ -275,6 +279,32 @@ end
 ---@return string
 function M.escape_pattern(str)
   return (str:gsub("([%.%+%-%^%$%(%)%%'%[%]])", "%%%1"))
+end
+
+---Split a "provider/model" or "provider model" shorthand into its parts.
+---Returns `(model, provider)` when a separator is found, or `(value, nil)`
+---when the input contains no separator.
+---@param value string
+---@return string model
+---@return string|nil provider
+function M.split_provider_model(value)
+  local slash_pos = value:find("/", 1, true)
+  local space_pos = value:find(" ", 1, true)
+  local split_pos
+  if slash_pos and space_pos then
+    split_pos = math.min(slash_pos, space_pos)
+  else
+    split_pos = slash_pos or space_pos
+  end
+  if not split_pos then
+    return value, nil
+  end
+  local left = value:sub(1, split_pos - 1)
+  local right = value:sub(split_pos + 1)
+  if #left == 0 or #right == 0 then
+    return value, nil
+  end
+  return right, left
 end
 
 return M

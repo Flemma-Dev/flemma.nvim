@@ -511,7 +511,7 @@ describe("Anthropic Provider", function()
       assert.is_nil(req.temperature)
     end)
 
-    it("should clamp 'max' effort to 'high' on sonnet-4-6", function()
+    it("should pass 'max' effort through on sonnet-4-6", function()
       local p = anthropic.new({
         model = "claude-sonnet-4-6",
         max_tokens = 4000,
@@ -523,7 +523,23 @@ describe("Anthropic Provider", function()
       local req = p:build_request(prompt)
 
       assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
-      assert.are.same({ effort = "high" }, req.output_config)
+      assert.are.same({ effort = "max" }, req.output_config)
+    end)
+
+    it("should clamp 'minimal' effort to 'low' on sonnet-4-6", function()
+      -- Anthropic has no `minimal` effort level; the model's map raises it to `low`.
+      local p = anthropic.new({
+        model = "claude-sonnet-4-6",
+        max_tokens = 4000,
+        thinking = { level = "minimal", foreign = "preserve" },
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "low" }, req.output_config)
     end)
 
     it("should clamp budget_tokens when budget >= max_tokens", function()

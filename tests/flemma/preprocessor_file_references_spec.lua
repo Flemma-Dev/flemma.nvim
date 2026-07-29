@@ -132,6 +132,98 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     assert.is_true(has_trailing)
   end)
 
+  it("parses multi-key options and consumes type=", function()
+    local doc = run_rewriter("@./file.pdf;type=application/pdf;detail=high")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
+    assert.truthy(segs[1].code:match("application/pdf"))
+    -- detail= parses uniformly but has no include() mapping yet
+    assert.is_nil(segs[1].code:match("detail"))
+  end)
+
+  it("keeps trailing punctuation out of the last option value", function()
+    local doc = run_rewriter("See @./file.pdf;type=application/pdf;detail=high.")
+    local has_expression, has_trailing = false, false
+    for _, seg in ipairs(doc.messages[1].segments) do
+      if seg.kind == "expression" then
+        has_expression = true
+        assert.truthy(seg.code:match("application/pdf"))
+      end
+      if seg.kind == "text" and seg.value == "." then
+        has_trailing = true
+      end
+    end
+    assert.is_true(has_expression)
+    assert.is_true(has_trailing)
+  end)
+
+  it("treats unknown single options as binary references", function()
+    local doc = run_rewriter("@./file.bin;x=1")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
+    assert.is_nil(segs[1].code:match("MIME"))
+  end)
+
+  it("re-emits a bare trailing semicolon as prose", function()
+    local doc = run_rewriter("See @./notes.txt; and reply")
+    local has_expression, has_semicolon = false, false
+    for _, seg in ipairs(doc.messages[1].segments) do
+      if seg.kind == "expression" then
+        has_expression = true
+        assert.is_nil(seg.code:find(";", 1, true))
+      end
+      if seg.kind == "text" and seg.value:find(";", 1, true) then
+        has_semicolon = true
+      end
+    end
+    assert.is_true(has_expression)
+    assert.is_true(has_semicolon)
+  end)
+
+  it("keeps a quoted parameterized MIME type intact", function()
+    local doc = run_rewriter("@./data.txt;type='text/plain;charset=utf-8'")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:find("[symbols.MIME] = 'text/plain;charset=utf-8'", 1, true))
+  end)
+
+  it("keeps punctuation inside a quoted option value while stripping prose", function()
+    local doc = run_rewriter("Read @./f.bin;type='text/x.'!")
+    local has_expression, has_trailing = false, false
+    for _, seg in ipairs(doc.messages[1].segments) do
+      if seg.kind == "expression" then
+        has_expression = true
+        assert.truthy(seg.code:find("[symbols.MIME] = 'text/x.'", 1, true))
+      end
+      if seg.kind == "text" and seg.value == "!" then
+        has_trailing = true
+      end
+    end
+    assert.is_true(has_expression)
+    assert.is_true(has_trailing)
+  end)
+
+  it("stringifies scalar non-string type values", function()
+    local doc = run_rewriter("@./blob;type=123")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.truthy(segs[1].code:find("[symbols.MIME] = '123'", 1, true))
+  end)
+
+  it("truncates an unquoted parameterized MIME at the next option boundary", function()
+    -- ';' belongs to the matrix grammar: an unquoted MIME parameter parses as
+    -- a separate (ignored) option. Quote the value to keep it whole.
+    local doc = run_rewriter("@./data.txt;type=text/plain;charset=utf-8")
+    local segs = doc.messages[1].segments
+    assert.truthy(segs[1].code:find("[symbols.MIME] = 'text/plain'", 1, true))
+    assert.is_nil(segs[1].code:find("charset", 1, true))
+  end)
+
   it("multiple file references on one line", function()
     local doc = run_rewriter("@./a.txt and @./b.txt")
     local kinds = segment_kinds(doc)

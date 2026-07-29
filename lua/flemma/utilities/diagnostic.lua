@@ -2,6 +2,7 @@
 ---@class flemma.utilities.Diagnostic
 local M = {}
 
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 
 local ICON_ERROR = "⊘"
@@ -51,7 +52,7 @@ end
 ---@param d flemma.ast.Diagnostic
 ---@return string
 function M.format_message(d)
-  local message = d.error or "unknown error"
+  local message = d.error or messages["ui.diagnostics.unknown_error"]{}
 
   -- File diagnostics: the filename IS the context, no type prefix needed
   if d.type == "file" then
@@ -83,7 +84,7 @@ function M.format_location(d)
   end
 
   if d.message_role then
-    table.insert(parts, "in @" .. d.message_role)
+    table.insert(parts, messages["ui.diagnostics.in_role"]{ role = d.message_role })
   end
 
   if d.rewriter_name then

@@ -7,6 +7,7 @@ local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local schema_definition = require("flemma.config.schema")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local core = require("flemma.core")
 local bridge = require("flemma.bridge")
@@ -123,19 +124,19 @@ M.setup = function(user_opts)
   -- Coerce transforms re-run with populated ctx (preset expansion, etc.).
   local failures, validation_failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
   if #validation_failures > 0 then
-    local messages = {}
+    local validation_errors = {}
     for _, failure in ipairs(validation_failures) do
       local d = diagnostic_format.from_validation_failure(failure)
-      table.insert(messages, d.error)
+      table.insert(validation_errors, d.error)
     end
-    notify.error(table.concat(messages, "; "))
+    notify.error(table.concat(validation_errors, "; "))
   end
   if failures then
     local paths = {}
     for _, f in ipairs(failures) do
       table.insert(paths, f.path)
     end
-    notify.warn("unknown config keys: " .. table.concat(paths, ", "))
+    notify.warn(messages["ui.config.unknown_keys"]{ keys = table.concat(paths, ", ") })
   end
 
   -- Re-materialize with complete config: DISCOVER defaults, deferred user
@@ -157,24 +158,31 @@ M.setup = function(user_opts)
     notify.error(preset_error)
     return
   end
+  ---@type table<string, any>
+  local boot_params = {}
   if resolved_preset then
-    -- Write resolved preset values to the SETUP layer.
+    -- Write resolved preset values to the SETUP layer. route_parameters writes
+    -- a provider-bearing preset's config-shaped parameters structurally and
+    -- returns a provider-less preset's flat parameters for the explicit channel.
     local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
     w.provider = resolved_preset.provider
     w.model = resolved_preset.model
+    boot_params = presets.route_parameters(resolved_preset, w)
     config.provider = resolved_preset.provider
     config.model = resolved_preset.model
   end
 
   -- Initialize provider based on the resolved config. Pass SETUP layer so the
   -- validated provider/model go to the same layer as user opts (not RUNTIME).
-  -- Only pass the preset's extra parameters as explicit overrides — the user's
-  -- setup parameters are already in L20 from config_facade.apply() above.
+  -- boot_params carries a provider-less preset's flat parameters (they scope
+  -- under the resolved provider); a provider-bearing preset's were already
+  -- written structurally above, and the user's setup parameters are already in
+  -- L20 from config_facade.apply() above.
   if resolved_preset then
     core.initialize_provider(
       resolved_preset.provider or config.provider --[[@as string]],
       resolved_preset.model or config.model,
-      resolved_preset.parameters or {},
+      boot_params,
       config_facade.LAYERS.SETUP
     )
   else
@@ -291,10 +299,7 @@ M.setup = function(user_opts)
           local ok, err = sandbox.validate_backend()
           if not ok then
             if backend_mode == "required" then
-              notify.warn(
-                "Tool execution is not sandboxed -- no compatible backend found. "
-                  .. "Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable."
-              )
+              notify.warn(messages["ui.sandbox.no_backend"]{})
             else
               -- "auto" mode: log quietly, don't bother the user
               log.warn("Sandbox: no compatible backend found, running unsandboxed. " .. (err or ""))

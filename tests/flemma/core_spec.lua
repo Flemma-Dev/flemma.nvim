@@ -69,8 +69,11 @@ describe(":Flemma send command", function()
     -- With cache_retention="short" (default), system is an array with cache_control
     assert.equals(1, #captured_request_body.system)
     assert.equals("Be brief.", captured_request_body.system[1].text)
-    -- max_tokens resolves from "50%" of claude-sonnet-4-6's 64K max_output → 32000
-    assert.equals(32000, captured_request_body.max_tokens)
+    -- max_tokens resolves from the default "50%" of claude-sonnet-4-6's 128K max_output.
+    -- Kept as a literal on purpose: deriving it from the registry would make the
+    -- assertion agree with whatever the catalogue says, including a wrong value.
+    assert.equals("claude-sonnet-4-6", default_anthropic_model)
+    assert.equals(64000, captured_request_body.max_tokens)
     assert.is_nil(captured_request_body.temperature)
     assert.equals(true, captured_request_body.stream)
     assert.equals(1, #captured_request_body.messages)
@@ -600,6 +603,87 @@ describe(":Flemma send command", function()
       end
     end
     assert.is_true(saw_fallback, "Should show model fallback as bullet in switch notification")
+  end)
+
+  it("switch_provider peels matrix parameters off the model string", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1234", {}, {})
+    local resolved = require("flemma.config").materialize()
+    assert.equals("anthropic", resolved.provider)
+    assert.is_nil(resolved.model:find(";", 1, true))
+    assert.equals(1234, resolved.parameters.anthropic.thinking_budget)
+  end)
+
+  it("space-separated key=value overrides a matrix parameter of the same name", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1111", { thinking_budget = 2222 }, {})
+    assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
+  it("routes general-schema matrix keys provider-specific on the switch surface", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;max_tokens=1234", {}, {})
+    local resolved = require("flemma.config").materialize()
+    assert.equals(1234, resolved.parameters.anthropic.max_tokens)
+    assert.is_not.equals(1234, resolved.parameters.max_tokens)
+  end)
+
+  it("resolves the same string identically through flemma.opt.model and :Flemma switch", function()
+    local config = require("flemma.config")
+    local paste = "anthropic/claude-haiku-4-5;thinking_budget=4321"
+
+    config.writer(nil, config.LAYERS.RUNTIME).model = paste
+    local via_config = config.materialize()
+    local config_triple = { via_config.provider, via_config.model, via_config.parameters.anthropic.thinking_budget }
+
+    vim.cmd("Flemma switch " .. paste)
+    local via_switch = config.materialize()
+    assert.are.same(
+      config_triple,
+      { via_switch.provider, via_switch.model, via_switch.parameters.anthropic.thinking_budget }
+    )
+    assert.are.same({ "anthropic", "claude-haiku-4-5", 4321 }, config_triple)
+  end)
+
+  it("clears a parameter via matrix key=nil", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=1234", {}, {})
+    assert.equals(1234, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+    core.switch_provider("anthropic", "claude-haiku-4-5;thinking_budget=nil", {}, {})
+    assert.is_nil(require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
+  it("peels matrix parameters glued to the provider argument", function()
+    core.switch_provider("anthropic;thinking_budget=77", nil, {}, {})
+    local resolved = require("flemma.config").materialize()
+    assert.equals("anthropic", resolved.provider)
+    assert.equals(77, resolved.parameters.anthropic.thinking_budget)
+  end)
+
+  it("a CLI space override deterministically beats a preset matrix parameter", function()
+    require("flemma.presets").setup({ ["$budget"] = "anthropic/claude-haiku-4-5;thinking_budget=1111" })
+    vim.cmd("Flemma switch $budget thinking_budget=2222")
+    assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
+  it("a CLI matrix override beats a preset space parameter", function()
+    require("flemma.presets").setup({ ["$budget2"] = "anthropic claude-haiku-4-5 thinking_budget=1111" })
+    vim.cmd("Flemma switch $budget2 claude-haiku-4-5;thinking_budget=2222")
+    assert.equals(2222, require("flemma.config").materialize().parameters.anthropic.thinking_budget)
+  end)
+
+  it("warns about ignored non-option matrix segments", function()
+    core.switch_provider("anthropic", "claude-haiku-4-5;api-key=1", {}, {})
+
+    vim.wait(50, function()
+      return #captured > 0
+    end, 10, false)
+    flush_schedule()
+
+    local saw_warning = false
+    for _, n in ipairs(captured) do
+      if n.message:find("api-key=1", 1, true) then
+        saw_warning = true
+        break
+      end
+    end
+    assert.is_true(saw_warning, "Should surface the ignored segment in the switch notification")
   end)
 
   it("initialize_provider emits deferred warning", function()

@@ -20,6 +20,7 @@ local M = {}
 
 local bridge = require("flemma.bridge")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local store = require("flemma.config.store")
 
@@ -199,11 +200,11 @@ function M.apply(layer, bufnr, path, items)
     for _, ref in ipairs(unresolved) do
       table.insert(merged_set, ref)
       local suggestion = bridge.closest_match_preset(ref)
-      local message = ("Unknown preset '%s'"):format(ref)
       if suggestion then
-        message = message .. (" — did you mean '%s'?"):format(suggestion)
+        notify.warn(messages["ui.provider.unknown_preset_suggestion"]{ preset = ref, suggestion = suggestion })
+      else
+        notify.warn(messages["ui.provider.unknown_preset"]{ preset = ref })
       end
-      notify.warn(message)
     end
     if from_refs.set_items then
       vim.list_extend(merged_set, from_refs.set_items)

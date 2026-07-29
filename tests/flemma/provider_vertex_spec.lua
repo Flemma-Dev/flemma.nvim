@@ -464,6 +464,171 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
+  describe("thoughtSignature in build_request", function()
+    -- Gemini 3+ rejects requests (HTTP 400) when the first functionCall part of
+    -- a model turn lacks a thoughtSignature. Conversations migrated from another
+    -- provider carry foreign (or no) signatures, so Flemma must send Google's
+    -- documented placeholder for migrated traces.
+    local PLACEHOLDER = "context_engineering_is_the_way_to_go"
+
+    ---@param model string
+    ---@return flemma.provider.Vertex
+    local function make_provider(model)
+      return vertex.new({
+        model = model,
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = { level = "high", foreign = "preserve" },
+      })
+    end
+
+    --- Conversation authored by another provider (Anthropic signatures): two
+    --- parallel tool calls in the first model turn, one more in the second.
+    ---@return flemma.provider.Prompt
+    local function foreign_tool_call_prompt()
+      return {
+        history = {
+          {
+            role = "user",
+            parts = { { kind = "text", text = "Search the docs" } },
+          },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "thinking", content = "Let me search.", signature = { provider = "anthropic", value = "sigA" } },
+              { kind = "text", text = "Searching now." },
+              { kind = "tool_use", name = "search", id = "toolu_01", input = { query = "onboarding" } },
+              { kind = "tool_use", name = "search", id = "toolu_02", input = { query = "invoicing" } },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              {
+                kind = "tool_result",
+                tool_use_id = "toolu_01",
+                name = "search",
+                is_error = false,
+                parts = { { kind = "text", text = "one" } },
+              },
+              {
+                kind = "tool_result",
+                tool_use_id = "toolu_02",
+                name = "search",
+                is_error = false,
+                parts = { { kind = "text", text = "two" } },
+              },
+            },
+          },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "thinking", content = "Fetch next.", signature = { provider = "anthropic", value = "sigB" } },
+              { kind = "tool_use", name = "fetch", id = "toolu_03", input = { id = "doc-1" } },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              {
+                kind = "tool_result",
+                tool_use_id = "toolu_03",
+                name = "fetch",
+                is_error = false,
+                parts = { { kind = "text", text = "three" } },
+              },
+            },
+          },
+        },
+        system = nil,
+        pending_tool_calls = {},
+        bufnr = 0,
+      }
+    end
+
+    --- Collect the functionCall parts of each model turn, in order.
+    ---@param req table<string, any>
+    ---@return table[][] function_calls_per_model_turn
+    local function collect_function_calls(req)
+      local turns = {}
+      for _, content in ipairs(req.contents) do
+        if content.role == "model" then
+          local calls = {}
+          for _, part in ipairs(content.parts) do
+            if part.functionCall then
+              table.insert(calls, part)
+            end
+          end
+          if #calls > 0 then
+            table.insert(turns, calls)
+          end
+        end
+      end
+      return turns
+    end
+
+    it("attaches the migrated-trace placeholder on Gemini 3 when signatures are foreign", function()
+      local provider = make_provider("gemini-3.1-pro-preview")
+      local req = provider:build_request(foreign_tool_call_prompt())
+
+      local turns = collect_function_calls(req)
+      assert.equals(2, #turns, "Expected two model turns with function calls")
+
+      -- Each model turn: placeholder on the first functionCall only (mirrors
+      -- Gemini's native shape for parallel calls).
+      assert.equals(PLACEHOLDER, turns[1][1].thoughtSignature)
+      assert.is_nil(turns[1][2].thoughtSignature, "Parallel calls after the first must not carry a signature")
+      assert.equals(PLACEHOLDER, turns[2][1].thoughtSignature)
+    end)
+
+    it("attaches the placeholder on Gemini 3 when the model turn has no thinking at all", function()
+      local provider = make_provider("gemini-3-flash-preview")
+      local prompt = foreign_tool_call_prompt()
+      for _, msg in ipairs(prompt.history) do
+        if msg.role == "assistant" then
+          for index = #msg.parts, 1, -1 do
+            if msg.parts[index].kind == "thinking" then
+              table.remove(msg.parts, index)
+            end
+          end
+        end
+      end
+
+      local req = provider:build_request(prompt)
+
+      local turns = collect_function_calls(req)
+      assert.equals(2, #turns, "Expected two model turns with function calls")
+      assert.equals(PLACEHOLDER, turns[1][1].thoughtSignature)
+      assert.equals(PLACEHOLDER, turns[2][1].thoughtSignature)
+    end)
+
+    it("prefers the native Vertex signature over the placeholder", function()
+      local provider = make_provider("gemini-3.1-pro-preview")
+      local prompt = foreign_tool_call_prompt()
+      prompt.history[2].parts[1].signature = { provider = "vertex", value = "native-sig" }
+
+      local req = provider:build_request(prompt)
+
+      local turns = collect_function_calls(req)
+      assert.equals("native-sig", turns[1][1].thoughtSignature)
+      assert.equals(PLACEHOLDER, turns[2][1].thoughtSignature)
+    end)
+
+    it("does not attach any signature on Gemini 2.5 for foreign conversations", function()
+      local provider = make_provider("gemini-2.5-pro")
+      local req = provider:build_request(foreign_tool_call_prompt())
+
+      local turns = collect_function_calls(req)
+      assert.equals(2, #turns, "Expected two model turns with function calls")
+      for _, calls in ipairs(turns) do
+        for _, part in ipairs(calls) do
+          assert.is_nil(part.thoughtSignature, "Gemini 2.5 requests must not carry placeholder signatures")
+        end
+      end
+    end)
+  end)
+
   describe("thinkingConfig in build_request", function()
     local parser = require("flemma.parser")
     local pipeline = require("flemma.pipeline")

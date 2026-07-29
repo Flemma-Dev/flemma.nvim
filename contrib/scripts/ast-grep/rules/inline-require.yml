@@ -1,0 +1,30 @@
+# ast-grep rule driving contrib/scripts/lint-inline-requires.sh (Pass 1).
+#
+# Detects require("flemma.…") calls that sit INSIDE a function body — the
+# structural definition of an "inline" (lazy) require, as opposed to a
+# top-level module import. This replaces the previous line-position heuristic
+# (locate the first `function` keyword, grep for requires below it), which
+# silently skipped any file whose functions are all assignment/anonymous style
+# — e.g. `M.f = function() … end` or `setmetatable(M, { __index = function() …
+# end })` — because its anchor regex never matched, leaving inline requires in
+# those files unchecked.
+#
+# Detection only: the rule carries no allowlist. lint-inline-requires.sh reads
+# the matches as JSON and applies the ALLOWED_INLINE file=module allowlist.
+# Two skip-cases the old grep handled by hand now fall out structurally:
+#   - a require written inside a Lua string literal is not a call node;
+#   - a dynamic require(variable) fails the ARG string-literal regex below.
+# House style is the parenthesised require("…") form; the paren-less string
+# call (require "…", unused anywhere in this codebase) is not matched.
+id: inline-require
+language: lua
+rule:
+  pattern: require($ARG)
+  inside:
+    any:
+      - kind: function_declaration
+      - kind: function_definition
+    stopBy: end
+constraints:
+  ARG:
+    regex: '^"flemma\.'

@@ -84,7 +84,7 @@ function M.register_async(resolve_fn, opts)
     completed = true
 
     if err then
-      notify.warn("Async tool source failed: " .. err)
+      notify.warn(messages["ui.tool.source_failed"]{ reason = err })
     end
 
     pending_sources = pending_sources - 1
@@ -207,7 +207,7 @@ function M.ensure_ready()
         done({ ok = true })
       end)
     end)
-    error(readiness.Suspense.new("Waiting for tool definitions to load…", boundary))
+    error(readiness.Suspense.new(messages["ui.tool.loading"]{}, boundary))
   end
   ensure_modules_loaded()
 end
@@ -273,7 +273,7 @@ function M.to_json_schema_for_prompt(definition)
     schema.properties["flemma.background"] = {
       type = is_strict and { "boolean", "null" } or "boolean",
       default = false,
-      description = messages.render("tool-parameter--background"),
+      description = messages["tool.parameter.background"]{},
     }
     if is_strict then
       schema.required = schema.required or {}
@@ -284,7 +284,7 @@ function M.to_json_schema_for_prompt(definition)
   if not has_cap(definition.name, "disables_save_to") then
     schema.properties["flemma.save_to"] = {
       type = is_strict and { "string", "null" } or "string",
-      description = messages.render("tool-parameter--save-to"),
+      description = messages["tool.parameter.save_to"]{},
     }
     if is_strict then
       schema.required = schema.required or {}

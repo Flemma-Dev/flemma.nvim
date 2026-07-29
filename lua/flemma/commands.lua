@@ -3,6 +3,7 @@
 ---@class flemma.Commands
 local M = {}
 
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local string_utils = require("flemma.utilities.string")
 
@@ -28,7 +29,7 @@ local function setup_commands()
     end
     if level then
       if not log.is_valid_level(level) then
-        notify.error("Invalid log level '" .. level .. "'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR")
+        notify.error(messages["ui.logging.invalid_level"]{ level = level })
         return
       end
       log.configure({ level = level:upper() })
@@ -36,16 +37,16 @@ local function setup_commands()
     log.set_enabled(enable)
     if enable then
       local level_display = log.get_level()
-      notify.info("Logging enabled (level: " .. level_display .. ") - " .. log.get_path())
+      notify.info(messages["ui.logging.enabled"]{ level = level_display, path = log.get_path() })
     else
-      notify.info("Logging disabled")
+      notify.info(messages["ui.logging.disabled"]{})
     end
   end
 
   local function open_log()
     local log = require("flemma.logging")
     if not log.is_enabled() then
-      notify.warn("Logging is currently disabled")
+      notify.warn(messages["ui.logging.currently_disabled"]{})
       vim.defer_fn(function()
         vim.cmd("tabedit " .. require("flemma.logging").get_path())
       end, 1000)
@@ -66,20 +67,20 @@ local function setup_commands()
       return function(...)
         local ok, err = pcall(value, ...)
         if not ok then
-          notify.error(("%s callback failed: %s"):format(label, err))
+          notify.error(messages["ui.callback.failed"]{ label = label, reason = err })
         end
       end
     end
 
     if type(value) ~= "string" then
-      notify.warn(("%s expects a string or function, received %s"):format(label, type(value)))
+      notify.warn(messages["ui.callback.invalid_type"]{ label = label, received = type(value) })
       return nil
     end
 
     return function()
       local ok, err = pcall(vim.cmd --[[@as function]], value)
       if not ok then
-        notify.error(("%s command failed: %s"):format(label, err))
+        notify.error(messages["ui.callback.command_failed"]{ label = label, reason = err })
       end
     end
   end
@@ -193,7 +194,7 @@ local function setup_commands()
     action = function()
       local bufnr = vim.api.nvim_get_current_buf()
       if not require("flemma.tools.executor").cancel_for_buffer(bufnr) then
-        notify.info("Nothing to cancel")
+        notify.info(messages["ui.tool.nothing_to_cancel"]{})
       end
     end,
   }
@@ -214,26 +215,30 @@ local function setup_commands()
         end
         table.sort(providers)
 
-        vim.ui.select(providers, { prompt = "Select Provider:" }, function(selected_provider)
+        vim.ui.select(providers, { prompt = messages["ui.provider.select_prompt"]{} }, function(selected_provider)
           if not selected_provider then
-            notify.info("Provider selection cancelled")
+            notify.info(messages["ui.provider.select_cancelled"]{})
             return
           end
 
           local models = provider_registry.models[selected_provider] or {}
           if type(models) ~= "table" or #models == 0 then
-            notify.warn("No models found for provider " .. selected_provider)
+            notify.warn(messages["ui.provider.no_models"]{ provider = selected_provider })
             core.switch_provider(selected_provider, nil, {}, { bufnr = bufnr })
             return
           end
 
-          vim.ui.select(models, { prompt = "Select Model for " .. selected_provider .. ":" }, function(selected_model)
-            if not selected_model then
-              notify.info("Model selection cancelled")
-              return
+          vim.ui.select(
+            models,
+            { prompt = messages["ui.provider.select_model_prompt"]{ provider = selected_provider } },
+            function(selected_model)
+              if not selected_model then
+                notify.info(messages["ui.provider.model_select_cancelled"]{})
+                return
+              end
+              core.switch_provider(selected_provider, selected_model, {}, { bufnr = bufnr })
             end
-            core.switch_provider(selected_provider, selected_model, {}, { bufnr = bufnr })
-          end)
+          )
         end)
         return
       end
@@ -242,7 +247,7 @@ local function setup_commands()
       if first_arg and vim.startswith(first_arg, "$") then
         local preset = presets.get(first_arg)
         if not preset then
-          notify.warn(("Unknown preset '%s'"):format(first_arg))
+          notify.warn(messages["ui.provider.unknown_preset"]{ preset = first_arg })
           return
         end
 
@@ -256,7 +261,13 @@ local function setup_commands()
 
         local provider = preset.provider
         local model = preset.model
-        local key_value_args = vim.deepcopy(preset.parameters or {})
+
+        -- route_parameters writes a provider-bearing preset's config-shaped
+        -- parameters structurally — like preset.tools above, and BEFORE
+        -- switch_provider's own writes so command-line overrides (matrix or
+        -- space form) win on store order — and returns a provider-less preset's
+        -- flat parameters for the explicit channel.
+        local key_value_args = presets.route_parameters(preset, config_facade.writer(nil, config_facade.LAYERS.RUNTIME))
 
         local remaining_args = {}
         for i = 2, #args do
@@ -287,9 +298,10 @@ local function setup_commands()
             ignored[#ignored + 1] = extracted_overrides.positionals[i]
           end
           if #ignored > 0 then
-            notify.warn(
-              ("Ignoring extra positional arguments for preset '%s': %s"):format(first_arg, table.concat(ignored, ", "))
-            )
+            notify.warn(messages["ui.provider.ignoring_positionals_preset"]{
+              preset = first_arg,
+              args = table.concat(ignored, ", "),
+            })
           end
         end
 
@@ -308,12 +320,14 @@ local function setup_commands()
       local provider = extracted.provider
 
       if not provider then
-        notify.warn("Provider name required (use :Flemma switch <provider>)")
+        notify.warn(messages["ui.provider.name_required"]{})
         return
       end
 
       if #extracted.extra_positionals > 0 then
-        notify.warn(("Ignoring extra positional arguments: %s"):format(table.concat(extracted.extra_positionals, ", ")))
+        notify.warn(
+          messages["ui.provider.ignoring_positionals"]{ args = table.concat(extracted.extra_positionals, ", ") }
+        )
       end
 
       local parameters = {}
@@ -387,14 +401,14 @@ local function setup_commands()
         action = function()
           local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
           w.diagnostics.enabled = true
-          notify.info("Diagnostics enabled")
+          notify.info(messages["ui.diagnostics.enabled"]{})
         end,
       },
       disable = {
         action = function()
           local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
           w.diagnostics.enabled = false
-          notify.info("Diagnostics disabled")
+          notify.info(messages["ui.diagnostics.disabled"]{})
         end,
       },
     },
@@ -426,19 +440,19 @@ local function setup_commands()
           local readiness = require("flemma.readiness")
           local provider_module_path = provider_registry.get(cfg.provider)
           if not provider_module_path then
-            notify.error("No provider configured. Use :Flemma switch to select one.")
+            notify.error(messages["ui.usage.no_provider"]{})
             return
           end
 
           local provider_module = require("flemma.loader").load(provider_module_path)
           if not provider_module or not provider_module.try_estimate_usage then
-            notify.error("Current provider does not support usage estimates.")
+            notify.error(messages["ui.usage.estimate_unsupported"]{})
             return
           end
 
           local function on_result(result)
             if result.err then
-              notify.error("Estimate failed: " .. result.err)
+              notify.error(messages["ui.usage.estimate_failed"]{ reason = result.err })
               return
             end
             local response = result.response
@@ -455,7 +469,7 @@ local function setup_commands()
               return
             end
             if not readiness.is_suspense(err) then
-              notify.error("Estimate failed: " .. tostring(err))
+              notify.error(messages["ui.usage.estimate_failed"]{ reason = tostring(err) })
               return
             end
             ---@cast err flemma.readiness.Suspense
@@ -465,7 +479,7 @@ local function setup_commands()
               if not boundary_result or not boundary_result.ok then
                 local diag_msg =
                   diagnostic_format.format_resolver_diagnostics(boundary_result and boundary_result.diagnostics)
-                notify.error("Estimate failed: " .. (diag_msg or err.message))
+                notify.error(messages["ui.usage.estimate_failed"]{ reason = diag_msg or err.message })
                 return
               end
               attempt()
@@ -482,13 +496,13 @@ local function setup_commands()
       enable = {
         action = function()
           require("flemma.autopilot").set_enabled(true)
-          notify.info("Autopilot enabled")
+          notify.info(messages["ui.autopilot.enabled"]{})
         end,
       },
       disable = {
         action = function()
           require("flemma.autopilot").set_enabled(false)
-          notify.info("Autopilot disabled")
+          notify.info(messages["ui.autopilot.disabled"]{})
         end,
       },
       status = {
@@ -506,17 +520,17 @@ local function setup_commands()
           local sandbox = require("flemma.sandbox")
           local ok, err = sandbox.validate_backend()
           if not ok then
-            notify.error("Cannot enable sandbox: " .. err)
+            notify.error(messages["ui.sandbox.enable_failed"]{ reason = err })
             return
           end
           sandbox.set_enabled(true)
-          notify.info("Sandbox enabled")
+          notify.info(messages["ui.sandbox.enabled"]{})
         end,
       },
       disable = {
         action = function()
           require("flemma.sandbox").set_enabled(false)
-          notify.info("Sandbox disabled")
+          notify.info(messages["ui.sandbox.disabled"]{})
         end,
       },
       status = {
@@ -559,7 +573,7 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").execute_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Execution failed")
+            notify.error(err or messages["ui.tool.execute_failed"]{})
           end
         end,
       },
@@ -569,9 +583,9 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").background_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Failed to move tool to background")
+            notify.error(err or messages["ui.tool.background_failed"]{})
           else
-            notify.info("Tool moved to background.")
+            notify.info(messages["ui.tool.backgrounded"]{})
           end
         end,
       },
@@ -581,7 +595,7 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").approve_at_cursor(bufnr)
           if not ok then
-            notify.error(err or "Approve failed")
+            notify.error(err or messages["ui.tool.approve_failed"]{})
           end
         end,
       },
@@ -595,7 +609,7 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").reject_at_cursor(bufnr, message)
           if not ok then
-            notify.error(err or "Reject failed")
+            notify.error(err or messages["ui.rejection.reject_failed"]{})
           end
         end,
       },
@@ -605,9 +619,9 @@ local function setup_commands()
 
           local cancelled = require("flemma.tools.executor").cancel_at_cursor(bufnr)
           if cancelled then
-            notify.info("Tool execution cancelled")
+            notify.info(messages["ui.tool.cancelled"]{})
           else
-            notify.info("No pending tool executions")
+            notify.info(messages["ui.tool.none_pending"]{})
           end
         end,
       },
@@ -616,7 +630,7 @@ local function setup_commands()
           local bufnr = vim.api.nvim_get_current_buf()
 
           require("flemma.tools.executor").cancel_all(bufnr)
-          notify.info("All tool executions cancelled")
+          notify.info(messages["ui.tool.all_cancelled"]{})
         end,
       },
       ["approve-all"] = {
@@ -625,7 +639,7 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").approve_all_pending(bufnr)
           if not ok then
-            notify.error(err or "No pending tools to approve")
+            notify.error(err or messages["ui.tool.no_pending_approve"]{})
           end
         end,
       },
@@ -635,16 +649,20 @@ local function setup_commands()
 
           local pending = require("flemma.tools.executor").get_pending(bufnr)
           if #pending == 0 then
-            notify.info("No pending tool executions")
+            notify.info(messages["ui.tool.none_pending"]{})
           else
             table.sort(pending, function(a, b)
               return a.started_at < b.started_at
             end)
-            local lines = { "Pending tool executions:" }
+            local lines = { messages["ui.tool.list_header"]{} }
             for _, p in ipairs(pending) do
               table.insert(
                 lines,
-                string.format("  %s (%s) - started %ds ago", p.tool_name, p.tool_id, os.time() - p.started_at)
+                messages["ui.tool.list_row"]{
+                  tool_name = p.tool_name,
+                  tool_id = p.tool_id,
+                  seconds = os.time() - p.started_at,
+                }
               )
             end
             notify.info(table.concat(lines, "\n"))
@@ -769,7 +787,7 @@ local function setup_commands()
   ---@param opts table
   local function run_command(fargs, opts)
     if #fargs == 0 then
-      notify.info("Available commands → " .. table.concat(available_commands, ", "))
+      notify.info(messages["ui.command.available"]{ commands = table.concat(available_commands, ", ") })
       return
     end
 
@@ -777,9 +795,11 @@ local function setup_commands()
     local node = resolve_command(command_token)
     if not node then
       local suggestion = string_utils.closest_match(command_token, available_commands)
-      local message = ("Unknown command '%s'"):format(command_token)
+      local message
       if suggestion then
-        message = message .. (". Did you mean '%s'?"):format(suggestion)
+        message = messages["ui.command.unknown_suggestion"]{ command = command_token, suggestion = suggestion }
+      else
+        message = messages["ui.command.unknown"]{ command = command_token }
       end
       notify.error(message)
       return
@@ -788,9 +808,12 @@ local function setup_commands()
     if not node.action then
       local child_names = list_child_names(node, command_token)
       if #child_names == 0 then
-        notify.warn(("'%s' is not invokable"):format(command_token))
+        notify.warn(messages["ui.command.not_invokable"]{ command = command_token })
       else
-        notify.info(("'%s' expects a sub-command (%s)"):format(command_token, table.concat(child_names, ", ")))
+        notify.info(messages["ui.command.expects_subcommand"]{
+          command = command_token,
+          subcommands = table.concat(child_names, ", "),
+        })
       end
       return
     end

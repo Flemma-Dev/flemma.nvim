@@ -18,6 +18,13 @@ local FINISH_REASON_MAP = {
   MAX_TOKENS = "length",
 }
 
+--- Gemini 3+ rejects requests (HTTP 400) when the first functionCall part of a
+--- model turn carries no thoughtSignature. Conversations migrated from another
+--- provider (or hand-edited buffers) have no Vertex signature to send back, so
+--- Google documents this exact placeholder to bypass strict validation for
+--- migrated traces: https://ai.google.dev/gemini-api/docs/thought-signatures
+local MIGRATED_TRACE_THOUGHT_SIGNATURE = "context_engineering_is_the_way_to_go"
+
 ---@class flemma.provider.Vertex : flemma.provider.Base
 local M = {}
 
@@ -104,6 +111,11 @@ end
 ---@param _context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context)
+  local model_info = provider_registry.get_model_info("vertex", self.parameters.model)
+  -- thinking_effort_map marks the Gemini 3+ generation (thinkingLevel API) —
+  -- the same generation that strictly validates functionCall thought signatures.
+  local requires_function_call_signatures = model_info ~= nil and model_info.thinking_effort_map ~= nil
+
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 
@@ -240,9 +252,14 @@ function M.build_request(self, prompt, _context)
             },
           }
           -- Attach thought signature to first function call (per Vertex API requirements)
-          if thought_signature and #function_calls == 0 then
-            fc_part.thoughtSignature = thought_signature
-            log.debug("vertex.build_request: Attached thoughtSignature to functionCall for " .. p.name)
+          if #function_calls == 0 then
+            if thought_signature then
+              fc_part.thoughtSignature = thought_signature
+              log.debug("vertex.build_request: Attached thoughtSignature to functionCall for " .. p.name)
+            elseif requires_function_call_signatures then
+              fc_part.thoughtSignature = MIGRATED_TRACE_THOUGHT_SIGNATURE
+              log.debug("vertex.build_request: Attached migrated-trace thoughtSignature to functionCall for " .. p.name)
+            end
           end
           table.insert(function_calls, fc_part)
           log.debug("vertex.build_request: Added functionCall for " .. p.name)
@@ -316,7 +333,6 @@ function M.build_request(self, prompt, _context)
   }
 
   -- Add thinking configuration using unified resolution
-  local model_info = provider_registry.get_model_info("vertex", self.parameters.model)
   local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then

@@ -4,20 +4,27 @@
 ---@class flemma.preprocessor.rewriters.FileReferences
 local M = {}
 
+local modeline = require("flemma.utilities.modeline")
 local preprocessor = require("flemma.preprocessor")
 local utilities = require("flemma.utilities.encoding")
 
 local url_decode = utilities.url_decode
 local lua_string_escape = utilities.lua_string_escape
 
----Strip trailing punctuation from a file path.
----@param path string
----@return string path The path without trailing punctuation
+---Strip trailing prose punctuation from a raw reference. Quote-aware: nothing
+---at or before the last quote character is touched, so punctuation inside a
+---quoted option value (`;note='a;b.'`) is content, not sentence prose.
+---@param raw string
+---@return string body The reference without trailing punctuation
 ---@return string trailing The stripped trailing punctuation
-local function strip_trailing_punctuation(path)
-  local cleaned = path:gsub("[%p]+$", "")
-  local trailing = path:sub(#cleaned + 1)
-  return cleaned, trailing
+local function strip_trailing_punctuation(raw)
+  local prefix, tail = raw:match("^(.*['\"])(.-)$")
+  if not prefix then
+    prefix, tail = "", raw
+  end
+  local cleaned = tail:gsub("[%p]+$", "")
+  local body = prefix .. cleaned
+  return body, raw:sub(#body + 1)
 end
 
 local file_refs = preprocessor.create_rewriter("file-references", { priority = 100 })
@@ -34,24 +41,19 @@ local function handle_file_reference(match, ctx)
     return nil
   end
 
-  local raw_path, options_str = match.captures[1]:match("^([^;]+)(;.+)$")
-  local trailing
-
-  local opts_parts = {}
-  if options_str then
-    local mime_with_punct = options_str:match("^;type=(.+)$")
-    if mime_with_punct then
-      local mime = mime_with_punct:gsub("[%p]+$", "")
-      trailing = mime_with_punct:sub(#mime + 1)
-      table.insert(opts_parts, "[symbols.BINARY] = true")
-      table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(mime) .. "'")
-    end
-  else
-    raw_path = match.captures[1]
-    local stripped
-    stripped, trailing = strip_trailing_punctuation(raw_path)
-    raw_path = stripped
-    table.insert(opts_parts, "[symbols.BINARY] = true")
+  -- Trailing prose punctuation belongs to the sentence, not the reference:
+  -- strip it from the raw capture first, so the pathless and options-bearing
+  -- forms share one rule, then parse the remainder through the shared matrix
+  -- grammar. `type=` is the only option consumed today; other keys parse
+  -- uniformly and are ignored. A MIME with parameters must be quoted
+  -- (`;type='text/plain;charset=utf-8'`) — an unquoted `;` starts the next
+  -- option per the grammar.
+  local raw, trailing = strip_trailing_punctuation(match.captures[1])
+  local raw_path, options = modeline.parse_matrix(raw)
+  local opts_parts = { "[symbols.BINARY] = true" }
+  local mime = options.type
+  if mime ~= nil and type(mime) ~= "table" then
+    table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(tostring(mime)) .. "'")
   end
 
   local path = url_decode(raw_path) --[[@as string]]

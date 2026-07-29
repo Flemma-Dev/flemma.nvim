@@ -3,6 +3,7 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local bridge = require("flemma.bridge")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 
 local ROLES = { System = true, You = true, Assistant = true }
@@ -146,10 +147,7 @@ function M.migrate_buffer(bufnr)
     if fm_changed then
       new_lines = fm_lines
       vim.schedule(function()
-        notify.warn(
-          "Tool names were migrated from ':' to '.' in Tool Use headers and frontmatter. "
-            .. "Review the frontmatter to confirm the changes are correct."
-        )
+        notify.warn(messages["ui.migration.tool_names_migrated"]{})
       end)
     end
   end
@@ -183,7 +181,7 @@ function M.migrate(bufnr)
     if vim.api.nvim_buf_is_valid(bufnr) then
       local count = bridge.resolve_orphaned_jobs(bufnr)
       if count > 0 then
-        notify.info(count .. " orphaned job(s) resolved.")
+        notify.info(messages["ui.migration.orphaned_jobs_resolved"]{ count = count })
       end
     end
   end)

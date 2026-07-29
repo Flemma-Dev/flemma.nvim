@@ -1195,4 +1195,27 @@ describe("Lualine component", function()
       assert.are.equal(muted_provider("openai", "o3 (high)"), flemma_component:update_status())
     end)
   end)
+
+  describe("provider/model shorthand", function()
+    it("should not double the provider prefix with frontmatter shorthand", function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      local w = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      w.model = "anthropic/claude-haiku-4-5"
+      w.parameters.thinking = false
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal(muted_provider("anthropic", "claude-haiku-4-5"), status)
+    end)
+
+    it("should split provider from model in frontmatter shorthand", function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      local w = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      w.model = "openai/gpt-4o"
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal(muted_provider("openai", "gpt-4o"), status)
+    end)
+  end)
 end)

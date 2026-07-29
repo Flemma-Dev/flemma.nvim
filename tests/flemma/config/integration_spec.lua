@@ -14,7 +14,7 @@ describe("flemma.config — integration", function()
   local function make_schema()
     return s.object({
       provider = s.string("anthropic"),
-      model = s.string("claude-sonnet-4-20250514"),
+      model = s.string("claude-sonnet-4-20250514"):transform(require("flemma.provider.registry").model_transform),
       parameters = s.object({
         max_tokens = s.optional(s.integer()),
         timeout = s.optional(s.integer()),
@@ -22,6 +22,9 @@ describe("flemma.config — integration", function()
         anthropic = s.object({
           thinking_budget = s.optional(s.integer()),
           timeout = s.optional(s.integer()),
+        }),
+        vertex = s.object({
+          project_id = s.optional(s.string()),
         }),
       }),
       tools = s.object({
@@ -623,6 +626,39 @@ describe("flemma.config — integration", function()
       assert.is_nil(deferred)
       assert.equals(1200, config.get().parameters.timeout)
     end)
+
+    it("defers matrix parameters for not-yet-registered DISCOVER providers", function()
+      local registry_table = {}
+      local schema = s.object({
+        provider = s.string("anthropic"),
+        model = s.string("m"):transform(require("flemma.provider.registry").model_transform),
+        parameters = s.object({
+          [symbols.DISCOVER] = function(key)
+            return registry_table[key]
+          end,
+        }),
+      })
+      config.init(schema)
+
+      -- Pass 1: vertex is unknown — the transform's parameters write defers.
+      local ok, err, deferred = config.apply(
+        L.SETUP,
+        { model = "vertex/gemini-3;project_id=stan" },
+        { defer_discover = true }
+      )
+      assert.is_true(ok)
+      assert.is_nil(err)
+
+      -- Register the provider schema, then pass 2 applies the deferred write.
+      registry_table.vertex = s.object({ project_id = s.optional(s.string()) })
+      local failures = config.apply_deferred(L.SETUP, deferred)
+      assert.is_nil(failures)
+
+      local result = config.materialize()
+      assert.equals("vertex", result.provider)
+      assert.equals("gemini-3", result.model)
+      assert.equals("stan", result.parameters.vertex.project_id)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -704,6 +740,39 @@ describe("flemma.config — integration", function()
       config.writer(nil, L.SETUP).tools.auto_approve:append("bash")
       local result = config.materialize()
       assert.are.same({ "$default", "bash" }, result.tools.auto_approve)
+    end)
+
+    it("splits provider/model shorthand in setup layer", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { model = "anthropic/claude-opus-4-8" })
+      local result = config.materialize()
+      assert.equals("anthropic", result.provider)
+      assert.equals("claude-opus-4-8", result.model)
+    end)
+
+    it("splits provider/model shorthand in frontmatter layer", function()
+      config.init(make_schema())
+      config.writer(1, L.FRONTMATTER).model = "openai/gpt-5.5"
+      local result = config.materialize(1)
+      assert.equals("openai", result.provider)
+      assert.equals("gpt-5.5", result.model)
+    end)
+
+    it("does not split a plain model name", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { model = "claude-opus-4-8" })
+      local result = config.materialize()
+      assert.equals("anthropic", result.provider)
+      assert.equals("claude-opus-4-8", result.model)
+    end)
+
+    it("decomposes matrix parameters from the model shorthand", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { model = "vertex/gemini-3.1-pro-preview;project_id=stans-playground" })
+      local result = config.materialize()
+      assert.equals("vertex", result.provider)
+      assert.equals("gemini-3.1-pro-preview", result.model)
+      assert.equals("stans-playground", result.parameters.vertex.project_id)
     end)
   end)
 
@@ -967,5 +1036,333 @@ describe("flemma.config — integration", function()
       -- Buffer 2 (no frontmatter): full expanded list
       assert.are.same({ "bash", "ls", "search" }, config.get(2).items)
     end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- register_module_defaults() called before init()
+  -- ---------------------------------------------------------------------------
+
+  describe("register_module_defaults() called before init()", function()
+    -- A module can self-register as a require()-time side effect (e.g. the
+    -- experimental Codex provider adapter's top-level `secrets.register(...)`
+    -- call) and end up required before flemma.setup() has run config.init() —
+    -- e.g. a packaging tool that require()s every module in isolation. The
+    -- registration must queue rather than crash, then flush once init() supplies
+    -- the schema.
+    it("queues rather than errors, then flushes once init() runs", function()
+      local registry = {}
+      local schema = s.object({
+        extensions = s.object({
+          [symbols.DISCOVER] = function(key)
+            return registry[key]
+          end,
+        }),
+      })
+      registry.custom = s.object({ value = s.string("default-value") })
+
+      assert.has_no.errors(function()
+        config.register_module_defaults("extensions", "custom", registry.custom)
+      end)
+
+      config.init(schema)
+
+      assert.equals("default-value", config.materialize().extensions.custom.value)
+    end)
+
+    it("flushes multiple queued registrations in call order", function()
+      local registry = {}
+      local schema = s.object({
+        extensions = s.object({
+          [symbols.DISCOVER] = function(key)
+            return registry[key]
+          end,
+        }),
+      })
+      registry.first = s.object({ value = s.string("first-value") })
+      registry.second = s.object({ value = s.string("second-value") })
+
+      assert.has_no.errors(function()
+        config.register_module_defaults("extensions", "first", registry.first)
+        config.register_module_defaults("extensions", "second", registry.second)
+      end)
+
+      config.init(schema)
+
+      local result = config.materialize()
+      assert.equals("first-value", result.extensions.first.value)
+      assert.equals("second-value", result.extensions.second.value)
+    end)
+  end)
+end)
+
+describe("config transform module", function()
+  local transform, config, s
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.operators"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.listops"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.transform"] = nil
+    package.loaded["flemma.schema"] = nil
+    package.loaded["flemma.schema.types"] = nil
+    package.loaded["flemma.schema.navigation"] = nil
+    config = require("flemma.config")
+    transform = require("flemma.config.transform")
+    s = require("flemma.schema")
+  end)
+
+  local function transform_schema()
+    local registry = require("flemma.provider.registry")
+    return s.object({
+      provider = s.string("anthropic"),
+      model = s.string("claude-x"):transform(registry.model_transform),
+      parameters = s.object({
+        max_tokens = s.optional(s.integer()),
+        anthropic = s.object({
+          max_tokens = s.optional(s.integer()),
+          timeout = s.optional(s.integer()),
+        }),
+        vertex = s.object({ project_id = s.optional(s.string()) }),
+      }),
+    })
+  end
+
+  it("resolves emitted paths relative to the transformed field's parent", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+      ctx.set("parameters.p.k", 1)
+    end)
+    local ops = transform.run(node, "presets.x.model", "m", nil)
+    assert.are.same({
+      { path = "presets.x.model", value = "m" },
+      { path = "presets.x.parameters.p.k", value = 1 },
+    }, ops)
+  end)
+
+  it("treats a root-level field's parent as the root", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+    end)
+    local ops = transform.run(node, "model", "m", nil)
+    assert.are.same({ { path = "model", value = "m" } }, ops)
+  end)
+
+  it("reads through ctx.get with the same relative base", function()
+    config.init(s.object({ provider = s.string("anthropic"), model = s.string("m") }))
+    local seen
+    local node = s.string():transform(function(_, ctx)
+      seen = ctx.get("provider")
+    end)
+    transform.run(node, "model", "x", nil)
+    assert.equals("anthropic", seen)
+  end)
+
+  it("denies coerce functions the transform context's set", function()
+    local store = require("flemma.config.store")
+    local coerce_ctx = store.make_coerce_context(nil)
+    assert.is_function(coerce_ctx.get)
+    assert.is_nil(coerce_ctx.set)
+  end)
+
+  it("expand applies ops through the site callback in emission order", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("a", value)
+      ctx.set("b", value .. "!")
+    end)
+    local applied = {}
+    local ok, err = transform.expand(node, "model", "x", nil, function(path, value)
+      applied[#applied + 1] = { path = path, value = value }
+    end)
+    assert.is_true(ok)
+    assert.is_nil(err)
+    assert.are.same({ { path = "a", value = "x" }, { path = "b", value = "x!" } }, applied)
+  end)
+
+  it("expand converts vim.NIL op values to real nil at the apply boundary", function()
+    local node = s.string():transform(function(_, ctx)
+      ctx.set("cleared", vim.NIL)
+    end)
+    local calls = 0
+    local seen_value = "sentinel"
+    transform.expand(node, "model", "x", nil, function(_, value)
+      calls = calls + 1
+      seen_value = value
+    end)
+    assert.equals(1, calls)
+    assert.is_nil(seen_value)
+  end)
+
+  it("expand raises the expansion flag only while applying", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+    end)
+    assert.is_false(transform.is_expanding())
+    local inside
+    transform.expand(node, "model", "x", nil, function()
+      inside = transform.is_expanding()
+    end)
+    assert.is_true(inside)
+    assert.is_false(transform.is_expanding())
+  end)
+
+  it("expand restores the flag and contextualizes an op failure", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+    end)
+    local ok, err = transform.expand(node, "model", "vertex/g;p=1", nil, function()
+      error({ type = "config", error = "unknown key 'parameters.vertex.p'" })
+    end)
+    assert.is_nil(ok)
+    assert.truthy(err:find("vertex/g;p=1", 1, true))
+    assert.truthy(err:find("unknown key 'parameters.vertex.p'", 1, true))
+    assert.is_false(transform.is_expanding())
+  end)
+
+  it("expand re-raises suspense sentinels unchanged", function()
+    local readiness = require("flemma.readiness")
+    local boundary = readiness.get_or_create_boundary("transform-spec", function(done)
+      done()
+    end)
+    local sentinel = readiness.Suspense.new("waiting", boundary)
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("model", value)
+    end)
+    local ok, err = pcall(transform.expand, node, "model", "x", nil, function()
+      error(sentinel)
+    end)
+    assert.is_false(ok)
+    assert.is_true(readiness.is_suspense(err))
+    assert.is_false(transform.is_expanding())
+  end)
+
+  it("decomposes a matrix model write through the proxy", function()
+    config.init(transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "vertex/gemini-3;project_id=stan"
+    local result = config.materialize(1)
+    assert.equals("vertex", result.provider)
+    assert.equals("gemini-3", result.model)
+    assert.equals("stan", result.parameters.vertex.project_id)
+  end)
+
+  it("later explicit parameter write wins over a matrix parameter", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.model = "vertex/gemini-3;project_id=matrix"
+    w.parameters.vertex.project_id = "explicit"
+    assert.equals("explicit", config.materialize(1).parameters.vertex.project_id)
+  end)
+
+  it("later matrix model write wins over an explicit parameter", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.parameters.vertex.project_id = "explicit"
+    w.model = "vertex/gemini-3;project_id=matrix"
+    assert.equals("matrix", config.materialize(1).parameters.vertex.project_id)
+  end)
+
+  it("scopes prefixless matrix parameters under the ambient provider", function()
+    config.init(transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "claude-y;timeout=99"
+    local result = config.materialize(1)
+    assert.equals("anthropic", result.provider)
+    assert.equals(99, result.parameters.anthropic.timeout)
+  end)
+
+  it("clears a lower-layer parameter via a matrix key=nil", function()
+    config.init(transform_schema())
+    config.apply(config.LAYERS.SETUP, { parameters = { anthropic = { timeout = 99 } } })
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "claude-y;timeout=nil"
+    local result = config.materialize(1)
+    assert.equals("claude-y", result.model)
+    assert.is_nil(result.parameters.anthropic.timeout)
+  end)
+
+  it("a later provider write beats a provider/ prefix", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.model = "vertex/gemini-3"
+    w.provider = "anthropic"
+    assert.equals("anthropic", config.materialize(1).provider)
+  end)
+
+  it("a later provider/ prefix beats an explicit provider write", function()
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.provider = "anthropic"
+    w.model = "vertex/gemini-3"
+    assert.equals("vertex", config.materialize(1).provider)
+  end)
+
+  it("scopes prefixless matrix parameters under a provider written earlier in the same buffer layer", function()
+    -- The buffer-aware ctx.get is the transform context's distinguishing
+    -- capability: the ambient provider here comes from a frontmatter-layer
+    -- write, not the schema default.
+    config.init(transform_schema())
+    local w = config.writer(1, config.LAYERS.FRONTMATTER)
+    w.provider = "vertex"
+    w.model = "gemini-3;project_id=stan"
+    local result = config.materialize(1)
+    assert.equals("vertex", result.provider)
+    assert.equals("stan", result.parameters.vertex.project_id)
+  end)
+
+  it("routes general-schema matrix keys provider-specific, never global", function()
+    config.init(transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "claude-y;max_tokens=1234"
+    local result = config.materialize(1)
+    assert.equals(1234, result.parameters.anthropic.max_tokens)
+    assert.is_nil(result.parameters.max_tokens)
+  end)
+
+  it("decomposes matrix parameters through config.apply", function()
+    config.init(transform_schema())
+    config.apply(config.LAYERS.SETUP, { model = "vertex/gemini-3;project_id=stan" })
+    local result = config.materialize()
+    assert.equals("vertex", result.provider)
+    assert.equals("gemini-3", result.model)
+    assert.equals("stan", result.parameters.vertex.project_id)
+  end)
+
+  -- The transform trigger contract must be identical at every write entry
+  -- point: a transform on an object node consumes a table write the same way
+  -- a transform on a scalar node consumes a string write.
+  local function object_transform_schema()
+    return s.object({
+      seen = s.optional(s.string()),
+      widget = s.object({ enabled = s.optional(s.boolean()) }):transform(function(_, ctx)
+        ctx.set("seen", "fired")
+      end),
+    })
+  end
+
+  it("fires an object-node transform through the proxy", function()
+    config.init(object_transform_schema())
+    config.writer(1, config.LAYERS.FRONTMATTER).widget = { enabled = true }
+    assert.equals("fired", config.materialize(1).seen)
+  end)
+
+  it("fires an object-node transform through config.apply", function()
+    config.init(object_transform_schema())
+    config.apply(config.LAYERS.SETUP, { widget = { enabled = true } })
+    assert.equals("fired", config.materialize().seen)
+  end)
+
+  it("fires an object-node transform through JSON operators", function()
+    config.init(object_transform_schema())
+    local failures = config.apply_operators(config.LAYERS.RUNTIME, nil, { widget = { enabled = true } })
+    assert.are.same({}, failures)
+    assert.equals("fired", config.materialize().seen)
+  end)
+
+  it("never re-transforms a transform's own output", function()
+    config.init(s.object({
+      model = s.string("m"):transform(function(value, ctx)
+        ctx.set("model", value .. "!")
+      end),
+    }))
+    config.writer(1, config.LAYERS.FRONTMATTER).model = "x"
+    assert.equals("x!", config.materialize(1).model)
   end)
 end)

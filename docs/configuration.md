@@ -331,12 +331,14 @@ thinking = {
 
 The `foreign` field controls what happens to thinking blocks from a different provider when you switch providers mid-conversation. Thinking blocks carry a provider signature — when the current provider doesn't match the signature, those blocks are "foreign."
 
-| `foreign` value            | Behaviour                                                                                                                                                                  |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"preserve"` **(default)** | Foreign thinking blocks are injected as text wrapped in `<thinking>` tags so the new provider can see the prior reasoning. Redacted and empty blocks are silently skipped. |
-| `"drop"`                   | Foreign thinking blocks are silently removed from the prompt.                                                                                                              |
+| `foreign` value            | Behaviour                                                                                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"preserve"` **(default)** | Foreign thinking blocks are injected as plain text — a short context phrase, the reasoning, and a `---` rule separating it from the turn's visible text. Redacted and empty blocks are silently skipped. |
+| `"drop"`                   | Foreign thinking blocks are silently removed from the prompt.                                                                                                                                            |
 
 This matters when you start a conversation with one provider (say, Anthropic) and switch to another (say, OpenAI) mid-conversation. With `"preserve"`, the new provider sees the old provider's reasoning as context. With `"drop"`, it sees only the visible messages.
+
+The framing is deliberately **tagless prose**, not an XML-style envelope: models mirror tag pairs that lead their own prior turns, so any wrapper tag eventually reappears verbatim in replies. The framing text is the `thinking.foreign.wrap` entry in the [string catalogue](../po/flemma-harness.po).
 
 Override per-buffer via frontmatter:
 
@@ -448,6 +450,31 @@ Individual buffers can override the global setting via frontmatter: `flemma.opt.
 | `on_request_complete` | After the response finishes     | Re-enter insert mode for your reply |
 
 Values are passed to `vim.cmd()`, so any Ex command works.
+
+### Model matrix parameters
+
+Model strings accept **matrix parameters** — `;key=value` pairs appended to the model name (URI matrix syntax, RFC 3986 §3.3). They decompose at write time into provider-scoped parameters, so this:
+
+```lua
+flemma.opt.model = "vertex/gemini-3.1-pro-preview;project_id=stans-playground"
+```
+
+is exactly equivalent to:
+
+```lua
+flemma.opt.provider = "vertex"
+flemma.opt.model = "gemini-3.1-pro-preview"
+flemma.opt.parameters.vertex.project_id = "stans-playground"
+```
+
+Matrix parameters are always provider-specific. Later writes win in source order: a `flemma.opt.parameters.vertex.project_id = ...` after the model line overrides the matrix value, and vice-versa. The same string works verbatim in `:Flemma switch` and in preset definitions; command-line `key=value` arguments override preset parameters of the same name, whichever grammar either side used.
+
+Values follow the modeline grammar — quoting (`;note='a;b'`), booleans, numbers, and comma lists (`;tags=a,b`). Two consequences worth knowing:
+
+- Numeric-looking values become Lua numbers. A string-typed parameter that happens to be all digits needs quotes: `;project_id='123456789042'`.
+- `;key=nil` explicitly clears the parameter, shadowing values from lower config layers — the same contract as the space-separated form.
+
+Parameter names are validated against the provider's schema: a typo like `;projext_id=x` is a config error naming the full parameter path. Matrix parameters cannot be attached to a preset reference (`model = "$fast;key=v"`) — a preset's provider is resolved later, so scope the parameter inside the preset definition instead.
 
 ### Presets
 

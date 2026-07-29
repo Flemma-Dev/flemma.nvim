@@ -2,263 +2,145 @@
 
 Flemma.nvim is a Neovim plugin for LLM-powered chat in `.chat` buffers. The buffer is the conversation — portable, re-parseable, and version-controllable. Keep each contribution focused, reversible, and well-documented so the next contributor can continue seamlessly.
 
----
+To understand the codebase, explore `lua/flemma/` — modules are named descriptively and each carries a `---@class` annotation explaining its role. This file records only what the code cannot tell you: rules to follow, conventions to apply, and learnings that cost real debugging time.
 
-# Part 1: Architecture & Conventions
+## Iron Rules
 
-## Critical Rules
+Non-negotiable. The canonical statement of every hard rule lives in this block; at most one section below expands its how/why — nothing restates a rule differently.
 
-These are counter-default behaviors — violating them breaks the build or introduces bugs:
+**Build & test**
 
-- **All JSON through `require("flemma.utilities.json")`** — never bare `vim.json.*` or `vim.fn.json_*` (JSON `null` becomes truthy `vim.NIL` instead of `nil`)
-- **All structural buffer inspection through the AST** — never regex/substring matching on buffer lines
-- **All `require()` calls at file top** — `make qa` enforces this
-- **Full EmmyLua type annotations on all production code** — `make qa` enforces this
-- **Never `---@diagnostic disable` as an easy fix** — use `---@cast`, `--[[@as type]]`, or restructure; suppressions only for genuine LuaLS limitations
+- Run `make qa` bare — never piped through `grep`/`tail`/`head`. It is silent on success and self-explanatory on failure.
+- Only `make qa` runs tests — never invoke `nvim` directly with Plenary commands.
+- A `make qa` failure is your problem, never "pre-existing" — the only acceptable proof otherwise is stashing your changes and confirming the failure on the clean parent commit.
+- Every new feature and every bug fix ships with test coverage.
+- New tests land in the module's existing spec file — create a new `_spec.lua` only for a genuinely new module or subsystem.
+- Always wrap ad-hoc headless `nvim` in `timeout` (`timeout 10 nvim --headless ...`) — it can hang indefinitely on an unexpected prompt.
+
+**Code**
+
+- All JSON through `require("flemma.utilities.json")` — never bare `vim.json.*` or `vim.fn.json_*`.
+- Never catalogue `flemma.logging` output — log lines stay inline English literals so they grep straight back to source when debugging. Every _user-visible_ string belongs in `flemma.messages` (model-facing strings — conversation, tool schemas — do too), and the surface is wider than `flemma.notify`: extmark/`virt_text` labels (spinners, tool-status indicators), interactive prompts (`vim.ui.select`/`vim.ui.input`), and float titles/borders/footers all count. Only `notify.*` is lint-enforced (the `messages` gate), so the rest is a manual sweep — grep `virt_text`, `nvim_echo`, `vim.ui.select`/`vim.ui.input`, `title =` when touching UI. NOT user-facing text (stay inline English): buffer-format tokens (role markers, `(rejected)`/`(pending)` status suffixes, `<thinking>` tags — all parse-critical) and highlight-group names.
+- `error()` prose stays inline English (developer-facing, like logging) — the exception is a structured diagnostic (`error({ type=…, error=… })`) raised on user-authored `.chat` content (templating expressions, `@file`/`include()` failures): that reaches the user, so its prose belongs in `flemma.messages`. Stdlib/libuv error text such a diagnostic wraps stays a dynamic `{{ detail }}` variable — translate our wrapper, never stdlib's message.
+- Join a user-facing string to another only with `\n` (layout) — never punctuation (`. `, `: `, ` `), which is language-specific grammar (a full stop is wrong in scripts that don't end sentences with one). A single message may carry an untranslatable prefix (method name like `config.apply:`, a glyph, HTML markup); two translations glued need one fuller message instead. The quotes/brackets around an interpolated value belong inside the `msgstr` too (Russian «», English ''), never hardcoded around the call.
+- Every `flemma.messages` rule is enforced by `make qa`'s `messages` gate (`contrib/scripts/lint-messages.sh`): PO validity (`msgfmt --check`), keys resolve both directions, call-site `{ vars }` match `{{ placeholders }}`, `#. Variables:` comments are present, no pure-formatting entries (a `msgstr` with no translatable words), newline-only joins, and the `local messages` import name. Add ast-grep rule files under `contrib/scripts/ast-grep/rules/`, never a stray scan in the Makefile.
+- All structural buffer inspection through the AST — never regex/substring matching on buffer lines.
+- Never write a helper without searching for an existing one first — `utilities/` (18 modules), `ast/query.lua`, and the owning subsystem; duplicating an established helper is a review failure.
+- All `require()` calls at file top — dynamic module paths go through `flemma.loader`.
+- Full EmmyLua type annotations on all production code.
+- Never `---@diagnostic disable` as an easy fix — use `---@cast`, `--[[@as type]]`, or restructure; suppressions only for genuine LuaLS limitations.
+- Never `vim.system(cmd):wait()` in code reachable from the send pipeline — async form behind a readiness boundary.
+
+**Commit & release**
+
+- No commits or PRs unless the user asks; ignore staged changes the user manages separately.
+- Every user-facing change carries a changeset file in the same commit — never as a follow-up.
+- `make format` before every commit.
+- `make types` after any config schema change.
+- Never commit plan or design documents (`docs/plans/`, `docs/superpowers/`).
+- Never hand-edit the `package.json` version or `CHANGELOG.md` — `pnpm changeset version` manages both.
+- Renames and terminology sweeps grep the whole repo from `.` across `*.lua *.md *.chat *.json *.yml *.yaml` — never just `lua/`.
+
+## Commands
+
+- `make qa` — every quality gate (luacheck, type-check, imports, tests). Silent on success; on failure re-runs only the failed gates with visible output.
+- `make types` — regenerate `lua/flemma/config/types.lua` after a schema change (`make qa` type-checks but does not regenerate).
+- `make develop` — launch Flemma from the working directory for manual testing.
+- `make format` — reformat via `treefmt` (stylua, shfmt, nixfmt, prettier, yamlfmt, taplo, po — the last normalizes `po/*.po` to `msgcat --no-wrap` for greppability); cached.
+
+`make qa` runs the tests against every Neovim version in `$NVIM_VERSIONS`; gate names embed the version (`test-neovim-0.12.2`). A failure in only one version is a version-specific compatibility issue — check `vim.fn` signatures, API changes, and Lua runtime differences.
 
 ## Design Principles
 
-- **Flemma is stateless; the buffer is the state.** All conversation data, tool calls, and results must be fully represented in the buffer text. Never rely on in-memory state that would be lost when Neovim restarts or when a `.chat` file is shared. If you need to persist information (e.g., synthetic IDs for providers that don't supply them), embed it in the buffer format itself so it can be parsed back later. In-memory structures (`state.lua`) are ephemeral caches rebuilt from the buffer on demand — they are never the source of truth.
+- **Flemma is stateless; the buffer is the state.** All conversation data, tool calls, and results live in buffer text — never in memory that dies with Neovim or is lost when a `.chat` file is shared. Anything that must persist (e.g., synthetic IDs) is embedded in the buffer format and parsed back. `state.lua` holds ephemeral caches rebuilt from the buffer — never the source of truth.
+- **The outgoing request is a product of _(conversation, environment)_.** The buffer determines what was said; the environment — config layers, tool registry, personality ambient state, template evaluation, model metadata — determines how it's delivered. Same buffer + same environment ⇒ same request. Every new request-pipeline input picks a side: conversation state → buffer; ambient context → environment. Never mix.
+- **All structural operations go through the AST** (cached per buffer in `state.ast_cache`). If the AST lacks information you need, extend the AST rather than bypass it. Direct buffer manipulation only for content injection (tool results, streaming text) and UI (spinners, extmarks).
+- **Async/blocking work in the send pipeline goes through `flemma.readiness`.** Leaf code raises `error(readiness.Suspense.new(message, boundary))`; orchestrators wrap the pipeline in `pcall`, check `readiness.is_suspense(err)`, subscribe to the boundary, and retry on completion. Boundaries are keyed by string and shared — concurrent consumers of one key share one in-flight runner. Any intermediate `pcall` silently swallows the sentinel: every pcall handler in the send path checks `is_suspense` and re-raises first. The `lint-pcall-rethrow` gate enforces this — new files in the send path must be added to its `WATCHED_FILES`.
+- **"Just make it work" beats "validate and warn."** Config we can't honor on the current model gets silent graceful fallback; warnings are reserved for config with no useful interpretation.
+- **Start with the smallest change that solves the problem**, in increments that isolate behaviour shifts so refactors stay reviewable.
+- **Verify claims before asserting them.** Untested claims in commits, comments, and docs rot fast and mislead the next contributor — back "X is only reachable via Y" with a test.
+- **Before mirroring a pattern, understand why it lives where it does.** A mirror that ignores its context becomes a leak into shared code.
 
-- **The outgoing request is a product of _(conversation, environment)_.** The buffer determines what was said; the environment determines how it's delivered. "Environment" means the config layer stack (SETUP/RUNTIME layers below FRONTMATTER), the tool registry, the personality builder's ambient state (`cwd`, `git_branch`, `date`, `time`, project context files on disk), template expression evaluation (`os.date`, `os.time`, `include()`, `math.random`), and model metadata from the registry. Given the same `.chat` buffer and the same environment, the request is deterministic. When adding new inputs to the request pipeline, decide which half they belong to — conversation state goes in the buffer, ambient context goes through the environment — and never mix the two.
+## Conventions
 
-- **All structural operations go through the AST.** The parsed AST (cached per buffer via `state.ast_cache`) is the only way to inspect conversation structure — roles, tool use/result blocks, thinking blocks, positions. If the AST lacks information you need, extend the AST rather than bypassing it. Direct buffer manipulation is only appropriate for content injection (tool results, streaming text) and UI concerns (spinners, extmarks).
+- Every module is `local M = {}` / `return M` with a `---@class flemma.ModuleName` annotation at the top.
+- Module names follow file paths (`lua/flemma/provider/adapters/openai.lua` → `flemma.provider.adapters.openai`). Public APIs belong to the domain-owning module (`flemma.tools`, `flemma.provider.registry`, …) — don't pollute `init.lua` with single-use accessors.
+- `require()` exceptions: module paths arriving as strings (config, user input, `BUILTIN_*` lists) go through `flemma.loader` — Flemma's extensibility contract — and Vim string-context code (`foldexpr`, `foldtext`, keymap strings) requires inside the string. Circular dependencies go through `flemma.bridge`.
+- Types: optional fields `---@field end_line? integer`; nullable unions `table|nil`; `---@alias` for discriminated unions; `---@cast` and `--[[@as type]]` for narrowing after guards.
+- Naming: full descriptive names, never abbreviated (`provider_name`, not `prov_name`); verb-based functions (`build_request()`); `UPPER_SNAKE_CASE` module constants; PascalCase dot-namespaced types (`flemma.ast.DocumentNode`); private functions stay `local`.
+- Files: single words preferred; snake_case for multi-word (`secret_tool.lua`); established domain concepts concatenate (`writequeue.lua`); tests end in `_spec.lua`. Integration filenames mirror the plugin repo minus `.nvim`, hyphens preserved (`nvim-treesitter-context.lua`) — internal identifiers and config keys don't follow file renames.
+- Directories: **plural** means the directory is a collection — the files ARE the concept (`tools/`, `secrets/`, `utilities/`); **singular** means a subsystem with a capability (`provider/`, `preprocessor/`, `ast/`). Subfolders name a role, not provenance (`tools/definitions/builtin/`, `secrets/resolvers/`). No self-referential subfolders (`provider/providers/`), and never a `foo.lua` next to a `foo/` directory — collapse into `foo/init.lua`.
+- Errors: `flemma.notify` for user-facing errors/warnings; `flemma.logging` for debug/trace; `value, err` tuples for operational results the caller handles inline; never `error()` for recoverable situations.
+- Shared infrastructure — search these before writing anything (the Iron Rule's where): `utilities/` (`json`, `path`, `string` — UTF-8-safe width truncation + `escape_pattern`, `truncate` — two-axis lines+bytes, `glob`, `variables` — URN/`$VAR`/`~` expansion, `modeline`, `encoding`, `color`, `display`, `http`, `registry` — name validation, `roles` — role↔wire mapping + highlight group names, `tools` — wire encoding `.`↔`__`, `buffer`, `diagnostic`); `ast/query.lua` — AST traversal helpers, never hand-roll message/segment loops; `buffer/writequeue.lua` — ordered async buffer writes; `buffer/editing.lua` — structural edits; `messages.lua` — string catalogue over `po/flemma-harness.po` (model-facing strings: conversation text, tool schemas — English-only prompt surface, never translated) merged with `po/flemma.po` (user-facing UI strings — the translatable surface, all keys namespaced `ui.*`); keys stay unique across the files, enforced at load (`messages["job.executing.tracked"]{ job_id = id }` renders with variables; bare `messages["tool.denied"]` for consumers that already stringify, e.g. `:describe()`; `messages["tool.denied"]{}` where a real string must materialize immediately, e.g. a stored/returned field with no variables — this also forces a plural entry to render (a bare proxy passed where a real string is required, e.g. a `desc` field or `Suspense.new`, fails); keys are flat dotted identifiers, entries render lazily through the templating engine; brace-call is the house style, auto-applied after stylua by `make format` — see `contrib/scripts/format-messages-brace-call.sh`); `utilities/po.lua` — strict-subset gettext PO parser behind it, returning a uniform `Entry` (a `forms` array plus an optional compiled `plural` selector; plural entries use `msgid_plural`/`msgstr[N]` and a `Plural-Forms` header compiled by `utilities/plural_forms.lua`, chosen when a `count` variable is passed); `utilities/plural_forms.lua` — closure-tree compiler for gettext `Plural-Forms` C-expressions (EN/FR/RU/PL tested); `symbols.lua` — shared glyphs and symbol keys; `cursor.request_move()` — deferred cursor moves during streaming; `hl.lua` — highlight algebra vs `highlight.lua` — group application.
+- Registration namespaces follow fixed patterns: extmark namespaces are `flemma_<domain>` created at module load; autocmd groups are `Flemma<Subsystem>` (buffer-local groups suffix `_<bufnr>`); highlight group names must start with `Flemma` (`hl.lua:set()` asserts it); extmark priorities come from the shared `PRIORITY` ladder in `ui/init.lua`, never hardcoded.
+- Every extension point (provider adapter, tool definition, preprocessor rewriter, fold rule, template builtin, secrets resolver, personality style) has a registration contract documented in its subsystem's base/init module — read it before adding an instance; adding one is never just dropping in a file.
+- Tool definitions access sandbox/truncate/path only through the execution context (`ctx.*`) — direct requires bypass sandbox policy enforcement; input schemas end in `.strict()` (OpenAI strict mode requires it); async tools call their callback exactly once — twice is silently ignored, never is a hang until timeout.
 
-- **Async/blocking work in the send pipeline goes through `flemma.readiness`.** Mirrors the `Confirmation` pattern in `lua/flemma/preprocessor/context.lua`: leaf code that would block on subprocess IO (e.g., `secrets.resolve`, `tools.get_for_prompt`) raises `error(readiness.Suspense.new(message, boundary))`. Orchestrators (`core.send_to_provider`, `usage.prefetch.fire_fetch`, `:Flemma usage:estimate`) wrap their pipeline in `pcall`, check `readiness.is_suspense(err)`, subscribe via `boundary:subscribe(cb)`, and retry the whole pipeline on completion. Boundaries are keyed by string (e.g., `secrets:vertex:access_token`) and shared — concurrent consumers of the same key share one in-flight runner. Never use `vim.system(cmd):wait()` in code reachable from the send pipeline — use the async `vim.system(cmd, opts, on_exit)` form behind a boundary.
-
-- **EmmyLua type annotations are mandatory.** Every production file must have full LuaLS type coverage — `---@class`, `---@param`, `---@return`, `---@field`, `---@type` on all public and private functions, fields, and return values. New code without type annotations will not pass `make qa`.
-
-- **Name modules according to their file path** (`lua/flemma/provider/adapters/openai.lua` → `flemma.provider.adapters.openai`). Public APIs belong in the module that owns the domain — tool registration lives in `flemma.tools`, provider registration in `flemma.provider.registry`, session access in `flemma.session`, etc. Don't pollute `init.lua` with single-use accessors; users require the specific module directly.
-
-- **Verify claims before asserting them.** Commit messages, comments, and docs that make claims you haven't tested rot fast and mislead the next contributor. If you write "X is only reachable via Y," back it with a test.
-
-- **Before mirroring a pattern, understand why it lives where it does.** Patterns are shaped by surrounding context — which capability branch owns them, which module, which provider. A mirror that ignores context becomes a leak into shared code.
-
-- **"Just make it work" beats "validate and warn".** When a user configures something we can't honor on the current model, prefer silent graceful fallback over warnings. Warnings that fire on every request are noise; reserve them for config with no useful interpretation.
-
-- **Start with the smallest change that solves the problem.** If three lines in one file would do, don't reach for shared infrastructure. Complexity creep is the tax on going in search of trouble.
-
-- Make incremental changes that isolate behaviour shifts so refactors remain reviewable.
-
-## Request Lifecycle
-
-Explore `lua/flemma/` to understand the codebase — module files are named descriptively and each has a `---@class` annotation explaining its role. The request lifecycle flows through these stages:
-
-### Input: Buffer → Structured Data
-
-`parser.lua` parses `.chat` buffer text into an AST. `ast/` defines the node types (document, message, segments for tool use, tool result, thinking, job result, text). The AST is cached per buffer in `state.lua` and is the sole interface for inspecting conversation structure. `preprocessor/` runs rewriters and confirmations on the parsed conversation before it reaches the provider — context injection, file reference resolution, and user confirmations live here.
-
-### Orchestration: Driving the Conversation
-
-`core.lua` is the main orchestrator — it constructs providers inline per-request, manages the send→stream→idle cycle, and drains background job completions at conversation idle. `processor.lua` evaluates template expressions and frontmatter, feeding into `pipeline.lua` which validates tool resolution and runs the request. `sink.lua` accumulates streaming data in hidden scratch buffers. `readiness.lua` provides the async suspense/boundary system for non-blocking credential resolution and other blocking work. `autopilot.lua` manages auto-continue behavior with debounced resume delay and guards (insert-mode, disarm-on-cancel).
-
-**Gotcha:** Any `pcall` between a leaf that raises `Suspense` and the orchestrator that catches it will silently swallow the sentinel. Check `readiness.is_suspense(err)` and re-raise first in any pcall handler in the send pipeline. This includes the compiled-template expression evaluator (`templating/compiler.lua` — expressions wrap each `{{ ... }}` in a `pcall`; `__emit_expr_error` must re-raise suspense). The `make qa` `lint-pcall-rethrow` gate enforces this for `core.lua`, `preprocessor/init.lua`, `preprocessor/runner.lua`, `processor.lua`, `provider/base.lua`, `templating/compiler.lua`, `usage/prefetch.lua`, and `commands.lua`. New files in the send path must be added to that script's `WATCHED_FILES`.
-
-### Execution: Providers, Tools, and Jobs
-
-`provider/base.lua` defines the provider contract (metatable inheritance). `provider/normalize.lua` handles parameter normalization (flatten, max_tokens, thinking, preset resolution). `provider/adapters/` contains implementations — `anthropic.lua`, `openai.lua`, `vertex.lua`, `moonshot.lua` — each request-scoped with no global instance.
-
-`tools/` manages the tool registry (`get_all()` filters by `enabled`), executor, injector, and approval flow. Built-in tool definitions live in `tools/definitions/builtin/` (bash, edit, find, grep, ls, read, write, mcporter). Harness tools live in `tools/definitions/harness/` (jobs status). The registry is a table keyed by name — `pairs()` does not guarantee order; sort by name when building tool arrays for deterministic prompt caching.
-
-**Background jobs** allow tools to run asynchronously. The executor assigns job IDs, routes completions to a queue, and supports mid-flight backgrounding (promoting a running foreground tool to background). Job completions drain at conversation idle via `core.drain_job_completions()`. The `flemma.jobs.status` harness tool lets the LLM query job state, cross-checked against the AST for buffer truth. The `flemma.background` parameter is auto-injected into async tool schemas.
-
-**Gotcha:** Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`. The walker prefers it over sync `:resolve`. A resolver that does `vim.system(cmd):wait()` in sync `:resolve` will block the editor. Additionally, `provider:resolve_credential()` returns `flemma.secrets.Result|nil` only — failures flow through suspense boundaries, not return-value diagnostics.
-
-### Output: Buffer Writing and UI
-
-`buffer/` provides buffer manipulation primitives — `editing.lua` for structural edits and `writequeue.lua` for ordered async writes. `messages/` externalizes user-facing buffer messages as `.chat` template files with a naming convention.
-
-`ui/` is decomposed into subsystems: `ui/bar/` (activity bar, background jobs observability), `ui/folding/` (fold rules, merge logic), plus indicators (tool status extmarks), highlights, and syntax. `symbols.lua` centralizes Unicode glyphs used across UI components.
-
-**Gotcha:** Tests must assert on observable output (window config, buffer text, extmark positions), not internal state. Internal fields can stay coherent while the rendered UI is wrong. Two regressions slipped past the Bar refactor's CI (duplicate spinner glyph, full-width corner floats) because specs checked `bar._some_flag` instead of window dimensions and buffer contents.
-
-### Infrastructure
-
-- `config/` — layered config system: `init.lua` (public facade: `get`, `materialize`, `apply`, `writer`, `inspect`), `store.lua` (DEFAULTS→SETUP→RUNTIME→FRONTMATTER layers), `proxy.lua` (read/write proxy metatables), `schema.lua` (definition with defaults, DISCOVER, aliases), `types.lua` (generated EmmyLua types)
-- `schema/` — general-purpose schema DSL engine: `init.lua` (factory: `s.string()`, `s.object()`, etc.), `types.lua` (node classes), `navigation.lua` (tree traversal)
-- `secrets/` — credential resolution with async resolvers; `resolvers/` contains built-in resolver implementations
-- `templating/` — Lua template engine; `builtins/` for built-in template functions
-- `hooks.lua` + `emittable.lua` — event system with internal subscribers (graduated alongside background jobs). Hooks dispatch asynchronously by default (`vim.schedule`); pass `{ sync = true }` as the third argument to `hooks.dispatch()` when the caller needs subscribers to complete before continuing (currently only `buffer:destroyed` in `state.lua`)
-- `migration.lua` — centralized load-time buffer mutations
-- `utilities/` — stateless shared infrastructure: `json.lua`, `path.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `registry.lua`, `buffer.lua`
-- `loader.lua` — dynamic module loading (Flemma's extensibility contract for user-provided module paths in config)
-- `bridge.lua` — circular dependency resolution between modules
-- `models/` — model definitions, metadata, pricing
-- `personalities/` — personality builder (system prompts, styles); ambient state (`cwd`, `git_branch`, `date`, etc.)
-- `session.lua` — session/request tracking, cost accounting
-- `usage/` — token usage estimation and prefetch
-
-## Directory Naming Convention
-
-A **plural** top-level directory means the directory _is_ a collection — the files ARE the concept (`tools/`, `secrets/`, `personalities/`, `models/`, `utilities/`, `integrations/`). A **singular** directory is a subsystem with a capability (`provider/`, `preprocessor/`, `sandbox/`, `config/`, `ast/`, `schema/`, `ui/`, `templating/`, `codeblock/`).
-
-Sub-folders name a **role** (what the files do or are), not provenance: `tools/definitions/builtin/`, `secrets/resolvers/`, `sandbox/backends/`, `preprocessor/rewriters/`, `codeblock/parsers/`, `templating/builtins/`. Sub-folder contents are by convention the built-in instances of that role.
-
-Avoid self-referential sub-folders (e.g., `provider/providers/`) and avoid a `.lua` file next to a directory with the same name — collapse to `foo/init.lua` instead.
-
-## Buffer Format Reference
+## Buffer Format
 
 `.chat` files use role markers, structured headers, and fenced blocks:
 
-- **Role markers**: `@System:`, `@You:`, `@Assistant:` at the start of a line; content extends until the next marker
-- **Tool Use** (`@Assistant` messages): ``**Tool Use:** `tool_name` (`tool_id`)`` followed by a fenced JSON code block with the tool input
-- **Tool Result** (`@You` messages): `` **Tool Result:** `tool_id` `` optionally followed by a modeline-parseable `(...)` suffix, then a fenced code block with the result
-- **Job Result** (`@You` messages): `` **Job Result:** `job_id` `` — linked to a tool_result via the job ID; follows the same status suffix convention
-- **Tool/job status suffix**: `(pending)` / `(approved)` / `(denied)` / `(rejected)` / `(aborted)` / `(error)` on tool_result/job_result headers, or explicit `(status=pending sandbox=false)` for mixed metadata — unrecognized tokens round-trip via the `meta` field on the AST node
-- **Thinking blocks** (`@Assistant` messages): `<thinking>` / `</thinking>` tags, optionally with `provider:signature="base64"` attribute or `redacted` flag
-- **Expressions**: `{{ lua_expression }}` in `@System`/`@You` messages (sandboxed environment with `math`, `string`, `table`, `utf8`, select `vim.fn`/`vim.fs` functions, and essential globals)
-- **File references**: `@./path`, `@../path`, `@~/path`, or `@//absolute/path` (with optional `;type=mime/type` suffix) in `@You` messages
+- **Role markers**: `@System:`, `@You:`, `@Assistant:` at the start of a line; content extends until the next marker.
+- **Tool Use** (`@Assistant`): ``**Tool Use:** `tool_name` (`tool_id`)`` followed by a fenced JSON block with the tool input.
+- **Tool Result** (`@You`): `` **Tool Result:** `tool_id` `` with an optional modeline-parseable `(...)` suffix, then a fenced block with the result.
+- **Job Result** (`@You`): `` **Job Result:** `job_id` `` — linked to a tool_result via the job ID; same suffix convention.
+- **Status suffixes**: `(pending)` / `(approved)` / `(denied)` / `(rejected)` / `(aborted)` / `(error)`, or explicit `(status=pending sandbox=false)` for mixed metadata — unrecognized tokens round-trip via the AST node's `meta` field.
+- **Thinking blocks** (`@Assistant`): `<thinking>` / `</thinking>`, optionally with `provider:signature="base64"` or the `redacted` flag.
+- **Expressions**: `{{ lua_expression }}` in `@System`/`@You` messages — sandboxed environment with `math`, `string`, `table`, `utf8`, select `vim.fn`/`vim.fs` functions, and essential globals.
+- **File references**: `@./path`, `@../path`, `@~/path`, `@//absolute/path`, optional `;key=value` matrix parameters (`;type=mime/type` sets the MIME type), in `@You` messages.
 
-All tool IDs, job IDs, and metadata are embedded in buffer text so `.chat` files are portable and re-parseable.
+All tool IDs, job IDs, and metadata are embedded in buffer text so `.chat` files stay portable and re-parseable.
 
-## Coding Conventions
+## Testing
 
-### Module pattern
+- Plenary+Busted style: `_spec.lua` files with `describe`/`it` blocks; write the failing test first when the reproduction is automatable; supporting data in `tests/fixtures/` with scenario-driven names.
+- Spec placement (the Iron Rule's why): every `_spec.lua` costs a Neovim process startup plus `flemma.setup`, so a file-per-change habit bloats the suite. Land tests in the owning module's spec inside a focused `describe` block; name a genuinely new spec after its module, mirroring `lua/flemma/…`; keep each block self-isolating — clear only its own `package.loaded` entries.
+- When refactoring covered functionality, update the affected specs so the suite stays green; re-run `make qa` after each significant change and expect a zero exit code.
+- Clear module caches in `before_each` (`package.loaded["flemma.module"] = nil`) — read existing specs for the pattern.
+- Mock HTTP via `client.register_fixture()` / `client.clear_fixtures()` — see `core_spec.lua`.
+- New built-in tools shift provider tool counts — use order-independent `find_*_tool()` helpers, never index-based assertions.
+- Assert on observable output — window config, buffer text, extmark positions — never internal state. Internal fields stay coherent while the rendered UI is wrong; two Bar-refactor regressions shipped exactly that way.
 
-Every module uses `local M = {}` / `return M`. Every module has a `---@class flemma.ModuleName` annotation at the top.
+## Workflow & Releases
 
-### Require placement
+- Commits use Conventional Commits (`type(scope): summary`) with a body that captures the rationale.
+- If the user wants a direct commit ("just commit", "skip the diff"), skip all worktree inspection and produce a single `git commit -m` command.
+- UI adjustments are validated in headless Neovim — never attach screenshots or recordings.
+- For large or risky refactors, draft a plan and confirm with the user before implementation.
+- Changesets: `.changeset/<descriptive-slug>.md` with frontmatter `"@flemma-dev/flemma.nvim": patch|minor|major` and a one-line summary. `patch` = fixes and internal improvements; `minor` = new features or config options; `major` = breaking changes to API, config, or buffer format. Skip for pure refactors, CI/tooling, test-only changes, and CLAUDE.md updates.
+- Releasing: `pnpm changeset version` consumes pending changesets, then commit the result; a GitHub Actions workflow opens a "Version Packages" PR as changesets accumulate on `main`. Each minor release gets a single-word typographic codename via the `release-naming` skill (logged in the `Incipit` ledger).
+- Session closure: `make format`, then `make qa`, then note outstanding follow-ups the next agent will need.
 
-All `require()` calls go at the top of the file, before any function definition. The only exceptions are:
+## Gotchas & Pitfalls
 
-- **Dynamic requires via `flemma.loader`** — when resolving a module path string at runtime (from config, user input, or a `BUILTIN_*` list), use `loader.load(path)` instead of bare `require(path)`. The loader is Flemma's extensibility contract: users put string paths in config (e.g., `{ tools = { modules = { "my.custom.tool" } } }`) and the loader turns them into loaded modules. Never use bare `require()` for dynamic module path resolution.
-- **Vim string-context requires** — inside `foldexpr`, `foldtext`, or keymap strings that Vim evaluates in a separate Lua context
+One entry per learning: **bold symptom** → fix. Add new ones as they're earned — only if they clear the Knowledge Management bar.
 
-`make qa` enforces this convention. If you need to call a function from a module that would create a circular require dependency, use `flemma.bridge` — see its module documentation.
+**Lua/LuaJIT/Neovim**
 
-### Type annotation patterns
+- **`tostring(5.0)` returns `"5"` in LuaJIT**, not `"5.0"` — account for it in assertions and formatting of numeric results.
+- **`a and b or c` fails when `b` is falsy** — `true and false or x` yields `x`. Explicit `if/else` whenever the true-branch value can be `false` or `nil`.
+- **`os.tmpname()` creates and leaks a file on LuaJIT** — it `mkstemp()`s into shared `/tmp` and returns the name. Use `vim.fn.tempname()` (private per-instance dir, removed on exit).
+- **`vim.NIL` is truthy** — JSON `null` decoded without `luanil` passes `if x then` guards and crashes on math/string ops. This is why the JSON Iron Rule exists.
+- **`nvim_set_option_value` with only `win` acts like `:set`, not `:setlocal`** — it mutates the global value too; pass `{ win = w, scope = "local" }` for any window-local intent.
+- **`vim.deepcopy` clones table keys, not just values** — symbol-keyed tables silently lose identity lookups; copy them with `symbols.deepcopy()`.
+- **Replacing buffer lines pushes extmarks to the start of the replaced range** — reposition after structural injection (see `indicators.reposition_tool_indicators()`).
 
-- Optional fields: `---@field end_line? integer`
-- Union types for nullable: `table|nil`, `string|nil`
-- `---@alias` for discriminated unions: `---@alias flemma.ast.Segment flemma.ast.TextSegment|...`
-- Use `---@cast` and `--[[@as type]]` for type narrowing after guards
-- `---@diagnostic disable-next-line` is a last resort, only for genuine LuaLS limitations (e.g., `return-type-mismatch` on `setmetatable` returns in provider `new()`)
+**Project**
 
-### Naming
-
-- **Full, descriptive names** — never abbreviate (`definition` not `def_entry`, `provider_name` not `prov_name`)
-- Functions: verb-based (`build_request()`, `parse_response()`, `resolve_credential()`)
-- Constants: `UPPER_SNAKE_CASE` at module top
-- Types/classes: `PascalCase` with dot-namespacing following file path (`flemma.ast.DocumentNode`)
-- Private functions: `local function name()` (not exported on `M`)
-
-### File naming
-
-Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
-
-**Integration module filenames** (`lua/flemma/integrations/*.lua`) mirror the plugin's repo name with any `.nvim` suffix dropped, and hyphens are preserved (e.g., `nvim-treesitter-context.lua`). Internal type identifiers and public config keys are not renamed when a filename changes.
-
-### JSON handling
-
-**Always use `require("flemma.utilities.json")`** for all JSON operations. Never use `vim.fn.json_decode`, `vim.fn.json_encode`, `vim.json.decode`, or `vim.json.encode` directly. The wrapper uses `luanil` options so JSON `null` becomes Lua `nil` (not `vim.NIL`). Bare `vim.json.decode` produces truthy `vim.NIL` userdata that passes `if x then` guards and crashes on math/string operations.
-
-### Error handling
-
-- `flemma.notify` for user-facing errors and warnings
-- `flemma.logging` (conventionally `local log = require("flemma.logging")`) for debug/trace logging
-- Return tuples `value, err` for operational results where the caller handles failures inline
-- Never `error()` for recoverable situations
-
-## Lua/LuaJIT Gotchas
-
-- **`tostring(5.0)` returns `"5"` in LuaJIT**, not `"5.0"`. Account for this in assertions and string formatting involving numeric results.
-- **`a and b or c` fails when `b` is falsy.** `true and false or x` evaluates to `x`, not `false`. Always use explicit `if/else` when the "true" branch value could be `false` or `nil`. This bit a dual-call convention closure (`maybe_item ~= nil and maybe_item or self_or_item`) where `maybe_item` was legitimately `false`.
-- **`os.tmpname()` on LuaJIT creates and leaks a file.** It `mkstemp()`s `/tmp/lua_XXXXXX` (the file exists on disk, mode 0600) and returns the name; callers that only use the name leak one empty file per call into shared `/tmp`. Use `vim.fn.tempname()` — Neovim's private per-instance temp dir, removed on exit.
-
-- **`vim.NIL` is truthy.** JSON `null` decoded without `luanil` options produces `vim.NIL` userdata that passes `if x then` guards. This is why the JSON wrapper rule exists.
-
----
-
-# Part 2: Agent Operating Contract
-
-## Build, Test, and Development Commands
-
-- **`make qa`** — run all quality gates (luacheck, type-check, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
-- **`make types`** — regenerate `lua/flemma/config/types.lua` after any schema change. `make qa` type-checks but does not regenerate.
-- **`make develop`** — launch Flemma from the working directory for manual testing.
-- **`make format`** — reformat the entire codebase via `treefmt` (stylua, shfmt, nixfmt, prettier, yamlfmt, taplo). Cached — only reformats changed files. **Run before every commit, not just at session end.**
-
-### Multi-Version Test Matrix
-
-`make qa` runs the test suite against every Neovim version listed in `$NVIM_VERSIONS` (set by the Nix dev shell). Gate names include the version — e.g., `test-neovim-0.11.7`, `test-neovim-0.12.2`. A failure in one version but not the other means a version-specific compatibility issue: check `vim.fn` signatures, API changes, and Lua runtime differences between the two.
-
-### `make qa` Only
-
-Do not invoke `nvim` directly with Plenary commands. Only `make qa` is wired correctly for running tests.
-
-### Run `make qa` Bare
-
-Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-explanatory on failure.
-
-## Testing Guidelines
-
-- Follow the existing Plenary+Busted style: files end with `_spec.lua` and use `describe`/`it` blocks.
-- Add fresh specs for every new feature **and every bug fix**. Write the failing test first (TDD) when the reproduction is automatable. Place supporting data in `tests/fixtures/` with scenario-driven names.
-- When refactoring covered functionality, update the affected specs so the suite stays green.
-- Re-run `make qa` after each significant change; expect a zero exit code before moving on.
-
-### Key testing patterns
-
-- **Module cache clearing** is critical for isolation — tests clear `package.loaded["flemma.module"] = nil` in `before_each()`. Read existing specs for the pattern.
-- **HTTP mocking** via `client.register_fixture()` / `client.clear_fixtures()` — see `core_spec.lua` for examples.
-- **Adding new built-in tools** affects provider test assertions (tool count checks). Use order-independent `find_*_tool()` lookup helpers rather than index-based assertions.
-
-## Workflow & Commit Guidance
-
-- Do not create PRs or commits unless the user explicitly asks for them; ignore any staged changes the user manages separately.
-- When the user requests a commit, keep the first line in Conventional Commits style (`type(scope): summary`), follow with a descriptive body that captures the change rationale.
-- If the user indicates they want a direct commit without review (e.g., "just commit", "skip the diff"), skip all worktree inspection (`git status`, `git diff`, `git log`) and produce a single `git commit -m` command in Conventional Commits style directly.
-- **After committing a user-facing change, always write a changeset file** (see below). Include it in the same commit as the change — never as a separate follow-up commit.
-- UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
-- For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
-- **Never commit plan or design documents** (`docs/plans/`, `docs/superpowers/`). Plans are working artifacts for the current session — they live on disk but stay out of version control.
-- **Search-and-replace must be repo-wide.** When doing any rename or terminology sweep, grep from `.` with patterns covering `*.lua *.md *.chat *.json *.yml *.yaml` (exclude `node_modules/`, `.git/`, and `docs/superpowers/`). Limiting grep to `--include="*.lua"` misses docs, README, changelogs, and config files that reference identifiers.
-
-### Changesets & Versioning
-
-After every commit with a user-facing change, write a changeset to `.changeset/<descriptive-slug>.md`:
-
-```markdown
----
-"@flemma-dev/flemma.nvim": patch
----
-
-Fixed parser edge case with nested thinking blocks
-```
-
-- **Bump types**: `patch` (fixes, internal improvements), `minor` (new features, config options), `major` (breaking changes to API, config, or buffer format)
-- **Skip changesets** for pure refactors, CI/tooling, test-only changes, and CLAUDE.md updates
-- **Never edit `package.json` version or `CHANGELOG.md` manually** — `pnpm changeset version` manages both
-- When the user asks to release, run `pnpm changeset version` to consume pending changesets, then commit the result
-- A GitHub Actions workflow (`.github/workflows/release.yml`) automatically creates a "Version Packages" PR when changesets accumulate on `main`
-- **Naming a minor release?** Each minor version gets a single-word typographic codename — invoke the `release-naming` skill (`.claude/skills/release-naming/`), which logs picks in the `Incipit` ledger so names are never reused
+- **Stale `vim-pack-dir` copy shadows working-directory changes** — headless runs must `set rtp^=` (prepend), never `+=`; verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source`.
+- **Provider `new()` metatable chains break subtly** — each provider sets the full chain atomically in its `setmetatable` literal before `self:_new_response_buffer()`; intermediate bases exist (`moonshot → openai_chat → base`).
+- **Tool header backticks are parse-critical** — ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` need exact backtick wrapping or parsing fails.
+- **Fixed paths under `${TMPDIR:-/tmp}` collide across parallel test processes** — `make qa` runs specs concurrently across Neovim versions and buffer numbers repeat per process, so one process's cleanup lands inside another's create→assert window. Use `vim.fn.tempname()` roots or the pid-scoped unnamed-store default.
+- **Hook-payload mocks must honor type contracts** — `hooks.dispatch()` reaches every subscriber registered by `flemma.setup()`, and errors in `vim.schedule`d continuations fail no test. Build payloads with real constructors (`session.Request.new(...)`) and disable subsystems the spec doesn't exercise.
+- **`vim.schedule`d closures from a reloaded module instance fire mid-test** — a `before_each` that clears `package.loaded` leaves the old instance's autocmds live until the fresh `setup()` re-registers them; buffer churn in that window schedules callbacks over the old instance's frozen module-locals, which drain inside the next test's first `vim.wait` and mutate global state (options, buffers) out from under it. Drain first: `vim.wait(10, function() return false end)` in `before_each` before establishing test state.
+- **Registry `pairs()` order is nondeterministic** — sort by name when building tool arrays or deterministic prompt caching breaks.
+- **Custom secrets resolvers must implement `resolve_async(self, credential, ctx, callback)`** — the walker prefers it; a sync `:resolve` doing `vim.system(cmd):wait()` blocks the editor. `provider:resolve_credential()` returns `flemma.secrets.Result|nil` only — failures flow through suspense boundaries, not return values.
+- **AST positions are 1-indexed; `nvim_buf_*` and extmark rows are 0-indexed** — every boundary crossing subtracts one; off-by-ones here put indicators on the wrong lines.
+- **Tool lists for provider requests must come from `tools.get_for_prompt()`** — it blocks on `ensure_ready()`; reading the registry directly lets async MCP sources establish a partial prompt-cache prefix, invalidating the cache for the rest of the conversation.
+- **`make format` reports high file-change counts that don't reflect real drift** — treefmt reformats, then `format-messages-brace-call.sh` fixes brace-call style; the two passes touch many files but cancel out. Trust `git status`/`git diff` for what actually changed, not the formatter's stdout.
 
 ## Knowledge Management
 
-**CLAUDE.md is the single source of truth for all project knowledge.** It is version-controlled, shared with every contributor and agent, and checked into the repository.
+CLAUDE.md is the single source of truth for project knowledge — version-controlled and shared with every contributor and agent. No local memory files; no splitting into linked files (only known paths auto-load; linked files get missed).
 
-- **Do not use local memory files** — no auto-memory, no `.claude/projects/*/memory/` files, no agent-local knowledge stores. Knowledge that isn't in CLAUDE.md doesn't exist for the next contributor.
-- **Do not split CLAUDE.md into linked files** — only files at known paths (`CLAUDE.md`, `.claude/CLAUDE.md`) are auto-loaded. Linked files require manual reads and get missed.
-- When you resolve a non-obvious issue, add it to the appropriate section (Lua/LuaJIT Gotchas or Project-Specific Pitfalls below). Keep entries concise: one line for the symptom, one for the fix/insight.
-
-## Project-Specific Pitfalls
-
-- **Stale `vim-pack-dir` copy shadows working-directory changes.** When running headless Neovim, always use `set rtp^=...` (prepend) not `set rtp+=...` (append). Verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source`.
-
-- **Always wrap `nvim --headless` in `timeout`.** Ad-hoc headless spikes can hang indefinitely on an unexpected prompt, modal error, or blocking autocmd. Prefix with `timeout 10 nvim --headless ...`.
-
-- **Provider `new()` metatable chain.** Each provider owns its constructor with the full chain set atomically in the `setmetatable` literal before `self:_new_response_buffer()`. The chain is typically `self → M → base`, but intermediate bases exist (e.g., `moonshot → openai_chat → base`). This makes metatable ordering bugs structurally impossible.
-
-- **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
-
-- **Never dismiss a `make qa` failure as "pre-existing".** If `make qa` fails, it's your problem. Fix it before committing — even if the failure looks unrelated to your change. The only way to prove a failure is pre-existing is to stash your changes and confirm it fails on the clean parent commit. Assuming without checking leads to shipping broken code.
-
-- **Tests must never create or delete fixed paths under `${TMPDIR:-/tmp}`.** `make qa` runs every spec file in parallel across multiple Neovim versions in the same `$TMPDIR`, and buffer numbers restart per process — a path keyed only by bufnr (or any fixed name) is byte-identical across sibling processes, and one process's `rm -rf` cleanup lands inside another's create→assert window. Use `vim.fn.tempname()` roots (process-unique) or the pid-scoped unnamed store default.
-
-- **Hook-payload mocks must honor type contracts.** `hooks.dispatch()` in a spec reaches every global subscriber registered by `flemma.setup()` (called by `tests/minimal_init.lua` and again by spec `before_each` blocks), and errors in their `vim.schedule`d continuations fail no test — they only surface as `attempt to call method` walls in failed-gate replays. Build payloads with real constructors (`session.Request.new(...)`, not bare field tables) and disable subsystems the spec doesn't exercise (e.g., `ui = { usage = { enabled = false } }`).
-
-## Session Closure Checklist
-
-- Run `make format` to reformat the entire codebase.
-- Run `make qa` and confirm it passes.
-- Note outstanding follow-ups, failing tests, or context the next agent will need to resume work.
+What belongs here is **normative** (tells the next actor what to do — rules, conventions, principles) or **hard-won** (a learning that cost real debugging time) — and only if it is **broadly applicable**: something a contributor could trip over anywhere, or must know before they'd find the right file. Hard-won measures cost, not reach, and placement follows reach — a learning confined to one module lives in a code comment at its point of use, not here. What never belongs is anything the codebase already says — code, comments, `---@class` annotations, filenames. A new MUST/NEVER lands as an Iron Rules one-liner; a new cross-cutting learning lands as a symptom→fix entry in Gotchas & Pitfalls.

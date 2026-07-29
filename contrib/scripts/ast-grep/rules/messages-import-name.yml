@@ -1,0 +1,16 @@
+# ast-grep rule: enforce `local messages = require("flemma.messages")`.
+#
+# The brace-call formatter (messages-brace-call.yml) rewrites
+# `messages["key"]({...})` → `messages["key"]{...}`. It matches the variable
+# name `messages` structurally — any other name silently bypasses the
+# formatter, leaving stylua's parentheses in place. This rule catches the
+# mismatch at lint time.
+id: messages-import-name
+language: lua
+rule:
+  all:
+    - pattern: local $VAR = require("flemma.messages")
+    - not:
+        pattern: local messages = require("flemma.messages")
+message: "flemma.messages must be imported as `local messages` (the brace-call formatter depends on this name)"
+severity: error

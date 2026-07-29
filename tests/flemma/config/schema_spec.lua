@@ -59,6 +59,14 @@ describe("flemma.schema", function()
       assert.equals("MyType", node._type_as)
       assert.equals("x", node:materialize())
     end)
+
+    it(":describe() normalizes a bare messages catalogue proxy via tostring()", function()
+      package.loaded["flemma.messages"] = nil
+      local messages = require("flemma.messages")
+      local node = s.string():describe(messages["tool.denied"])
+      assert.is_string(node._description)
+      assert.equals("The tool was denied by a policy.", node._description)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -1609,5 +1617,78 @@ describe("flemma.schema", function()
       assert.same({ "command", "label", "timeout" }, result.required)
       assert.equals(false, result.additionalProperties)
     end)
+  end)
+end)
+
+describe("schema node transform hook", function()
+  local s = require("flemma.schema")
+
+  local function collector_ctx()
+    local ctx = { ops = {} }
+    ctx.set = function(path, value)
+      table.insert(ctx.ops, { path = path, value = value })
+    end
+    ctx.get = function()
+      return nil
+    end
+    return ctx
+  end
+
+  it("has no transform by default", function()
+    assert.is_false(s.string():has_transform())
+  end)
+
+  it("attaches a transform chainably and applies it", function()
+    local node = s.string():transform(function(value, ctx)
+      ctx.set("other", value .. "!")
+    end)
+    assert.is_true(node:has_transform())
+    local ctx = collector_ctx()
+    node:apply_transform("x", ctx)
+    assert.are.same({ { path = "other", value = "x!" } }, ctx.ops)
+  end)
+
+  it("delegates through optional wrappers", function()
+    local node = s.optional(s.string():transform(function(value, ctx)
+      ctx.set("other", value)
+    end))
+    assert.is_true(node:has_transform())
+    local ctx = collector_ctx()
+    node:apply_transform("y", ctx)
+    assert.are.same({ { path = "other", value = "y" } }, ctx.ops)
+  end)
+
+  it("attaches a transform through an optional wrapper", function()
+    local node = s.optional(s.string()):transform(function(value, ctx)
+      ctx.set("other", value)
+    end)
+    assert.is_true(node:has_transform())
+    local ctx = collector_ctx()
+    node:apply_transform("z", ctx)
+    assert.are.same({ { path = "other", value = "z" } }, ctx.ops)
+  end)
+
+  it("attaches a transform through a nullable wrapper", function()
+    local node = s.nullable(s.string()):transform(function(value, ctx)
+      ctx.set("other", value)
+    end)
+    assert.is_true(node:has_transform())
+    local ctx = collector_ctx()
+    node:apply_transform("w", ctx)
+    assert.are.same({ { path = "other", value = "w" } }, ctx.ops)
+  end)
+
+  it("attaches a coerce through an optional wrapper", function()
+    local node = s.optional(s.integer()):coerce(function(value)
+      return value + 1
+    end)
+    assert.is_true(node:has_coerce())
+    assert.equals(4, node:apply_coerce(3))
+  end)
+
+  it("apply_transform is a no-op without a transform", function()
+    local ctx = collector_ctx()
+    s.string():apply_transform("x", ctx)
+    assert.are.same({}, ctx.ops)
   end)
 end)

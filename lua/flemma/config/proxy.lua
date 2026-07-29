@@ -17,6 +17,7 @@ local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
 local symbols = require("flemma.symbols")
+local transform = require("flemma.config.transform")
 
 --- Build an is_list classifier function for the given root schema.
 --- Returns true when the path refers to a list-capable field (ListNode,
@@ -312,6 +313,30 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- or hybrid proxy and return the proxy itself. When assigned back
       -- (e.g. `w.f = w.f + item`), the value is a sentinel: ops are done.
       if is_op_chain_sentinel(value) then
+        return
+      end
+
+      -- Write transform: decompose this write into explicit ops on sibling
+      -- paths (e.g. model = "vertex/gemini;p=x" → model + provider + params).
+      -- Ops re-enter this proxy under the expansion flag, so each target
+      -- field's own coerce/validation applies and outputs are never
+      -- re-transformed. A nil op value is the proxy's native clear (set-nil).
+      if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
+        local root = make_proxy(root_schema, bufnr, layer, "", root_schema)
+        local ok, err = transform.expand(leaf, canonical, value, bufnr, function(op_path, op_value)
+          local segments = vim.split(op_path, ".", { plain = true })
+          local target = root
+          for i = 1, #segments - 1 do
+            target = target[segments[i]]
+          end
+          target[segments[#segments]] = op_value
+        end)
+        if not ok then
+          error({
+            type = "config",
+            error = err --[[@as string]],
+          })
+        end
         return
       end
 

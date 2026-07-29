@@ -5,6 +5,7 @@
 local M = {}
 
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local registry = require("flemma.provider.registry")
 
@@ -108,10 +109,10 @@ function M.resolve_max_tokens(provider_name, model_name, parameters)
       local max = model_info.max_output_tokens
       local min = model_info.min_output_tokens
       if max and value > max then
-        notify.warn(string.format("max_tokens %d exceeds %s limit (%d), clamping.", value, model_name, max))
+        notify.warn(messages["ui.provider.max_tokens_exceeds"]{ value = value, model = model_name, limit = max })
         parameters.max_tokens = max
       elseif min and value < min then
-        notify.warn(string.format("max_tokens %d below %s minimum (%d), raising.", value, model_name, min))
+        notify.warn(messages["ui.provider.max_tokens_below"]{ value = value, model = model_name, limit = min })
         parameters.max_tokens = min
       end
     end

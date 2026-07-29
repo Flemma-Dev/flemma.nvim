@@ -7,6 +7,7 @@ local cache = require("flemma.secrets.cache")
 local config = require("flemma.config")
 local context = require("flemma.secrets.context")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.secrets.registry")
@@ -55,12 +56,9 @@ function M.resolve(credential)
     end)
   end)
 
-  error(
-    readiness.Suspense.new(
-      "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)) .. "…",
-      boundary
-    )
-  )
+  local description = credential.description
+    or messages["ui.secrets.credential_description"]{ kind = credential.kind, service = credential.service }
+  error(readiness.Suspense.new(messages["ui.secrets.resolving"]{ description = description }, boundary))
 end
 
 ---@param credential flemma.secrets.Credential
@@ -139,13 +137,13 @@ function M.register(source, resolver)
   else
     local ok, mod = pcall(require, source)
     if not ok then
-      notify.error("failed to load secrets resolver: " .. source)
+      notify.error(messages["ui.secrets.load_failed"]{ source = source })
       log.error("secrets.register(): " .. tostring(mod))
       return
     end
     ---@cast mod flemma.secrets.Resolver
     if not mod.name then
-      notify.error("secrets resolver module missing 'name' field: " .. source)
+      notify.error(messages["ui.secrets.missing_name"]{ source = source })
       return
     end
     registry.register(mod.name, mod)

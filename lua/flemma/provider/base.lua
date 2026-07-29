@@ -84,6 +84,7 @@ local bridge = require("flemma.bridge")
 local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
@@ -660,6 +661,7 @@ function M._check_buffered_response(self, callbacks)
   if ok and type(data) == "table" then
     local msg = self:extract_json_response_error(data)
     if msg and callbacks.on_error then
+      log.error("base._check_buffered_response(): API error: " .. log.inspect(msg))
       callbacks.on_error(msg)
       return true
     end
@@ -800,7 +802,9 @@ function M.is_foreign_thinking(self, segment)
   return not self:is_native_thinking(segment)
 end
 
----Collect foreign thinking segments and wrap them in a single <thinking> block.
+---Collect foreign thinking segments and frame them as tagless prose context
+---(the `thinking.foreign.wrap` catalogue entry — see its PO comment for why
+---it must never grow an XML-style envelope).
 ---Returns nil if foreign thinking is disabled or no foreign segments are found.
 ---@param self flemma.provider.Base
 ---@param segments flemma.ast.GenericThinkingPart[]
@@ -819,7 +823,7 @@ function M.wrap_foreign_thinking(self, segments)
   if #parts == 0 then
     return nil
   end
-  return "<thinking>\n" .. table.concat(parts, "\n\n") .. "\n</thinking>"
+  return messages["thinking.foreign.wrap"]{ content = table.concat(parts, "\n\n") }
 end
 
 --- Emit a thinking block to the buffer.
@@ -874,7 +878,7 @@ end
 ---@param callbacks flemma.provider.Callbacks
 function M._warn_truncated(self, callbacks)
   log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
-  notify.warn("Response truncated – model reached max output tokens")
+  notify.warn(messages["ui.provider.response_truncated"]{})
   if callbacks.on_response_complete then
     callbacks.on_response_complete()
   end

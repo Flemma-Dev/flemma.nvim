@@ -1,10 +1,51 @@
 --- Anthropic Claude model definitions.
+---
+--- `min_cache_tokens` is the minimum cacheable prefix and is per-model, not
+--- per-family — and it is NOT monotonic across generations (Opus 5 is 512,
+--- Opus 4.7 is 2048, Opus 4.6 is 4096). Do not collapse these into a family
+--- pattern; copy each value from Anthropic's prompt-caching docs.
 --- @see flemma.models.Types for type annotations
 
 ---@type flemma.models.ProviderModels
 return {
   default = "claude-sonnet-4-6",
   models = {
+    -- Claude Fable 5 — most capable widely released model; thinking is always on
+    -- (an explicit `thinking.type = "disabled"` is rejected with 400, but Flemma
+    -- omits the parameter entirely when thinking is off, which the API accepts).
+    ["claude-fable-5"] = {
+      pricing = {
+        input = 10.0,
+        output = 50.0,
+        cache_read = 1.00,
+        cache_write = 12.50,
+      },
+      max_input_tokens = 1000000,
+      max_output_tokens = 128000,
+      thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+      min_thinking_budget = 1024,
+      min_cache_tokens = 512,
+      meta = { adaptive_thinking = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+
+    -- Claude Opus 5 — adaptive thinking on by default (manual budget_tokens is rejected with 400)
+    ["claude-opus-5"] = {
+      pricing = {
+        input = 5.0,
+        output = 25.0,
+        cache_read = 0.50,
+        cache_write = 6.25,
+      },
+      max_input_tokens = 1000000,
+      max_output_tokens = 128000,
+      thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+      min_thinking_budget = 1024,
+      min_cache_tokens = 512,
+      meta = { adaptive_thinking = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+
     -- Claude Opus 4.8 — adaptive thinking only (manual budget_tokens is rejected with 400)
     ["claude-opus-4-8"] = {
       pricing = {
@@ -17,7 +58,7 @@ return {
       max_output_tokens = 128000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
       meta = { adaptive_thinking = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
     },
@@ -51,7 +92,7 @@ return {
       max_output_tokens = 128000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 4096,
       meta = { adaptive_thinking = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
     },
@@ -68,9 +109,9 @@ return {
       max_output_tokens = 128000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
       meta = { adaptive_thinking = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
     },
 
     -- Claude Sonnet 4.6
@@ -82,12 +123,12 @@ return {
         cache_write = 3.75,
       },
       max_input_tokens = 1000000,
-      max_output_tokens = 64000,
+      max_output_tokens = 128000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
       meta = { adaptive_thinking = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
     },
 
     -- Claude Sonnet 4.5
@@ -102,7 +143,7 @@ return {
       max_output_tokens = 64000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
     },
     ["claude-sonnet-4-5-20250929"] = {
       pricing = {
@@ -115,7 +156,7 @@ return {
       max_output_tokens = 64000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
     },
 
     -- Claude Haiku 4.5
@@ -158,7 +199,7 @@ return {
       max_output_tokens = 64000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 4096,
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["claude-opus-4-5-20251101"] = {
@@ -172,7 +213,7 @@ return {
       max_output_tokens = 64000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 4096,
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
 
@@ -188,7 +229,7 @@ return {
       max_output_tokens = 32000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
     },
     ["claude-opus-4-1-20250805"] = {
       pricing = {
@@ -201,7 +242,7 @@ return {
       max_output_tokens = 32000,
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
-      min_cache_tokens = 2048,
+      min_cache_tokens = 1024,
     },
   },
 }

@@ -12,6 +12,7 @@ local config_facade = require("flemma.config")
 local context_module = require("flemma.context")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 local renderer = require("flemma.templating.renderer")
 local sandbox_module = require("flemma.sandbox")
@@ -139,11 +140,11 @@ end
 local function render_format(format_str, env)
   local parts, diagnostics = renderer.render(format_str, env)
   if #diagnostics > 0 then
-    local messages = {}
+    local error_messages = {}
     for _, diagnostic in ipairs(diagnostics) do
-      messages[#messages + 1] = diagnostic.error or "unknown error"
+      error_messages[#error_messages + 1] = diagnostic.error or "unknown error"
     end
-    error(("Invalid store path format '%s': %s"):format(format_str, table.concat(messages, "; ")))
+    error(("Invalid store path format '%s': %s"):format(format_str, table.concat(error_messages, "; ")))
   end
   local expanded = renderer.parts_to_text(parts)
   expanded = variables.expand_inline(expanded)
@@ -531,7 +532,7 @@ function M.apply_redirect(opts)
     return { success = true, output = stub }, nil
   end
 
-  local notice = ("[Output not saved: %s. Showing the full output instead.]"):format(redirect_err or "unknown error")
+  local notice = messages["tool.output.not_saved"]{ reason = redirect_err or "unknown error" }
   return { success = true, output = content .. "\n\n" .. notice }, redirect_err
 end
 

@@ -17,6 +17,7 @@ local M = {}
 
 local hooks = require("flemma.hooks")
 local layout = require("flemma.ui.bar.layout")
+local messages = require("flemma.messages")
 local config_facade = require("flemma.config")
 local provider_registry = require("flemma.provider.registry")
 local str = require("flemma.utilities.string")
@@ -340,20 +341,20 @@ function M.recall_last()
 
   local filepath = vim.api.nvim_buf_get_name(bufnr)
   if filepath == "" then
-    notify.warn("No usage data for this buffer.")
+    notify.warn(messages["ui.usage.no_data"]{})
     return
   end
 
   local session = state.get_session()
   local latest = session:get_latest_request_for_filepath(filepath)
   if not latest then
-    notify.warn("No usage data for this buffer.")
+    notify.warn(messages["ui.usage.no_data"]{})
     return
   end
 
   local segments = M.build_segments(latest, session)
   if #segments == 0 then
-    notify.warn("No usage data for this buffer.")
+    notify.warn(messages["ui.usage.no_data"]{})
     return
   end
 

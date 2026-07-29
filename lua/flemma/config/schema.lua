@@ -82,7 +82,11 @@ return s.object({
   -- ---------------------------------------------------------------------------
 
   provider = s.string("anthropic"),
-  model = s.optional(s.string()),
+  model = s.optional(s.string():transform(function(value, ctx)
+    -- Lazy require: schema.lua cannot top-require the provider registry
+    -- (load cycle) — mirror the DISCOVER callback pattern below.
+    return require("flemma.provider.registry").model_transform(value, ctx)
+  end)),
 
   parameters = general_parameters_schema():extend({
     [symbols.DISCOVER] = function(key)
@@ -366,6 +370,7 @@ return s.object({
     disable_textwidth = s.boolean(true),
     auto_write = s.boolean(false),
     manage_updatetime = s.boolean(true),
+    manage_viewoptions = s.boolean(true),
     compact_headers = s.boolean(true),
     fold = s.object({
       level = s.integer(1),

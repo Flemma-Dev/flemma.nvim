@@ -24,9 +24,9 @@ A full slash-command engine for `.chat` buffers. The scope includes:
 
 ### User-overridable buffer messages
 
-Flemma injects short text fragments into the conversation buffer — tool result placeholders, abort notices, job status text. These messages now live as standalone `.chat` template files under `lua/flemma/messages/` (externalized in v0.12) and render through the templating engine.
+Flemma injects short text fragments into the conversation buffer — tool result placeholders, abort notices, job status text. These messages now live as flat keyed entries in gettext PO catalogues — `po/flemma-harness.po` for model-facing strings, `po/flemma.po` for user-facing UI strings — behind the `flemma.messages` module, and render through the templating engine.
 
-What's still missing is the user-facing override surface: letting users replace individual messages by dropping replacement `.chat` files in a known location (e.g., `~/.config/flemma/messages/`). This would allow customising the text the model sees when a tool is denied, a request is aborted, or a background job is lost — without forking the plugin.
+What's still missing is the user-facing override surface: letting users merge a supplemental `.po` file over the base catalogue to replace individual entries by key. This would allow customising the text the model sees when a tool is denied, a request is aborted, or a background job is lost — without forking the plugin.
 
 ---
 

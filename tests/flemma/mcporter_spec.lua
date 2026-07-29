@@ -9,6 +9,24 @@ describe("mcporter", function()
     mcporter = require("flemma.tools.definitions.builtin.mcporter")
   end)
 
+  -- ExecutionContext stub mirroring the E2E blocks below: real truncation,
+  -- no per-tool config, cwd = test root.
+  local function make_ctx()
+    return {
+      cwd = vim.fn.getcwd(),
+      timeout = 10,
+      get_config = function()
+        return nil
+      end,
+      truncate = setmetatable({
+        truncate_with_overflow = function(text, opts)
+          opts.bufnr = 0
+          return tools_truncate.truncate_with_overflow(text, opts)
+        end,
+      }, { __index = tools_truncate }),
+    }
+  end
+
   describe("_filter_tools", function()
     local tools = {
       { name = "slack.channels_list" },
@@ -502,6 +520,139 @@ describe("mcporter", function()
       end)
       assert.is_not_nil(result)
       assert.is_false(result.success)
+    end)
+  end)
+
+  describe("call timeout", function()
+    local echo_path = vim.fn.fnamemodify("tests/fixtures/mcporter/echo-args.sh", ":p")
+
+    -- echo-args.sh returns the whole command line as the tool output, so the
+    -- assertions below inspect exactly what was passed to `mcporter call`.
+    local function run(def, input)
+      local result = nil
+      def.execute(input, make_ctx(), function(r)
+        result = r
+      end)
+      vim.wait(5000, function()
+        return result ~= nil
+      end)
+      assert.is_not_nil(result)
+      return result
+    end
+
+    it("passes the configured timeout to mcporter as --timeout in milliseconds", function()
+      local def = mcporter._build_tool_definition("slack", {
+        name = "channels_list",
+        description = "List channels",
+        inputSchema = { type = "object", properties = {} },
+      }, { path = echo_path, timeout = 30 })
+
+      local result = run(def, {})
+      assert.is_true(result.success)
+      assert.equals("30000", result.output:match("%-%-timeout (%d+)"))
+    end)
+
+    it("lets the model override the call timeout per call", function()
+      local def = mcporter._build_tool_definition("perplexity", {
+        name = "perplexity_research",
+        description = "Deep research",
+        inputSchema = { type = "object", properties = {} },
+      }, { path = echo_path, timeout = 60 })
+
+      local result = run(def, { timeout = 600 })
+      assert.is_true(result.success)
+      -- the per-call 600s wins over the configured 60s default.
+      assert.equals("600000", result.output:match("%-%-timeout (%d+)"))
+    end)
+
+    it("strips the injected timeout so it never reaches the server as an argument", function()
+      local def = mcporter._build_tool_definition("perplexity", {
+        name = "perplexity_research",
+        description = "Deep research",
+        inputSchema = { type = "object", properties = { query = { type = "string" } } },
+      }, { path = echo_path, timeout = 60 })
+
+      local result = run(def, { query = "hello", timeout = 600 })
+      assert.is_true(result.success)
+      -- routed to the CLI flag ...
+      assert.equals("600000", result.output:match("%-%-timeout (%d+)"))
+      -- ... the real argument still travels ...
+      assert.is_not_nil(result.output:find('"query":"hello"', 1, true))
+      -- ... but the timeout is NOT emitted as a JSON tool argument.
+      assert.is_nil(result.output:find('"timeout"', 1, true))
+    end)
+
+    it("omits --args when only a timeout override is provided", function()
+      local def = mcporter._build_tool_definition("perplexity", {
+        name = "perplexity_research",
+        description = "Deep research",
+        inputSchema = { type = "object", properties = {} },
+      }, { path = echo_path, timeout = 60 })
+
+      local result = run(def, { timeout = 600 })
+      assert.is_true(result.success)
+      assert.equals("600000", result.output:match("%-%-timeout (%d+)"))
+      assert.is_nil(result.output:find("--args", 1, true))
+    end)
+  end)
+
+  describe("timeout input schema", function()
+    it("injects an optional numeric timeout carrying the default in its description", function()
+      local def = mcporter._build_tool_definition("slack", {
+        name = "channels_list",
+        description = "List channels",
+        inputSchema = {
+          type = "object",
+          properties = { channel_types = { type = "string" } },
+          required = { "channel_types" },
+        },
+      }, { path = "mcporter", timeout = 60 })
+
+      local timeout_prop = def.input_schema.properties.timeout
+      assert.is_table(timeout_prop)
+      assert.equals("number", timeout_prop.type)
+      assert.is_string(timeout_prop.description)
+      assert.is_not_nil(timeout_prop.description:find("60", 1, true))
+      -- stays optional: never added to the server's required list.
+      assert.is_false(vim.tbl_contains(def.input_schema.required, "timeout"))
+    end)
+
+    it("does not clobber a server-owned timeout property", function()
+      local def = mcporter._build_tool_definition("weird", {
+        name = "slow_tool",
+        description = "Owns its timeout arg",
+        inputSchema = {
+          type = "object",
+          properties = { timeout = { type = "string", description = "server timeout" } },
+        },
+      }, { path = "mcporter", timeout = 60 })
+
+      assert.equals("string", def.input_schema.properties.timeout.type)
+      assert.equals("server timeout", def.input_schema.properties.timeout.description)
+    end)
+
+    it("routes a server-owned timeout to --args and keeps the config default for --timeout", function()
+      local echo_path = vim.fn.fnamemodify("tests/fixtures/mcporter/echo-args.sh", ":p")
+      local def = mcporter._build_tool_definition("weird", {
+        name = "slow_tool",
+        description = "Owns its timeout arg",
+        inputSchema = {
+          type = "object",
+          properties = { timeout = { type = "string" } },
+        },
+      }, { path = echo_path, timeout = 30 })
+
+      local result = nil
+      def.execute({ timeout = "abc" }, make_ctx(), function(r)
+        result = r
+      end)
+      vim.wait(5000, function()
+        return result ~= nil
+      end)
+      assert.is_not_nil(result)
+      assert.is_true(result.success)
+      assert.equals("30000", result.output:match("%-%-timeout (%d+)"))
+      assert.is_not_nil(result.output:find('"timeout":"abc"', 1, true))
     end)
   end)
 end)

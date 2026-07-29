@@ -8,6 +8,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local messages = require("flemma.messages")
 local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
@@ -118,30 +119,19 @@ M.definitions = {
         ),
       }),
     },
-    description = "Search file contents using ripgrep (rg) or grep. "
-      .. "Returns matching lines with file paths and line numbers. "
-      .. "Output is limited to "
-      .. DEFAULT_LIMIT
-      .. " matches by default. "
-      .. "Supports regex patterns. "
-      .. "When using grep -E fallback, \\d, \\w, \\s are automatically translated to POSIX equivalents.",
+    description = messages["tool.grep.description"]{ default_limit = DEFAULT_LIMIT },
     strict = true,
     input_schema = s.object({
-      label = s.string()
-        :describe("A short human-readable label for this operation (e.g., 'searching for TODO comments')"),
-      pattern = s.string():describe("Regular expression pattern to search for"),
-      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
-      glob = s.string():nullable():describe("File glob filter (e.g., '*.lua', '*.{ts,tsx}')"),
-      limit = s.number():nullable():describe("Maximum number of matches (default: " .. DEFAULT_LIMIT .. ")"),
+      label = s.string():describe(messages["tool.grep.input.label"]),
+      pattern = s.string():describe(messages["tool.grep.input.pattern"]),
+      path = s.string():nullable():describe(messages["tool.grep.input.path"]),
+      glob = s.string():nullable():describe(messages["tool.grep.input.glob"]),
+      limit = s.number():nullable():describe(messages["tool.grep.input.limit"]{ default_limit = DEFAULT_LIMIT }),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Search file contents for patterns using ripgrep or grep",
-        guidelines = {
-          "Use grep to find specific patterns, symbols, or text across the codebase",
-          "Prefer specific patterns over broad ones to reduce noise",
-          "Use glob filter to narrow search to relevant file types",
-        },
+        snippet = messages["tool.grep.personality.snippet"]{},
+        guidelines = messages["tool.grep.personality.guidelines"]{},
       },
     },
     async = true,
@@ -167,13 +157,13 @@ M.definitions = {
       ---@cast callback -nil
       local pattern = input.pattern
       if not pattern or pattern == "" then
-        callback({ success = false, error = "No pattern provided" })
+        callback({ success = false, error = messages["tool.error.no_pattern"]{} })
         return nil
       end
 
       local backend = detect_backend()
       if not backend then
-        callback({ success = false, error = "No search backend available (install rg or grep)" })
+        callback({ success = false, error = messages["tool.grep.error.no_backend"]{} })
         return nil
       end
 
@@ -292,7 +282,7 @@ M.definitions = {
             if is_error then
               callback({
                 success = false,
-                error = "Search failed with exit code " .. code,
+                error = messages["tool.grep.error.exit_code"]{ code = code },
               })
               return
             end
@@ -300,7 +290,7 @@ M.definitions = {
             if match_count == 0 then
               callback({
                 success = true,
-                output = "No matches found.",
+                output = messages["tool.grep.no_matches"]{},
               })
               return
             end
@@ -315,9 +305,9 @@ M.definitions = {
             -- Add summary footer
             local footer
             if limit_reached then
-              footer = string.format("[%d matches, limit reached]", match_count)
+              footer = messages["tool.grep.footer_limit_reached"]{ count = match_count }
             else
-              footer = string.format("[%d matches]", match_count)
+              footer = messages["tool.grep.footer"]{ count = match_count }
             end
 
             if result.truncated then
@@ -338,7 +328,7 @@ M.definitions = {
       local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(cmd)
       if not wrapped_cmd then
         output_sink:destroy()
-        callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+        callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err } })
         return nil
       end
 
@@ -346,7 +336,7 @@ M.definitions = {
 
       if job_id <= 0 then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to start search process" })
+        callback({ success = false, error = messages["tool.grep.error.job_start"]{} })
         return nil
       end
 
@@ -355,7 +345,7 @@ M.definitions = {
       timer = vim.uv.new_timer()
       if not timer then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to create timer" })
+        callback({ success = false, error = messages["tool.error.timer"]{} })
         return nil
       end
       timer:start(
@@ -372,7 +362,7 @@ M.definitions = {
 
             local partial_output = output_sink:read():gsub("%s+$", "")
             output_sink:destroy()
-            local error_msg = string.format("Search timed out after %d seconds.", timeout)
+            local error_msg = messages["tool.grep.timeout"]{ count = timeout }
             if partial_output ~= "" then
               error_msg = partial_output .. "\n\n" .. error_msg
             end

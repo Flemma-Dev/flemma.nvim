@@ -15,16 +15,31 @@ local M = {}
 local bridge = require("flemma.bridge")
 local listops = require("flemma.config.listops")
 local nav = require("flemma.schema.navigation")
+local messages = require("flemma.messages")
 local notify = require("flemma.notify")
 local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
 local store = require("flemma.config.store")
+local transform = require("flemma.config.transform")
 
 --- Layer priority constants.
 M.LAYERS = store.LAYERS
 
 ---@type flemma.schema.Node?
 local root_schema = nil
+
+--- A module's config schema defaults registered via `register_module_defaults()`
+--- before `init()` has assigned `root_schema` — e.g. a module that self-registers
+--- as a `require()`-time side effect (see `provider/adapters/experimental/codex.lua`)
+--- and gets required in isolation, ahead of `flemma.setup()`. Flushed once `init()`
+--- runs — see `register_module_defaults()`.
+---@class flemma.config.PendingModuleDefaults
+---@field parent_path string
+---@field name string
+---@field config_schema flemma.schema.Node
+
+---@type flemma.config.PendingModuleDefaults[]
+local pending_module_defaults = {}
 
 -- ---------------------------------------------------------------------------
 -- Internal: schema helpers
@@ -63,6 +78,28 @@ local function path_parent(path)
     return parent, leaf
   end
   return "", path
+end
+
+--- Convert a dotted canonical path + value into a nested table rooted at "".
+--- Transform ops carry fully-flattened absolute paths (e.g.
+--- "parameters.vertex.project_id"), but re-applying one as a single
+--- apply_recursive(ctx, path, value) call bypasses the per-segment object
+--- recursion that DISCOVER deferral depends on — deferral only checks one
+--- parent level up, so an op two-or-more levels below an unregistered
+--- DISCOVER key would report "unknown key" instead of deferring. Rebuilding
+--- the nested table and re-entering at the root makes each segment boundary
+--- go through the normal object branch again, so deferral triggers at the
+--- right level regardless of op path depth.
+---@param path string
+---@param value any
+---@return table
+local function unflatten_path(path, value)
+  local segments = vim.split(path, ".", { plain = true })
+  local nested = value
+  for i = #segments, 1, -1 do
+    nested = { [segments[i]] = nested }
+  end
+  return nested
 end
 
 -- ---------------------------------------------------------------------------
@@ -141,7 +178,26 @@ local function apply_recursive(ctx, path, value)
         return true
       end
     end
-    return report_error(ctx, string.format("config.apply: unknown key '%s'", path))
+    return report_error(ctx, "config.apply: " .. messages["ui.config.apply_unknown_key"]{ key = path })
+  end
+
+  -- Write transform: fires for any value shape, before object handling — the
+  -- transform consumes the write entirely (same trigger contract as the proxy
+  -- and JSON-operator sites). Each op re-enters at the root with its path
+  -- unflattened into a nested table: apply_recursive's per-segment object
+  -- recursion keeps DISCOVER deferral, validation, and error collection
+  -- identical to a direct write, at any depth.
+  if value ~= nil and not transform.is_expanding() and leaf:has_transform() then
+    local ok, err = transform.expand(leaf, path, value, ctx.bufnr, function(op_path, op_value)
+      local op_ok, op_err = apply_recursive(ctx, "", unflatten_path(op_path, op_value))
+      if not op_ok then
+        error({ type = "config", error = op_err }, 0)
+      end
+    end)
+    if not ok then
+      return report_error(ctx, err --[[@as string]])
+    end
+    return true
   end
 
   if leaf:is_object() and type(value) == "table" then
@@ -158,7 +214,8 @@ local function apply_recursive(ctx, path, value)
           if not ok then
             return report_error(
               ctx,
-              string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid")
+              "config.apply: "
+                .. messages["ui.config.apply_list_item_error"]{ index = i, path = path, reason = err or "invalid" }
             )
           end
         end
@@ -182,7 +239,10 @@ local function apply_recursive(ctx, path, value)
     end
     local valid, err = leaf:validate_value(value)
     if not valid then
-      return report_error(ctx, string.format("config.apply: validation error at '%s': %s", path, err or "invalid"))
+      return report_error(
+        ctx,
+        "config.apply: " .. messages["ui.config.apply_validation_error"]{ path = path, reason = err or "invalid" }
+      )
     end
     store.record(ctx.layer, ctx.bufnr, "set", path, value)
   end
@@ -220,12 +280,38 @@ local function materialize_resolved(schema, base_path, bufnr)
 end
 
 -- ---------------------------------------------------------------------------
+-- Internal: module defaults
+-- ---------------------------------------------------------------------------
+
+--- Materialize a module's config schema defaults onto the DEFAULTS layer.
+--- Assumes `root_schema` is already set — callers (`register_module_defaults()`
+--- and `init()`'s pending-queue flush) are responsible for that invariant.
+---@param parent_path string Dot-delimited path to the parent object
+---@param name string Module name (the DISCOVER key)
+---@param config_schema flemma.schema.Node Module's config schema
+local function apply_module_defaults(parent_path, name, config_schema)
+  assert(root_schema, "apply_module_defaults: root_schema must already be set")
+  local defaults = config_schema:materialize()
+  if not defaults then
+    return
+  end
+  local base_path = parent_path .. "." .. name
+  ---@type flemma.config.ApplyContext
+  local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
+  local ok, err = apply_recursive(ctx, base_path, defaults)
+  if not ok then
+    notify.warn(messages["ui.config.module_defaults_failed"]{ path = base_path, reason = err })
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Initialization
 -- ---------------------------------------------------------------------------
 
 --- Initialize the config system with a root schema.
---- Stores the schema reference, resets the layer store, and materializes
---- schema defaults into the DEFAULTS layer.
+--- Stores the schema reference, resets the layer store, materializes schema
+--- defaults into the DEFAULTS layer, then flushes any module defaults that
+--- registered before this call (see `register_module_defaults()`).
 ---@param schema flemma.schema.Node Root schema node
 function M.init(schema)
   root_schema = schema
@@ -238,6 +324,16 @@ function M.init(schema)
     local ok, err = apply_recursive(ctx, "", defaults)
     if not ok then
       error("config.init: failed to materialize defaults: " .. err)
+    end
+  end
+
+  -- Flush module defaults registered before init() supplied the schema (e.g.
+  -- a module self-registering as a require()-time side effect).
+  if #pending_module_defaults > 0 then
+    local pending = pending_module_defaults
+    pending_module_defaults = {}
+    for _, entry in ipairs(pending) do
+      apply_module_defaults(entry.parent_path, entry.name, entry.config_schema)
     end
   end
 end
@@ -286,25 +382,23 @@ function M.record_default(op, path, value)
 end
 
 --- Materialize a discovered module's schema defaults into the DEFAULTS layer.
---- Called by registries (providers, tools, sandbox backends) after module
---- registration so that DISCOVER-resolved schemas contribute their defaults
---- to L10.
+--- Called by registries (providers, tools, sandbox backends, secrets resolvers)
+--- after module registration so that DISCOVER-resolved schemas contribute their
+--- defaults to L10.
+---
+--- May be called before `init()` — some modules self-register as a `require()`-
+--- time side effect (see `provider/adapters/experimental/codex.lua`) and can be
+--- required in isolation, ahead of `flemma.setup()`. When that happens the
+--- registration is queued and flushed once `init()` assigns the root schema.
 ---@param parent_path string Dot-delimited path to the parent object (e.g., "parameters", "tools", "sandbox.backends")
 ---@param name string Module name (the DISCOVER key, e.g., "anthropic", "bash", "bwrap")
 ---@param config_schema flemma.schema.Node Module's config schema
 function M.register_module_defaults(parent_path, name, config_schema)
-  assert(root_schema, "config.init() must be called before register_module_defaults()")
-  local defaults = config_schema:materialize()
-  if not defaults then
+  if not root_schema then
+    table.insert(pending_module_defaults, { parent_path = parent_path, name = name, config_schema = config_schema })
     return
   end
-  local base_path = parent_path .. "." .. name
-  ---@type flemma.config.ApplyContext
-  local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
-  local ok, err = apply_recursive(ctx, base_path, defaults)
-  if not ok then
-    notify.warn("register_module_defaults failed for " .. base_path .. ": " .. err)
-  end
+  apply_module_defaults(parent_path, name, config_schema)
 end
 
 --- Replay deferred writes from a previous `apply()` call.
@@ -422,17 +516,20 @@ end
 
 --- Materialize the current resolved config into a plain Lua table.
 --- Walks the schema tree (static fields + DISCOVER-cached fields) and resolves
---- every path from the store, then expands any $-prefixed model preset into its
---- concrete provider/model/parameters. Returns a deep copy safe for external
---- mutation. Use when consumers need the effective config as a plain table
---- (`pairs()`, `vim.deepcopy()`); the raw accessors `get`/`inspect` deliberately
---- preserve preset aliases.
+--- every path from the store, then expands any $-prefixed model preset into
+--- its concrete fields ("provider/model" shorthand and matrix parameters need
+--- no expansion here — every write path decomposes them at the store
+--- boundary). Returns a deep copy safe for external mutation. Use when
+--- consumers need the effective config as a plain table (`pairs()`,
+--- `vim.deepcopy()`); the raw accessors `get`/`inspect` deliberately preserve
+--- preset aliases.
 ---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return table
 function M.materialize(bufnr)
   assert(root_schema, "config.init() must be called before materialize()")
   local resolved = vim.deepcopy(materialize_resolved(root_schema, "", bufnr) or {})
-  return expand_model_preset(resolved)
+  resolved = expand_model_preset(resolved)
+  return resolved
 end
 
 -- ---------------------------------------------------------------------------

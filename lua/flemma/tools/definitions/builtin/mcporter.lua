@@ -11,11 +11,17 @@ local config_facade = require("flemma.config")
 local glob = require("flemma.utilities.glob")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
 
 local SEPARATOR = tool_names.INTERNAL_SEPARATOR
+
+--- Seconds added on top of the effective call timeout before Flemma force-kills
+--- the mcporter subprocess. mcporter's own `--timeout` fires first and returns a
+--- clean error; this grace window is the backstop for a genuinely hung process.
+local TIMEOUT_GRACE_SECONDS = 5
 
 ---@class flemma.tools.definitions.builtin.MCPorter.Metadata
 ---@field name string
@@ -116,7 +122,7 @@ end
 ---@return boolean is_error True when the MCP response signals a tool-level error via isError
 function M._parse_call_response(raw)
   if raw == "" then
-    return nil, "mcporter returned empty output", false
+    return nil, messages["tool.mcporter.empty_output"]{}, false
   end
 
   -- Try MCP CallToolResult first
@@ -161,16 +167,57 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
   local mcporter_path = exec_opts.path
   local call_timeout = exec_opts.timeout
 
+  local input_schema = tool_data.inputSchema or { type = "object", properties = {} }
+
+  -- Expose a model-facing `timeout` (seconds), mirroring the bash tool, so the
+  -- model can extend the budget for slow tools (deep research, large crawls).
+  -- Inject only when the server's schema is an object that does not already own
+  -- a `timeout` property — a server-owned `timeout` belongs to that tool, so we
+  -- neither shadow it here nor strip it from the payload below.
+  local injected_timeout = false
+  if type(input_schema) == "table" and (input_schema.type == "object" or input_schema.type == nil) then
+    input_schema.properties = input_schema.properties or {}
+    if input_schema.properties.timeout == nil then
+      input_schema.properties.timeout = {
+        type = "number",
+        description = messages["tool.mcporter.input.timeout"]{ default = call_timeout },
+      }
+      injected_timeout = true
+    end
+  end
+
   ---@type flemma.tools.ToolDefinition
   local definition = {
     name = tool_name,
     description = tool_data.description or "",
-    input_schema = tool_data.inputSchema or { type = "object", properties = {} },
+    input_schema = input_schema,
     async = true,
     execute = function(input, ctx, callback)
       ---@cast callback -nil
+
+      -- Resolve the effective timeout (seconds): a model-supplied value wins
+      -- over the configured default, but only for the `timeout` we injected.
+      local effective_timeout = call_timeout
+      local call_input = input
+      if injected_timeout and type(input) == "table" and input.timeout ~= nil then
+        if type(input.timeout) == "number" then
+          effective_timeout = input.timeout
+        end
+        -- Strip our synthetic field so it never reaches the MCP server (even a
+        -- non-number, which we ignore rather than forward to the tool).
+        call_input = {}
+        for key, value in pairs(input) do
+          if key ~= "timeout" then
+            call_input[key] = value
+          end
+        end
+      end
+
       local cmd = { mcporter_path, "call", selector }
-      local args_json = json.encode(input)
+      -- mcporter's --timeout is in milliseconds (see `mcporter call --help`).
+      table.insert(cmd, "--timeout")
+      table.insert(cmd, tostring(math.floor(effective_timeout * 1000)))
+      local args_json = json.encode(call_input)
       if args_json ~= "{}" and args_json ~= "[]" then
         table.insert(cmd, "--args")
         table.insert(cmd, args_json)
@@ -224,7 +271,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
             local stderr_text = #stderr_lines > 0 and table.concat(stderr_lines, "\n") or nil
 
             if code ~= 0 then
-              local err_msg = stderr_text or ("mcporter call failed with exit code " .. code)
+              local err_msg = stderr_text or messages["tool.mcporter.call_failed"]{ code = code }
               log.warn("mcporter: call " .. selector .. " failed (exit " .. code .. "): " .. err_msg)
               callback({ success = false, error = err_msg })
               return
@@ -232,9 +279,9 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
 
             local text, parse_err, is_error = M._parse_call_response(raw_output)
             if not text then
-              local diagnostic = parse_err or "Failed to parse response"
+              local diagnostic = parse_err or messages["tool.mcporter.parse_failed"]{}
               if stderr_text then
-                diagnostic = diagnostic .. "\nstderr: " .. stderr_text
+                diagnostic = diagnostic .. "\n" .. messages["tool.mcporter.stderr"]{ detail = stderr_text }
               end
               log.warn("mcporter: call " .. selector .. " parse error: " .. diagnostic)
               callback({ success = false, error = diagnostic })
@@ -260,7 +307,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
       local job_id = vim.fn.jobstart(cmd, job_opts)
       if job_id <= 0 then
         output_sink:destroy()
-        callback({ success = false, error = "Failed to start mcporter call" })
+        callback({ success = false, error = messages["tool.mcporter.start_failed"]{} })
         return nil
       end
 
@@ -270,12 +317,15 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
         finished = true
         pcall(vim.fn.jobstop, job_id)
         output_sink:destroy()
-        callback({ success = false, error = "Failed to create timer" })
+        callback({ success = false, error = messages["tool.error.timer"]{} })
         return nil
       end
 
+      -- Force-kill backstop: give mcporter's own --timeout a grace window to
+      -- fire first (returning a clean error) before we hard-stop the process.
+      local kill_after = effective_timeout + TIMEOUT_GRACE_SECONDS
       timer:start(
-        call_timeout * 1000,
+        kill_after * 1000,
         0,
         vim.schedule_wrap(function()
           if finished then
@@ -288,7 +338,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
             output_sink:destroy()
             callback({
               success = false,
-              error = string.format("mcporter call timed out after %d seconds", call_timeout),
+              error = messages["tool.mcporter.timeout"]{ count = kill_after },
             })
           end
           close_timer()

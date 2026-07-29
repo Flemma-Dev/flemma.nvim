@@ -85,9 +85,11 @@ describe("flemma.presets", function()
     assert.is_not_nil(preset, "preset should be available after setup")
     assert.are.equal("openai", preset.provider)
     assert.are.equal("o3", preset.model)
+    -- General keys stay flat; provider-specific keys nest under the provider
+    -- (preset.parameters is isomorphic to config.parameters).
     assert.are.same({
       temperature = 1,
-      reasoning = "high",
+      openai = { reasoning = "high" },
     }, preset.parameters)
   end)
 
@@ -101,7 +103,7 @@ describe("flemma.presets", function()
     assert.are.equal("vertex", preset.provider)
     assert.are.equal("gemini-2.5-pro", preset.model)
     assert.are.same({
-      project_id = "demo",
+      vertex = { project_id = "demo" },
     }, preset.parameters)
   end)
 
@@ -135,6 +137,115 @@ describe("flemma.presets", function()
     assert.are.same({
       temperature = 0.5,
     }, preset.parameters)
+  end)
+
+  it("splits provider/model in a table-form preset model", function()
+    presets.setup({ ["$g"] = { model = "vertex/gemini-3.1-pro-preview" } })
+    local preset = presets.get("$g")
+    assert.equals("vertex", preset.provider)
+    assert.equals("gemini-3.1-pro-preview", preset.model)
+  end)
+
+  it("decomposes matrix parameters from a table-form preset model", function()
+    presets.setup({ ["$kimi"] = { model = "moonshot/kimi-k2.6;opt=value" } })
+    local preset = presets.get("$kimi")
+    assert.equals("moonshot", preset.provider)
+    assert.equals("kimi-k2.6", preset.model)
+    assert.are.same({ moonshot = { opt = "value" } }, preset.parameters)
+  end)
+
+  it("accepts slash-form string presets", function()
+    presets.setup({ ["$kimi"] = "moonshot/kimi-k2.6;opt=value" })
+    local preset = presets.get("$kimi")
+    assert.equals("moonshot", preset.provider)
+    assert.equals("kimi-k2.6", preset.model)
+    assert.are.same({ moonshot = { opt = "value" } }, preset.parameters)
+  end)
+
+  it("scopes matrix parameters off an explicit provider field", function()
+    presets.setup({ ["$kimi"] = { provider = "moonshot", model = "kimi-k2.6;opt=value" } })
+    local preset = presets.get("$kimi")
+    assert.are.same({ moonshot = { opt = "value" } }, preset.parameters)
+  end)
+
+  it("rejects a model provider that conflicts with the provider field", function()
+    presets.setup({ ["$bad"] = { provider = "openai", model = "moonshot/kimi-k2.6" } })
+    assert.is_nil(presets.get("$bad"))
+    flush_schedule()
+    assert.is_true(#notifications > 0)
+  end)
+
+  it("drops matrix parameters when no provider is resolvable", function()
+    presets.setup({ ["$loose"] = { model = "kimi-k2.6;opt=value" } })
+    local preset = presets.get("$loose")
+    assert.equals("kimi-k2.6", preset.model)
+    assert.are.same({}, preset.parameters)
+    flush_schedule()
+    assert.is_true(#notifications > 0)
+  end)
+
+  it("nests provider-specific space parameters under the provider", function()
+    presets.setup({ ["$k"] = "moonshot kimi-k2.6 opt=1 max_tokens=100" })
+    local preset = presets.get("$k")
+    assert.are.same({ max_tokens = 100, moonshot = { opt = 1 } }, preset.parameters)
+  end)
+
+  it("merges space and matrix parameters into one provider namespace", function()
+    presets.setup({ ["$k"] = "moonshot/kimi-k2.6;opt=1 other=2" })
+    local preset = presets.get("$k")
+    assert.are.same({ moonshot = { opt = 1, other = 2 } }, preset.parameters)
+  end)
+
+  describe("route_parameters()", function()
+    local function fake_writer()
+      return { parameters = {} }
+    end
+
+    it("writes a provider-bearing preset's config-shaped parameters structurally", function()
+      presets.setup({ ["$kimi"] = { provider = "moonshot", model = "kimi-k2.6;opt=value" } })
+      local writer = fake_writer()
+      local overrides = presets.route_parameters(presets.get("$kimi"), writer)
+      assert.are.same({ moonshot = { opt = "value" } }, writer.parameters)
+      assert.are.same({}, overrides)
+    end)
+
+    it("returns a provider-less preset's flat parameters for the explicit channel", function()
+      presets.setup({ ["$tweak"] = { temperature = 0.5, custom_knob = 7 } })
+      local writer = fake_writer()
+      local overrides = presets.route_parameters(presets.get("$tweak"), writer)
+      assert.are.same({}, writer.parameters)
+      assert.are.same({ temperature = 0.5, custom_knob = 7 }, overrides)
+    end)
+
+    it("returns a fresh copy the caller can mutate without touching the preset", function()
+      presets.setup({ ["$tweak"] = { temperature = 0.5 } })
+      local preset = presets.get("$tweak")
+      local overrides = presets.route_parameters(preset, fake_writer())
+      overrides.temperature = 0.9
+      assert.equals(0.5, preset.parameters.temperature)
+    end)
+
+    it("is a no-op returning {} when the preset has no parameters", function()
+      presets.setup({ ["$plain"] = { provider = "openai", model = "o3" } })
+      local writer = fake_writer()
+      local overrides = presets.route_parameters(presets.get("$plain"), writer)
+      assert.are.same({}, writer.parameters)
+      assert.are.same({}, overrides)
+    end)
+  end)
+
+  it("keeps parameters flat when the preset has no provider", function()
+    presets.setup({ ["$tweak"] = { temperature = 0.5, custom_knob = 7 } })
+    local preset = presets.get("$tweak")
+    assert.are.same({ temperature = 0.5, custom_knob = 7 }, preset.parameters)
+  end)
+
+  it("warns about ignored matrix segments in a preset model", function()
+    presets.setup({ ["$weird"] = { model = "moonshot/kimi-k2.6;api-key=1" } })
+    local preset = presets.get("$weird")
+    assert.are.same({}, preset.parameters)
+    flush_schedule()
+    assert.is_true(#notifications > 0)
   end)
 
   it("supports auto_approve in strict table format", function()
@@ -671,7 +782,7 @@ describe(":Flemma switch with presets", function()
     stub_core = nil
   end)
 
-  it("expands preset definitions into switch arguments", function()
+  it("expands preset definitions into provider, model, and structural parameter writes", function()
     local flemma = require("flemma")
     flemma.setup({
       presets = {
@@ -689,10 +800,13 @@ describe(":Flemma switch with presets", function()
     assert.is_not_nil(stub_core.last_switch, "switch should be invoked for preset")
     assert.are.equal("openai", stub_core.last_switch.provider)
     assert.are.equal("o3", stub_core.last_switch.model)
-    assert.are.same({
-      reasoning = "high",
-      temperature = 1,
-    }, stub_core.last_switch.parameters)
+    -- Preset parameters no longer travel through the switch-arguments
+    -- channel — they are written structurally to the store before the
+    -- switch, so command-line overrides win on store order.
+    assert.are.same({}, stub_core.last_switch.parameters)
+    local resolved = require("flemma.config").materialize()
+    assert.equals(1, resolved.parameters.temperature)
+    assert.equals("high", resolved.parameters.openai.reasoning)
   end)
 
   it("allows overriding preset model and parameters", function()

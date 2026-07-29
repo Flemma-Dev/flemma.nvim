@@ -5,6 +5,58 @@
 return {
   default = "gpt-5.4",
   models = {
+    -- GPT-5.6 models — first OpenAI family with a native `max` reasoning effort
+    -- (accepted levels: none, low, medium, high, xhigh, max; no `minimal`) and
+    -- the first with a billed cache-write rate (every earlier family shows "-").
+    ["gpt-5.6-sol"] = {
+      pricing = {
+        input = 5.0,
+        output = 30.0,
+        cache_read = 0.50,
+        cache_write = 6.25,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+    ["gpt-5.6"] = { -- alias for gpt-5.6-sol
+      pricing = {
+        input = 5.0,
+        output = 30.0,
+        cache_read = 0.50,
+        cache_write = 6.25,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+    ["gpt-5.6-terra"] = {
+      pricing = {
+        input = 2.50,
+        output = 15.0,
+        cache_read = 0.25,
+        cache_write = 3.125,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+    ["gpt-5.6-luna"] = {
+      pricing = {
+        input = 1.0,
+        output = 6.0,
+        cache_read = 0.10,
+        cache_write = 1.25,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+
     -- GPT-5.5 models
     ["gpt-5.5"] = {
       pricing = {
@@ -120,13 +172,18 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
+    -- Codex-Spark is a research preview: ChatGPT Pro in the Codex surfaces, and in
+    -- the API only for a small set of design partners. It has no page on the models
+    -- index and no row on the pricing page, so the rates below mirror gpt-5.3-codex
+    -- (its parent model) rather than a published Spark price. Limits come from the
+    -- launch post's 128K context window, minus the 32K output reservation.
     ["gpt-5.3-codex-spark"] = {
       pricing = {
         input = 1.75,
         output = 14.0,
         cache_read = 0.175,
       },
-      max_input_tokens = 100000,
+      max_input_tokens = 96000,
       max_output_tokens = 32000,
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
@@ -162,17 +219,6 @@ return {
       max_input_tokens = 128000,
       max_output_tokens = 16384,
     },
-    ["gpt-5.2-codex"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 1.75,
-        output = 14.0,
-        cache_read = 0.175,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
-    },
     ["gpt-5.2-pro"] = {
       pricing = {
         input = 21.0,
@@ -185,7 +231,7 @@ return {
       thinking_effort_map = { minimal = "medium", low = "medium", medium = "medium", high = "high", max = "xhigh" },
     },
 
-    -- GPT-5.1 models (deprecated, retiring Jul 23, 2026)
+    -- GPT-5.1 models
     ["gpt-5.1"] = {
       pricing = {
         input = 1.25,
@@ -197,64 +243,9 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["gpt-5.1-chat-latest"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 1.25,
-        output = 10.0,
-        cache_read = 0.125,
-      },
-      max_input_tokens = 128000,
-      max_output_tokens = 16384,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
-    },
-    ["gpt-5.1-codex"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 1.25,
-        output = 10.0,
-        cache_read = 0.125,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
-    },
-    ["gpt-5.1-codex-max"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 1.25,
-        output = 10.0,
-        cache_read = 0.125,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
-    },
-    ["gpt-5.1-codex-mini"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 0.25,
-        output = 2.0,
-        cache_read = 0.025,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
-    },
 
-    -- GPT-5 models
+    -- GPT-5 models (deprecated, retiring Dec 11, 2026)
     ["gpt-5"] = {
-      pricing = {
-        input = 1.25,
-        output = 10.0,
-        cache_read = 0.125,
-      },
-      max_input_tokens = 272000,
-      max_output_tokens = 128000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
-    },
-    ["gpt-5-codex"] = { -- (deprecated, retiring Jul 23, 2026)
       pricing = {
         input = 1.25,
         output = 10.0,
@@ -287,13 +278,16 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
+    -- gpt-5-pro inverts the family's usual split: 272K of the 400K context is
+    -- reserved for output, leaving 128K for input (every other GPT-5 model
+    -- reserves 128K for output and allows 272K in).
     ["gpt-5-pro"] = {
       pricing = {
         input = 15.0,
         output = 120.0,
         cache_read = 15.0,
       },
-      max_input_tokens = 272000,
+      max_input_tokens = 128000,
       max_output_tokens = 272000,
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "high", low = "high", medium = "high", high = "high", max = "high" },
@@ -432,7 +426,7 @@ return {
       max_input_tokens = 200000,
       max_output_tokens = 100000,
     },
-    ["o3"] = {
+    ["o3"] = { -- (deprecated, retiring Dec 11, 2026)
       pricing = {
         input = 2.0,
         output = 8.0,
@@ -443,7 +437,7 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["o3-pro"] = {
+    ["o3-pro"] = { -- (deprecated, retiring Dec 11, 2026)
       pricing = {
         input = 20.0,
         output = 80.0,
@@ -451,17 +445,6 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-    },
-    ["o3-deep-research"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 10.0,
-        output = 40.0,
-        cache_read = 2.50,
-      },
-      max_input_tokens = 200000,
-      max_output_tokens = 100000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["o3-mini"] = { -- (deprecated, retiring Oct 23, 2026)
       pricing = {
@@ -485,47 +468,6 @@ return {
       meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
-    ["o4-mini-deep-research"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 2.0,
-        output = 8.0,
-        cache_read = 0.50,
-      },
-      max_input_tokens = 200000,
-      max_output_tokens = 100000,
-      meta = { reasoning_effort = true },
-      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
-    },
-
-    -- Search and specialized models (deprecated, retiring Jul 23, 2026)
-    ["gpt-4o-mini-search-preview"] = {
-      pricing = {
-        input = 0.15,
-        output = 0.60,
-        cache_read = 0.15,
-      },
-      max_input_tokens = 128000,
-      max_output_tokens = 16384,
-    },
-    ["gpt-4o-search-preview"] = {
-      pricing = {
-        input = 2.50,
-        output = 10.0,
-        cache_read = 2.50,
-      },
-      max_input_tokens = 128000,
-      max_output_tokens = 16384,
-    },
-    ["computer-use-preview"] = { -- (deprecated, retiring Jul 23, 2026)
-      pricing = {
-        input = 3.0,
-        output = 12.0,
-        cache_read = 3.0,
-      },
-      max_input_tokens = 128000,
-      max_output_tokens = 16384,
-    },
-
     -- GPT-4 Turbo models (deprecated, retiring Oct 23, 2026)
     ["gpt-4-turbo"] = {
       pricing = {

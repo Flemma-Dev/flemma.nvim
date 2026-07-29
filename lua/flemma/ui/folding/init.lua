@@ -534,6 +534,12 @@ end
 ---Set up folding expression for a buffer.
 ---If bufnr is provided, sets folding on the window displaying that buffer,
 ---otherwise sets folding on the current window.
+---
+---Uses `scope = "local"` explicitly: `nvim_set_option_value` (which `vim.wo`
+---delegates to) with only `win` mutates BOTH the window-local and global
+---values — equivalent to `:set`, not `:setlocal`. Without the scope hint,
+---opening one chat buffer would leak Flemma's foldexpr into the global
+---default that unrelated windows inherit.
 ---@param bufnr? integer
 function M.setup_folding(bufnr)
   local winid
@@ -547,10 +553,35 @@ function M.setup_folding(bufnr)
     winid = vim.api.nvim_get_current_win()
   end
 
-  vim.wo[winid].foldmethod = "expr"
-  vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
-  vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.folding").get_fold_text()'
-  vim.wo[winid].foldlevel = config_facade.get().editing.fold.level
+  local opts = { win = winid, scope = "local" }
+  vim.api.nvim_set_option_value("foldmethod", "expr", opts)
+  vim.api.nvim_set_option_value("foldexpr", 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)', opts)
+  vim.api.nvim_set_option_value("foldtext", 'v:lua.require("flemma.ui.folding").get_fold_text()', opts)
+  vim.api.nvim_set_option_value("foldlevel", config_facade.get().editing.fold.level, opts)
+end
+
+---Reassert Flemma's fold settings if an external actor overwrote them.
+---`:loadview` (with `viewoptions+=folds`) restores `foldmethod`/`foldexpr`
+---from the view file — a view saved before Flemma managed the buffer carries
+---`foldmethod=manual` and `foldexpr=0`, silently disabling all Flemma folds.
+---Reasserting `foldmethod=expr` alone is not enough: it evaluates whatever
+---foldexpr the view left behind. The full trio must be re-applied.
+---Cheap no-op when the settings are intact.
+---@param bufnr integer
+---@return boolean recovered True when settings were clobbered and re-applied
+function M.ensure_fold_settings(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "chat" then
+    return false
+  end
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return false
+  end
+  if vim.wo[winid].foldmethod == "expr" and vim.wo[winid].foldexpr:find("flemma.ui.folding", 1, true) then
+    return false
+  end
+  M.setup_folding(bufnr)
+  return true
 end
 
 ---Close all open sub-folds within a line range before closing the outer fold.
@@ -778,7 +809,6 @@ function M.invalidate_folds(bufnr)
   if winid == -1 then
     return
   end
-  local foldmethod_ok = vim.wo[winid].foldmethod == "expr"
   -- Invalidate the cache unconditionally. Neovim's incremental fold updater
   -- (foldUpdateIEMS, triggered by nvim_buf_set_lines) may have already called
   -- get_fold_level for the modified line range, warming the cache with the
@@ -788,9 +818,14 @@ function M.invalidate_folds(bufnr)
   -- not revisited. Invalidating the cache ensures the next full fold
   -- evaluation (triggered by `set foldmethod=expr`) rebuilds from scratch.
   invalidate_cache()
+  if M.ensure_fold_settings(bufnr) then
+    -- Settings were clobbered and re-applied; assigning foldmethod already
+    -- forced a full fold re-evaluation with the fresh cache.
+    return
+  end
   local mode = vim.api.nvim_get_mode().mode
   if
-    not foldmethod_ok
+    vim.wo[winid].foldmethod ~= "expr"
     or (mode ~= "i" and mode ~= "ic" and mode ~= "ix" and mode ~= "R" and mode ~= "Rc" and mode ~= "Rx")
   then
     vim.fn.win_execute(winid, "set foldmethod=expr")

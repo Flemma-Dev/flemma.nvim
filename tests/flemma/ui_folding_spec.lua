@@ -3337,4 +3337,139 @@ describe("UI Folding", function()
       end)
     end)
   end)
+
+  describe("fold settings recovery", function()
+    local FLEMMA_FOLDEXPR = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
+
+    ---Create a chat buffer with a thinking block, shown in a fresh window.
+    ---@return integer bufnr, integer winid
+    local function make_chat_window()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "response",
+        "<thinking>",
+        "thinking content",
+        "</thinking>",
+        "done",
+      })
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      folding.setup_folding(bufnr)
+      return bufnr, vim.api.nvim_get_current_win()
+    end
+
+    ---Simulate what `:loadview` does with a stale pre-Flemma view file.
+    ---@param winid integer
+    local function clobber_fold_settings(winid)
+      vim.api.nvim_set_option_value("foldmethod", "manual", { win = winid, scope = "local" })
+      vim.api.nvim_set_option_value("foldexpr", "0", { win = winid, scope = "local" })
+      vim.api.nvim_set_option_value("foldlevel", 0, { win = winid, scope = "local" })
+    end
+
+    it("ensure_fold_settings is a no-op when settings are intact", function()
+      local bufnr, winid = make_chat_window()
+      assert.is_false(folding.ensure_fold_settings(bufnr))
+      assert.are.equal("expr", vim.wo[winid].foldmethod)
+      assert.are.equal(FLEMMA_FOLDEXPR, vim.wo[winid].foldexpr)
+    end)
+
+    it("ensure_fold_settings reasserts foldmethod and foldexpr after an external clobber", function()
+      local bufnr, winid = make_chat_window()
+      clobber_fold_settings(winid)
+
+      assert.is_true(folding.ensure_fold_settings(bufnr))
+      assert.are.equal("expr", vim.wo[winid].foldmethod)
+      assert.are.equal(FLEMMA_FOLDEXPR, vim.wo[winid].foldexpr)
+      -- Folds must actually compute again — foldexpr "0" yields level 0 everywhere
+      vim.cmd("redraw")
+      assert.are.equal(2, vim.fn.foldlevel(3), "thinking block should fold at level 2 after recovery")
+    end)
+
+    it("ensure_fold_settings declines buffers that are not chat filetype", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      local winid = vim.api.nvim_get_current_win()
+      assert.is_false(folding.ensure_fold_settings(bufnr))
+      assert.are_not.equal(FLEMMA_FOLDEXPR, vim.wo[winid].foldexpr)
+    end)
+
+    it("invalidate_folds repairs a clobbered window, not just foldmethod", function()
+      local bufnr, winid = make_chat_window()
+      clobber_fold_settings(winid)
+
+      folding.invalidate_folds(bufnr)
+
+      -- Regression: `set foldmethod=expr` alone left foldexpr at "0",
+      -- producing no folds at all.
+      assert.are.equal("expr", vim.wo[winid].foldmethod)
+      assert.are.equal(FLEMMA_FOLDEXPR, vim.wo[winid].foldexpr)
+      vim.cmd("redraw")
+      assert.are.equal(2, vim.fn.foldlevel(3))
+    end)
+
+    it("recovers folds after a user loadview autocmd restores a stale view", function()
+      local saved_viewdir = vim.o.viewdir
+      local saved_viewoptions = vim.o.viewoptions
+      local view_dir = vim.fn.tempname() .. "_views"
+      vim.fn.mkdir(view_dir, "p")
+      vim.o.viewdir = view_dir
+
+      local chat_path = vim.fn.tempname() .. ".chat"
+      vim.fn.writefile({
+        "@Assistant:",
+        "response",
+        "<thinking>",
+        "thinking content",
+        "</thinking>",
+        "done",
+      }, chat_path)
+
+      -- Phase 1: manufacture a stale pre-Flemma view — open the file, force
+      -- manual fold state (as a session without Flemma would have), mkview.
+      vim.cmd("edit " .. vim.fn.fnameescape(chat_path))
+      local winid = vim.api.nvim_get_current_win()
+      clobber_fold_settings(winid)
+      vim.cmd("3,5 fold")
+      -- BufEnter stripped "folds" from viewoptions; re-add so mkview records fold state
+      vim.o.viewoptions = "folds,cursor"
+      vim.cmd("mkview")
+      vim.cmd("bdelete!")
+
+      -- Phase 2: the user's loadview autocmd runs after Flemma's BufWinEnter
+      -- handlers and restores the stale view.
+      local user_augroup = vim.api.nvim_create_augroup("FlemmaSpecUserViews", { clear = true })
+      vim.api.nvim_create_autocmd("BufWinEnter", {
+        group = user_augroup,
+        pattern = "*.chat",
+        callback = function()
+          vim.cmd("silent! loadview")
+        end,
+      })
+
+      vim.cmd("edit " .. vim.fn.fnameescape(chat_path))
+      winid = vim.api.nvim_get_current_win()
+
+      -- The clobber must have happened (otherwise this test passes vacuously)
+      assert.are.equal("manual", vim.wo[winid].foldmethod, "loadview should have restored the stale view")
+
+      -- The scheduled recovery runs once the autocmd batch has drained
+      vim.wait(1000, function()
+        return vim.wo[winid].foldmethod == "expr"
+      end)
+
+      assert.are.equal("expr", vim.wo[winid].foldmethod)
+      assert.are.equal(FLEMMA_FOLDEXPR, vim.wo[winid].foldexpr)
+      vim.cmd("redraw")
+      assert.are.equal(2, vim.fn.foldlevel(3), "thinking block should fold at level 2 after recovery")
+
+      vim.api.nvim_del_augroup_by_id(user_augroup)
+      vim.fn.delete(chat_path)
+      vim.fn.delete(view_dir, "rf")
+      vim.o.viewdir = saved_viewdir
+      vim.o.viewoptions = saved_viewoptions
+    end)
+  end)
 end)

@@ -6,6 +6,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local path_util = require("flemma.utilities.path")
@@ -77,30 +78,22 @@ M.definitions = {
         cwd = s.optional(s.string("urn:flemma:buffer:path")),
       }),
     },
-    description = "List directory contents. Output is truncated to "
-      .. truncate.MAX_LINES
-      .. " lines or "
-      .. math.floor(truncate.MAX_BYTES / 1024)
-      .. "KB. "
-      .. "Directories appear first (suffixed with /), then files, both sorted case-insensitively. "
-      .. "Use max_depth > 1 to recurse into subdirectories (max 10). "
-      .. "Use limit to cap the number of entries (default "
-      .. DEFAULT_LIMIT
-      .. ").",
+    description = messages["tool.ls.description"]{
+      max_lines = truncate.MAX_LINES,
+      max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024),
+      default_limit = DEFAULT_LIMIT,
+    },
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'listing project root')"),
-      path = s.string():describe("Directory path to list (relative or absolute)"),
-      max_depth = s.number():nullable():describe("Maximum recursion depth (default: 1, max: 10)"),
-      limit = s.number():nullable():describe("Maximum number of entries (default: 500)"),
+      label = s.string():describe(messages["tool.ls.input.label"]),
+      path = s.string():describe(messages["tool.ls.input.path"]),
+      max_depth = s.number():nullable():describe(messages["tool.ls.input.max_depth"]),
+      limit = s.number():nullable():describe(messages["tool.ls.input.limit"]),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "List directory contents with optional depth and entry limit",
-        guidelines = {
-          "Use ls to explore project structure before reading individual files",
-          "Prefer max_depth=1 for broad overviews, increase depth for targeted exploration",
-        },
+        snippet = messages["tool.ls.personality.snippet"]{},
+        guidelines = messages["tool.ls.personality.guidelines"]{},
       },
     },
     async = false,
@@ -121,7 +114,7 @@ M.definitions = {
     execute = function(input, ctx)
       local path = input.path
       if not path or path == "" then
-        return { success = false, error = "No path provided" }
+        return { success = false, error = messages["tool.error.no_path"]{} }
       end
 
       -- Resolve relative paths against cwd (not __dirname)
@@ -129,7 +122,7 @@ M.definitions = {
 
       -- Validate directory exists
       if vim.fn.isdirectory(path) ~= 1 then
-        return { success = false, error = "Directory not found: " .. input.path }
+        return { success = false, error = messages["tool.ls.error.not_found"]{ path = input.path } }
       end
 
       local depth = math.min(input.max_depth or 1, MAX_DEPTH)
@@ -146,9 +139,9 @@ M.definitions = {
       -- Build summary footer
       local footer
       if depth > 1 then
-        footer = string.format("[%d entries, depth=%d]", entry_count, depth)
+        footer = messages["tool.ls.footer_with_depth"]{ count = entry_count, depth = depth }
       else
-        footer = string.format("[%d entries]", entry_count)
+        footer = messages["tool.ls.footer"]{ count = entry_count }
       end
 
       local output_text

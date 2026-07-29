@@ -1,0 +1,13 @@
+# ast-grep rule: self-append concatenation that pulls in a catalogue message,
+# e.g. `msg = msg .. SEP .. messages["ui.x"]{...}`.
+# lint-messages.sh inspects the separator literals: translations may only be
+# joined by newlines (layout), never by language-specific punctuation like
+# ". " or " " (grammar). A newline join keeps each catalogue string a
+# complete, independently translatable sentence.
+id: messages-self-append
+language: lua
+rule:
+  pattern: $V = $V .. $$$REST
+  has:
+    pattern: messages[$K]
+    stopBy: end

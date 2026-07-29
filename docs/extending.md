@@ -138,13 +138,13 @@ Flemma resolves API keys and tokens through a priority-based resolver chain. The
 
 ### Resolution order
 
-| Priority | Resolver       | Platform     | What it checks                                                       |
-| -------- | -------------- | ------------ | -------------------------------------------------------------------- |
-| 100      | Environment    | All          | `{SERVICE}_{KIND}` env var (e.g., `ANTHROPIC_API_KEY`), then aliases |
-| 50       | Secret Service | Linux        | `secret-tool lookup service {service} key {kind}` (GNOME Keyring)    |
-| 50       | Keychain       | macOS        | `security find-generic-password -s {service} -a {kind} -w`           |
-| 50       | ChatGPT        | All          | `~/.codex/auth.json` OAuth token (only `chatgpt_subscription` kind)  |
-| 25       | Gcloud         | All (w/ CLI) | `gcloud auth print-access-token` (only for `access_token` kind)      |
+| Priority | Resolver       | Platform     | What it checks                                                                                               |
+| -------- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| 100      | Environment    | All          | `{SERVICE}_{KIND}` env var (e.g., `ANTHROPIC_API_KEY`), then aliases                                         |
+| 50       | Secret Service | Linux        | `secret-tool lookup service {service} key {kind}` (GNOME Keyring)                                            |
+| 50       | Keychain       | macOS        | `security find-generic-password -s {service} -a {kind} -w`                                                   |
+| 50       | ChatGPT        | All          | `~/.codex/auth.json` OAuth token (only `chatgpt_subscription` kind)                                          |
+| 25       | Gcloud         | All (w/ CLI) | `gcloud auth print-access-token` (logged in) / `application-default print-access-token` (via `access_token`) |
 
 The ChatGPT resolver is **not** part of the default chain — it is registered only when the experimental Codex provider is loaded (`providers.modules = { "flemma.provider.adapters.experimental.codex" }`). See [docs/providers.md](providers.md#codex--chatgpt-subscription-experimental).
 

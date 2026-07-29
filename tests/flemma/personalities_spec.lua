@@ -117,6 +117,26 @@ describe("flemma.personalities.builder", function()
       assert.same({ "A single string" }, result[1].parts.snippet)
     end)
 
+    it("splits a multi-line string part into trimmed, non-empty lines", function()
+      local tool_definitions = {
+        {
+          name = "bash",
+          description = "Execute commands",
+          input_schema = { type = "object" },
+          personalities = {
+            ["test"] = {
+              -- Leading/trailing newlines, mixed CRLF/CR/LF endings, surrounding
+              -- whitespace, and both blank and whitespace-only lines — all
+              -- collapsed away by build_tools' [\r\n]+ split.
+              guidelines = "\r\n  First guideline  \nSecond guideline\n\n   \n\rThird guideline\r\n",
+            },
+          },
+        },
+      }
+      local result = builder.build_tools("test", tool_definitions)
+      assert.same({ "First guideline", "Second guideline", "Third guideline" }, result[1].parts.guidelines)
+    end)
+
     it("returns empty parts for personality not in tool definition", function()
       local tool_definitions = {
         {

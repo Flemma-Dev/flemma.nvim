@@ -231,6 +231,13 @@ function M.get_rate_limit_snapshot(self)
   }
 end
 
-secrets.register("flemma.secrets.resolvers.chatgpt")
+--- Registration hook invoked by the provider registry when the Codex adapter is
+--- registered (during setup, before config finalization). Registering the
+--- ChatGPT secrets resolver here — rather than as a require()-time side effect —
+--- keeps the module pure to require() while still surfacing `secrets.chatgpt.*`
+--- config in time for setup to validate it.
+function M.on_register()
+  secrets.register("flemma.secrets.resolvers.chatgpt")
+end
 
 return M

@@ -9,6 +9,7 @@ local M = {}
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
 local log = require("flemma.logging")
+local messages = require("flemma.messages")
 local s = require("flemma.schema")
 local sink_module = require("flemma.sink")
 local store = require("flemma.tools.store")
@@ -104,7 +105,7 @@ end
 local function execute_terminal(input, ctx, callback)
   local cmd = input.command
   if not cmd or cmd == "" then
-    callback({ success = false, error = "No command provided" })
+    callback({ success = false, error = messages["tool.bash.error.no_command"]{} })
     return nil
   end
 
@@ -148,7 +149,7 @@ local function execute_terminal(input, ctx, callback)
   local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
   if not wrapped_cmd then
     vim.api.nvim_buf_delete(term_bufnr, { force = true })
-    callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+    callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err } })
     return nil
   end
 
@@ -168,10 +169,10 @@ local function execute_terminal(input, ctx, callback)
       local result = ctx.truncate.truncate_with_overflow(full_output, {
         direction = "tail",
       })
-      local output_text = result.content ~= "" and result.content or "(no output)"
+      local output_text = result.content ~= "" and result.content or messages["tool.bash.no_output"]{}
 
       if code ~= 0 then
-        output_text = output_text .. string.format("\n\nCommand exited with code %d", code)
+        output_text = output_text .. "\n\n" .. messages["tool.error.exit_code"]{ code = code }
         callback({
           success = false,
           error = output_text,
@@ -223,7 +224,7 @@ local function execute_terminal(input, ctx, callback)
 
   if not job_id or job_id <= 0 then
     vim.api.nvim_buf_delete(term_bufnr, { force = true })
-    callback({ success = false, error = "Failed to start job" })
+    callback({ success = false, error = messages["tool.error.job_start"]{} })
     return nil
   end
 
@@ -259,7 +260,7 @@ local function execute_terminal(input, ctx, callback)
   if not timer then
     pcall(vim.fn.jobstop, job_id)
     vim.api.nvim_buf_delete(term_bufnr, { force = true })
-    callback({ success = false, error = "Failed to create timer" })
+    callback({ success = false, error = messages["tool.error.timer"]{} })
     return nil
   end
   timer:start(
@@ -277,7 +278,7 @@ local function execute_terminal(input, ctx, callback)
         -- Include any partial output collected before the timeout
         local partial_output = read_terminal_output(term_bufnr)
         destroy_terminal_buffer(term_bufnr, label)
-        local error_msg = string.format("Command timed out after %d seconds.", timeout)
+        local error_msg = messages["tool.bash.timeout"]{ count = timeout }
         if partial_output ~= "" then
           error_msg = partial_output .. "\n\n" .. error_msg
         end
@@ -310,7 +311,7 @@ end
 local function execute_jobstart(input, ctx, callback)
   local cmd = input.command
   if not cmd or cmd == "" then
-    callback({ success = false, error = "No command provided" })
+    callback({ success = false, error = messages["tool.bash.error.no_command"]{} })
     return nil
   end
 
@@ -353,10 +354,10 @@ local function execute_jobstart(input, ctx, callback)
         local result = ctx.truncate.truncate_with_overflow(full_output, {
           direction = "tail",
         })
-        local output_text = result.content ~= "" and result.content or "(no output)"
+        local output_text = result.content ~= "" and result.content or messages["tool.bash.no_output"]{}
 
         if code ~= 0 then
-          output_text = output_text .. string.format("\n\nCommand exited with code %d", code)
+          output_text = output_text .. "\n\n" .. messages["tool.error.exit_code"]{ code = code }
           callback({
             success = false,
             error = output_text,
@@ -399,7 +400,7 @@ local function execute_jobstart(input, ctx, callback)
   local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
   if not wrapped_cmd then
     output_sink:destroy()
-    callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+    callback({ success = false, error = messages["tool.error.sandbox"]{ detail = sandbox_err } })
     return nil
   end
 
@@ -407,7 +408,7 @@ local function execute_jobstart(input, ctx, callback)
 
   if job_id <= 0 then
     output_sink:destroy()
-    callback({ success = false, error = "Failed to start job" })
+    callback({ success = false, error = messages["tool.error.job_start"]{} })
     return nil
   end
 
@@ -416,7 +417,7 @@ local function execute_jobstart(input, ctx, callback)
   if not timer then
     pcall(vim.fn.jobstop, job_id)
     output_sink:destroy()
-    callback({ success = false, error = "Failed to create timer" })
+    callback({ success = false, error = messages["tool.error.timer"]{} })
     return nil
   end
   timer:start(
@@ -435,7 +436,7 @@ local function execute_jobstart(input, ctx, callback)
         local all_lines = output_sink:read_lines()
         local partial_output = table.concat(all_lines, "\n"):gsub("%s+$", "")
         output_sink:destroy()
-        local error_msg = string.format("Command timed out after %d seconds.", timeout)
+        local error_msg = messages["tool.bash.timeout"]{ count = timeout }
         if partial_output ~= "" then
           error_msg = partial_output .. "\n\n" .. error_msg
         end
@@ -473,29 +474,20 @@ M.definitions = {
       }),
     },
     capabilities = { "auto_approves_if_sandboxed" },
-    description = "Execute a bash command in the current working directory. "
-      .. "Returns stdout and stderr. Output is truncated to last "
-      .. truncate.MAX_LINES
-      .. " lines or "
-      .. math.floor(truncate.MAX_BYTES / 1024)
-      .. "KB (whichever is hit first). "
-      .. "If truncated, full output is saved to a file. "
-      .. "$FLEMMA_TOOLS_STORE_PATH is set in the environment and points to a directory "
-      .. "where saved tool results for this conversation are stored. "
-      .. "Optionally provide a timeout in seconds.",
+    description = messages["tool.bash.description"]{
+      max_lines = truncate.MAX_LINES,
+      max_bytes_kb = math.floor(truncate.MAX_BYTES / 1024),
+    },
     strict = true,
     input_schema = s.object({
-      label = s.string():describe("A short human-readable label for this operation (e.g., 'running tests')"),
-      command = s.string():describe("The bash command to execute"),
-      timeout = s.number():nullable():describe("Timeout in seconds (default: 30)"),
+      label = s.string():describe(messages["tool.bash.input.label"]),
+      command = s.string():describe(messages["tool.bash.input.command"]),
+      timeout = s.number():nullable():describe(messages["tool.bash.input.timeout"]),
     }):strict(),
     personalities = {
       ["coding-assistant"] = {
-        snippet = "Execute shell commands in the user's project directory",
-        guidelines = {
-          "Prefer dedicated tools (read, edit, write) over bash for file operations",
-          "Never run destructive commands (rm -rf, git reset --hard) without user confirmation",
-        },
+        snippet = messages["tool.bash.personality.snippet"]{},
+        guidelines = messages["tool.bash.personality.guidelines"]{},
       },
     },
     async = true,

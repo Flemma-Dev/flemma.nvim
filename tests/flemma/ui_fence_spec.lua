@@ -106,6 +106,100 @@ describe("UI Fence Brackets", function()
       assert.are.equal("CustomBar", chunks[1][2])
       assert.are.equal("CustomLabel", chunks[2][2])
     end)
+
+    it("scales bar width to match fence backtick count", function()
+      local chunks = ui.build_fence_virt_text("``````", "FlemmaFenceBar", "FlemmaFenceLabel")
+      assert.is_truthy(chunks)
+      assert.are.equal(1, #chunks)
+      assert.are.equal(string.rep("╌", 6), chunks[1][1])
+    end)
+
+    it("extracts language after wide fence delimiter", function()
+      local chunks = ui.build_fence_virt_text("````lua", "FlemmaFenceBar", "FlemmaFenceLabel")
+      assert.is_truthy(chunks)
+      assert.are.equal(2, #chunks)
+      assert.are.equal(string.rep("╌", 4), chunks[1][1])
+      assert.are.equal("lua", chunks[2][1])
+    end)
+  end)
+
+  describe("tree-aware fence filtering", function()
+    ---@param bufnr integer
+    ---@return TSNode|nil
+    local function get_markdown_root(bufnr)
+      local ok, ts_parser = pcall(vim.treesitter.get_parser, bufnr, "markdown")
+      if not ok or not ts_parser then
+        return nil
+      end
+      ts_parser:parse()
+      local trees = ts_parser:trees()
+      return trees[1] and trees[1]:root() or nil
+    end
+
+    it("distinguishes outer delimiters from inner backticks in nested fences", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "``````",
+        "```",
+        "nested code",
+        "```",
+        "``````",
+      })
+
+      local root = get_markdown_root(bufnr)
+      if not root then
+        return
+      end
+
+      local node_open = root:named_descendant_for_range(0, 0, 0, 0)
+      assert.are.equal("fenced_code_block_delimiter", node_open:type(), "outer opening is a delimiter")
+
+      local node_close = root:named_descendant_for_range(4, 0, 4, 0)
+      assert.are.equal("fenced_code_block_delimiter", node_close:type(), "outer closing is a delimiter")
+
+      local node_inner_open = root:named_descendant_for_range(1, 0, 1, 0)
+      assert.are_not.equal(
+        "fenced_code_block_delimiter",
+        node_inner_open:type(),
+        "inner ``` is content, not a delimiter"
+      )
+
+      local node_inner_close = root:named_descendant_for_range(3, 0, 3, 0)
+      assert.are_not.equal(
+        "fenced_code_block_delimiter",
+        node_inner_close:type(),
+        "inner ``` is content, not a delimiter"
+      )
+    end)
+
+    it("only treats the opening as a delimiter when fences are non-balanced", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "````",
+        "some code",
+        "```",
+        "more text",
+      })
+
+      local root = get_markdown_root(bufnr)
+      if not root then
+        return
+      end
+
+      local node_open = root:named_descendant_for_range(0, 0, 0, 0)
+      assert.are.equal("fenced_code_block_delimiter", node_open:type(), "opening ```` is a delimiter")
+
+      local node_short = root:named_descendant_for_range(2, 0, 2, 0)
+      assert.are_not.equal("fenced_code_block_delimiter", node_short:type(), "``` does not close a ```` fence")
+
+      local open_chunks = ui.build_fence_virt_text("````", "FlemmaFenceBar", "FlemmaFenceLabel")
+      assert.are.equal(string.rep("╌", 4), open_chunks[1][1], "opening overlay is 4 wide")
+
+      local short_chunks = ui.build_fence_virt_text("```", "FlemmaFenceBar", "FlemmaFenceLabel")
+      assert.is_truthy(short_chunks, "pattern match still fires on ```")
+    end)
   end)
 
   describe("resolve_fence_highlights", function()

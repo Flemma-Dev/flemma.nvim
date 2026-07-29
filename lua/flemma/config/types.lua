@@ -42,6 +42,7 @@
 ---@field disable_textwidth boolean
 ---@field fold flemma.config.EditingFold
 ---@field manage_updatetime boolean
+---@field manage_viewoptions boolean
 
 ---@class flemma.config.Experimental
 ---@field patch_markdown_conceal boolean
