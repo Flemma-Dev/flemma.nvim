@@ -6,6 +6,7 @@ Codenames assigned to Flemma **minor** releases. One single-word typographic / b
 
 ## Ledger
 
-| Version | Codename     | Headline it fit                                                                                                               |
-| ------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| 0.13.0  | **Ascender** | Codex subscription auth, new models, the `flemma.hl` highlight builder, the tool-result store, and inline approval/rejection. |
+| Version | Codename     | Headline it fit                                                                                                                                                                                                       |
+| ------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.13.0  | **Ascender** | Codex subscription auth, new models, the `flemma.hl` highlight builder, the tool-result store, and inline approval/rejection.                                                                                         |
+| 0.14.0  | **Polyglot** | The whole string surface externalized into audience-split gettext catalogues with compiled plural forms for EN/FR/RU/PL, alongside model matrix parameters and the July 2026 refresh of all four provider catalogues. |
